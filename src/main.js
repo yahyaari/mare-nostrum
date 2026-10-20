@@ -25,7 +25,7 @@ const ctx = canvas.getContext("2d");
 const cam = makeCamera();
 
 let game = null;
-const ui = { screen: "start", lang: pickLang(), pick: null, saved: null, sel: null, modal: null, toast: null };
+const ui = { screen: "start", lang: pickLang(), level: pickLevel(), pick: null, saved: null, sel: null, modal: null, toast: null };
 const startOwners = Object.fromEntries(PLACES.map((p) => [p.id, p.owner]));
 
 let dpr = 1;
@@ -55,6 +55,14 @@ function load() {
 
 function forget() {
   try { localStorage.removeItem(SAVE); } catch { /* bkz. yukarı */ }
+}
+
+function pickLevel() {
+  try {
+    const saved = localStorage.getItem("mn.level");
+    if (saved === "easy" || saved === "normal" || saved === "hard") return saved;
+  } catch { /* varsayılan */ }
+  return "normal";
 }
 
 function pickLang() {
@@ -165,9 +173,13 @@ function dispatch(act) {
     case "pick":
       ui.pick = act.civ;
       break;
+    case "level":
+      ui.level = act.level;
+      try { localStorage.setItem("mn.level", act.level); } catch { /* varsayılan */ }
+      break;
     case "start":
       if (!ui.pick) break;
-      game = newGame(ui.pick, (Date.now() % 1e9) | 0);
+      game = newGame(ui.pick, (Date.now() % 1e9) | 0, ui.level);
       ui.screen = "game";
       ui.sel = null;
       ui.modal = { kind: "help" };

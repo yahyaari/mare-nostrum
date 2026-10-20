@@ -48,16 +48,27 @@ export const N = {
     free: {
       city: { level: 2, inf: 30, arch: 10 },
       castle: { level: 1, inf: 30, arch: 30 },
+      // Siraküza, Atina, Antakya, Babil: seviye 3 (şehir suru). Siraküza Kartaca'nın İtalya'ya,
+      // Antakya ve Babil Mısır'ın doğuya kapısı; ikisi de sursuz kapılardan çok hızlı büyüyordu.
+      big: { level: 3, inf: 40, arch: 20 },
     },
   },
   moves: 1,
 
   // Bilgisayar
-  // Bu turdan önce kimse kimseye savaş açmaz: önce bağımsızlar. 6 iken biri 15-25. turda
-  // yok oluyordu - oyuncu daha bağımsızları alırken.
+  // Bilgisayarlar arası: bu turdan önce kimse kimseye savaş açmaz (önce bağımsızlar), ve ancak
+  // bu kadar güçlüyken açar. 6. tur iken biri 15-25. turda yok oluyordu.
   aiPeace: 12,
-  aiWarRatio: 1.5, // ancak bu kadar güçlüyken savaş açar
+  aiWarRatio: 1.5,
   aiWarChance: 0.15,
+};
+
+// Zorluk: bilgisayarın OYUNCUYA ne zaman savaş açtığı ve bilgisayarın üretimi. Bilgisayarlar
+// kendi aralarında her zorlukta aynı (N.aiPeace, N.aiWarRatio) oynar.
+export const LEVELS = {
+  easy: { peace: 20, warRatio: 2, aiOutput: 0.85 },
+  normal: { peace: 12, warRatio: 1.5, aiOutput: 1 },
+  hard: { peace: 8, warRatio: 1.25, aiOutput: 1.15 },
 };
 
 // Medeniyetlerin güçlü ve zayıf yanları (bölüm 9). Yazılmayan her şey 1.

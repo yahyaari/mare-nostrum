@@ -9,7 +9,7 @@ import { estimate } from "./combat.js";
 import { canDeclare, canPropose, declareWar, proposeAlliance, proposePeace } from "./diplomacy.js";
 import { neighbours, path } from "./graph.js";
 import { access, advance, attack, defenders, hostile, order, refresh, wallsOf } from "./moves.js";
-import { N } from "./numbers.js";
+import { LEVELS, N } from "./numbers.js";
 import { random } from "./rng.js";
 import {
   armiesAt, armiesOf, budget, enemiesOf, formArmy, info, merge, men, placesOf, popCap,
@@ -43,17 +43,21 @@ function neighbourCivs(state, civ) {
 }
 
 function diplomacy(state, civ, events) {
-  if (state.turn < N.aiPeace) return;
+  const level = LEVELS[state.level] ?? LEVELS.normal;
+  // Oyuncuya karşı zorluğun sayıları, bilgisayarlar arasında her zaman aynıları.
+  const peace = (o) => (o === state.player ? level.peace : N.aiPeace);
+  const ratio = (o) => (o === state.player ? level.warRatio : N.aiWarRatio);
+  if (state.turn < Math.min(N.aiPeace, level.peace)) return;
   const me = strength(state, civ);
   const wars = enemiesOf(state, civ);
 
   // Savaş: en fazla bir cephe, ve ancak açıkça güçlüyken.
   if (wars.length === 0 || (wars.length === 1 && random(state) < 0.1)) {
     const prey = neighbourCivs(state, civ)
-      .filter((o) => canDeclare(state, civ, o))
+      .filter((o) => canDeclare(state, civ, o) && state.turn >= peace(o))
       .sort((a, b) => strength(state, a) - strength(state, b));
     for (const o of prey) {
-      if (me >= N.aiWarRatio * strength(state, o) && random(state) < N.aiWarChance) {
+      if (me >= ratio(o) * strength(state, o) && random(state) < N.aiWarChance) {
         events.push(declareWar(state, civ, o));
         break;
       }

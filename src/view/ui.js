@@ -57,7 +57,7 @@ function drawStart(ctx, cam, ui, boxes, T) {
   ctx.fillRect(0, 0, cam.w, cam.h);
   const rowH = 52;
   const W = Math.min(cam.w - 24, 520);
-  const H = 104 + CIVS.length * rowH + 76 + (ui.saved ? 56 : 0);
+  const H = 104 + CIVS.length * rowH + 52 + 76 + (ui.saved ? 56 : 0);
   const x = Math.round((cam.w - W) / 2), y = Math.max(12, Math.round((cam.h - H) / 2));
   panel(ctx, x, y, W, H, boxes);
   text(ctx, T.title, x + W / 2, y + 42, { bold: true, size: 26, align: "center" });
@@ -91,7 +91,15 @@ function drawStart(ctx, cam, ui, boxes, T) {
     boxes.push({ x: x + 12, y: ry, w: W - 24, h: rowH, act: { do: "pick", civ: c.id } });
   });
 
-  const by = y + 104 + CIVS.length * rowH + 14;
+  // Zorluk: üç düğme yan yana, seçili olan dolu.
+  const ly = y + 104 + CIVS.length * rowH + 8;
+  text(ctx, T.difficulty, x + 22, ly + 25, { bold: true, size: 13 });
+  const lw = Math.min(110, (W - 150) / 3);
+  [["easy", T.lvEasy], ["normal", T.lvNormal], ["hard", T.lvHard]].forEach(([lv, label], i) => {
+    button(ctx, boxes, { x: x + W - 20 - (3 - i) * (lw + 6) + 6, y: ly + 4, w: lw, h: 34, label, size: 13, main: ui.level === lv, act: { do: "level", level: lv } });
+  });
+
+  const by = ly + 52 + 6;
   const picked = CIVS.find((c) => c.id === ui.pick);
   button(ctx, boxes, {
     x: x + 20, y: by, w: W - 40, h: 48, main: true, size: 16, off: !picked,

@@ -169,7 +169,9 @@ const { play } = await import("./bot.mjs");
   check("öteki şehir seviye 1", tar.level === 1 && ari.level === 1);
   check("nüfus tavanın %75'i", rome.pop === 150 && tar.pop === 75 && ari.pop === 38, `${rome.pop} ${tar.pop} ${ari.pop}`);
   check("garnizon 30 / 20 / 10", rome.inf === 30 && tar.inf === 20 && ari.inf === 10);
-  check("bağımsız şehir: seviye 2, 30 piyade 10 okçu", s.places.athens.level === 2 && s.places.athens.inf === 30 && s.places.athens.arch === 10);
+  check("bağımsız şehir: seviye 2, 30 piyade 10 okçu", s.places.massalia.level === 2 && s.places.massalia.inf === 30 && s.places.massalia.arch === 10);
+  check("büyük bağımsız şehir: seviye 3, 40 piyade 20 okçu", ["syracuse", "athens", "antioch", "babylon"].every((id) => s.places[id].level === 3 && s.places[id].inf === 40 && s.places[id].arch === 20));
+  check("büyük şehrin suru var", M.wallsOf(s, "athens") === "city" && M.wallsOf(s, "massalia") === null);
   check("bağımsız kale: 30 piyade 30 okçu", s.places.sparta.inf === 30 && s.places.sparta.arch === 30);
   check("Makedonya nüfusu x0.8", s.places.pella.pop === 120, s.places.pella.pop);
   check("bütün yapılar 1", Object.values(s.places).every((p) => p.industry === 1 && p.farms === 1 && p.barracks === 1));
@@ -326,6 +328,33 @@ section("Bot: oyun boyunca değişmezler");
   check("25. tura kadar bağımsızların çoğu alınıyor", free25.every((n) => n <= 8), free25.join(" "));
   check("her oyunda savaş çıkıyor", games.every((g) => g.firstWar !== null && g.firstWar <= 40), games.map((g) => g.firstWar).join(" "));
   check("barış döneminde kimse savaş açmıyor", games.every((g) => g.firstWar >= N.aiPeace));
+
+  // Zorluk: kolayda bilgisayar oyuncuya 20. turdan önce savaş açmaz. Bot oyunlarında buna hiç
+  // fırsat çıkmıyordu - kural gevşetilince de o kontrol geçiyordu. Burada fırsat bilerek
+  // kuruluyor: Kartaca Siraküza'yı almış, Roma'nın yanında, 400 piyadeyle; Roma bomboş.
+  const { aiTurn: ai } = await import("../src/rules/ai.js");
+  const tryWar = (level, turn) => {
+    let n = 0;
+    for (let k = 0; k < 40; k++) {
+      const s = S.newGame("rome", 100 + k, level);
+      s.turn = turn;
+      for (const id of ["rome", "tarentum", "ariminum"]) s.places[id].inf = 0;
+      s.places.syracuse.owner = "carthage";
+      s.places.carthage.inf = 400;
+      const ev = [];
+      ai(s, "carthage", ev);
+      if (ev.some((e) => e.type === "war" && e.on === "rome")) n++;
+    }
+    return n;
+  };
+  check("normalde güçlü komşu 15. turda savaş açabiliyor", tryWar("normal", 15) > 0);
+  check("kolayda 15. turda açmıyor", tryWar("easy", 15) === 0);
+  check("kolayda 20. turda açabiliyor", tryWar("easy", 20) > 0);
+  check("zorda 9. turda açabiliyor", tryWar("hard", 9) > 0);
+  check("normalde 9. turda açmıyor", tryWar("normal", 9) === 0);
+  const ez = S.newGame("rome", 3, "easy"), nm = S.newGame("rome", 3, "normal"), hd = S.newGame("rome", 3, "hard");
+  check("zorluk oyuncunun üretimini değiştirmez", S.budget(ez, "rome").money === S.budget(hd, "rome").money);
+  check("kolayda bilgisayar az, zorda çok üretir", S.budget(ez, "egypt").money < S.budget(nm, "egypt").money && S.budget(nm, "egypt").money < S.budget(hd, "egypt").money);
   const first = games.map((g) => g.fallen[0]?.[1] ?? 999);
   check("ilk medeniyet 20. turdan önce düşmüyor", first.every((t) => t >= 20), first.join(" "));
 

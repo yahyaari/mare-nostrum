@@ -17,9 +17,11 @@ export const CIVS = [
 export const FREE_COLOR = "#8c8780";
 
 const P = (id, en, tr, lat, lon, kind, extra = {}) => ({
-  id, name: { en, tr }, lat, lon, kind, port: false, owner: null, capital: false, ...extra,
+  id, name: { en, tr }, lat, lon, kind, port: false, owner: null, capital: false, big: false, ...extra,
 });
 const port = { port: true };
+// Antik dünyanın büyük bağımsız şehirleri: surlu ve kalabalık başlar (kurallar.md bölüm 2).
+const big = { port: true, big: true };
 const own = (owner, more = {}) => ({ owner, ...more });
 const cap = (owner, more = {}) => ({ owner, capital: true, ...more });
 
@@ -54,7 +56,7 @@ export const PLACES = [
   P("tanais", "Tanais", "Tanais", 47.27, 39.33, "castle", own("saka")),
 
   // Bağımsızlar: Yunan şehir devletleri, Seleukos toprakları, kıyıdaki ticaret şehirleri.
-  P("syracuse", "Syracuse", "Siraküza", 37.07, 15.29, "city", port),
+  P("syracuse", "Syracuse", "Siraküza", 37.07, 15.29, "city", big),
   P("caralis", "Caralis", "Karalis", 39.22, 9.11, "city", port),
   P("massalia", "Massalia", "Massalia", 43.30, 5.37, "city", port),
   P("mediolanum", "Mediolanum", "Mediolanum", 45.46, 9.19, "city"),
@@ -65,7 +67,7 @@ export const PLACES = [
   P("leptis", "Leptis Magna", "Leptis Magna", 32.61, 14.26, "city", port),
   P("cyrene", "Cyrene", "Kirene", 32.82, 21.86, "city", port),
   P("epidamnos", "Epidamnos", "Epidamnos", 41.33, 19.50, "city", port),
-  P("athens", "Athens", "Atina", 37.98, 23.73, "city", port),
+  P("athens", "Athens", "Atina", 37.98, 23.73, "city", big),
   P("sparta", "Sparta", "Sparta", 37.08, 22.43, "castle"),
   P("byzantium", "Byzantium", "Bizans", 41.05, 28.93, "city", port),
   P("odessos", "Odessos", "Odessos", 43.21, 27.91, "city", port),
@@ -74,8 +76,8 @@ export const PLACES = [
   P("ancyra", "Ancyra", "Ankyra", 39.93, 32.86, "castle"),
   P("sinope", "Sinope", "Sinop", 42.00, 35.09, "city", port),
   P("mazaka", "Mazaka", "Mazaka", 38.72, 35.49, "castle"),
-  P("antioch", "Antioch", "Antakya", 36.20, 36.16, "city", port),
-  P("babylon", "Babylon", "Babil", 32.54, 44.42, "city"),
+  P("antioch", "Antioch", "Antakya", 36.20, 36.16, "city", big),
+  P("babylon", "Babylon", "Babil", 32.54, 44.42, "city", { big: true }),
   P("ecbatana", "Ecbatana", "Ekbatana", 34.80, 48.52, "city"),
   P("artaxata", "Artaxata", "Artaşat", 39.95, 44.55, "castle"),
 ];

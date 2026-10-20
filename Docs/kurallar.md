@@ -63,6 +63,11 @@ Her yerleşimin haritadaki toprağı, ona en yakın yerlerdir (en fazla ~350 km)
 Bağımsız yerleşimler **saldırmaz, büyümez, sadece savunur.** Şehirleri seviye 2, 30 piyade ve 10
 okçuyla; kaleleri seviye 1, 30 piyade ve 30 okçuyla başlar. Alınınca normal bir şehir olur.
 
+**Büyük bağımsız şehirler:** Siraküza, Atina, Antakya ve Babil seviye 3 (şehir suru), 40 piyade
+ve 20 okçuyla başlar. Siraküza Kartaca'nın İtalya'ya, Antakya ve Babil Mısır'ın doğuya kapısı;
+sursuzken bu iki medeniyet çok hızlı büyüyordu ve ilk medeniyet ortalama 29. turda düşüyordu.
+Surla bu 47. tura çıktı, Roma 28 oyunun 5'i yerine 14'ünde ayakta kalıyor.
+
 ---
 
 ## 3. Kaynaklar
@@ -198,6 +203,19 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 
 Bu sayılar 28 bot oyunuyla ayarlandı. Mısır ve Kartaca hâlâ en sık büyüyenler, Roma ortada
 sıkıştığı için en sık düşen. Tarihe de uyuyor; oyuncu oynadıkça bakılacak.
+
+---
+
+## 9b. Zorluk
+
+Başlangıç ekranında seçilir. Sadece bilgisayarın OYUNCUYA davranışını ve bilgisayarın üretimini
+değiştirir; bilgisayarlar kendi aralarında her zorlukta aynı oynar.
+
+| Zorluk | Sana savaş açabileceği ilk tur | Ne kadar güçlüyken | Bilgisayarın üretimi |
+|---|---|---|---|
+| Kolay | 20 | 2 kat | × 0.85 |
+| Normal | 12 | 1.5 kat | × 1 |
+| Zor | 8 | 1.25 kat | × 1.15 |
 
 ---
 

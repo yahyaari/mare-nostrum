@@ -6,19 +6,19 @@
 
 import { CIVS, PLACES } from "../data/world.js";
 import { byId } from "./graph.js";
-import { N, trait } from "./numbers.js";
+import { LEVELS, N, trait } from "./numbers.js";
 
 export const VERSION = 1;
 
 // ---- yeni oyun ----
 
-export function newGame(player, seed = 1) {
+export function newGame(player, seed = 1, level = "normal") {
   const civs = {};
   for (const c of CIVS) civs[c.id] = { ...N.start.stock, alive: true };
   const places = {};
   for (const p of PLACES) {
     const free = p.owner === null;
-    const start = free ? N.start.free[p.kind] : null;
+    const start = free ? N.start.free[p.big ? "big" : p.kind] : null;
     const level = free ? start.level : p.capital ? 2 : 1;
     const place = {
       owner: p.owner, level, industry: 1, farms: 1, barracks: 1,
@@ -30,7 +30,7 @@ export function newGame(player, seed = 1) {
     places[p.id] = place;
   }
   return {
-    version: VERSION, turn: 1, player, rng: seed | 0 || 1,
+    version: VERSION, turn: 1, player, level, rng: seed | 0 || 1,
     civs, places, armies: [], nextArmy: 1,
     relations: {}, // "a|b" -> "ally" | "war"; yazılmayan tarafsız
     cooldown: {}, // "a|b" -> ittifakın bozulduğu tur: o tur savaş ilan edilemez
@@ -58,10 +58,12 @@ export function popCap(place, kind) {
 export function output(state, id) {
   const pl = state.places[id], p = byId[id], c = pl.owner;
   const castle = p.kind === "castle" ? N.castleOutput : 1;
+  // Zorluk: bilgisayar medeniyetlerinin üretimi (oyuncunun değil).
+  const ai = c && c !== state.player ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;
   return {
-    money: (pl.pop / N.taxPer) * trait(c, "money"),
-    weapons: pl.industry * castle * trait(c, "weapons"),
-    food: pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") + (p.port ? N.fish * trait(c, "fish") : 0),
+    money: (pl.pop / N.taxPer) * trait(c, "money") * ai,
+    weapons: pl.industry * castle * trait(c, "weapons") * ai,
+    food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") + (p.port ? N.fish * trait(c, "fish") : 0)) * ai,
   };
 }
 

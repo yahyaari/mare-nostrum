@@ -13,8 +13,8 @@ import { newGame, placesOf, strength } from "../src/rules/state.js";
  * Bir oyun oynat. `watch(state, events)` her turdan sonra çağrılır (değişmez kontrolleri
  * oradan). Dönen: turlara göre özet.
  */
-export function play({ seed = 1, player = "rome", turns = 200, watch = null } = {}) {
-  const state = newGame(player, seed);
+export function play({ seed = 1, player = "rome", turns = 200, level = "normal", watch = null } = {}) {
+  const state = newGame(player, seed, level);
   const log = { seed, player, turns: 0, battles: 0, captures: 0, wars: 0, famines: 0, fallen: [], firstWar: null, freeLeft: [] };
   for (let t = 0; t < turns && !state.over; t++) {
     const mine = [];
