@@ -8,7 +8,7 @@ import { CIVS, PLACES } from "./data/world.js";
 import { estimate } from "./rules/combat.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rules/diplomacy.js";
 import { neighbours } from "./rules/graph.js";
-import { access, attack, canAttack, defenders, hostile, order, routeTo, wallsOf } from "./rules/moves.js";
+import { access, attack, canAttack, defenders, hostile, menace, order, routeTo, wallsOf } from "./rules/moves.js";
 import {
   VERSION, armyById, formArmy, merge, men, newGame, placesOf, recruit, split, station, upgrade,
 } from "./rules/state.js";
@@ -99,6 +99,7 @@ function mapView() {
   if (!game) return view;
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
+  view.threats = Object.fromEntries(placesOf(game, game.player).map((id) => [id, menace(game, id)]).filter(([, n]) => n > 0));
   view.armies = game.armies.map((a) => ({
     id: a.id, owner: a.owner, at: a.at, men: men(a),
     selected: ui.sel?.kind === "army" && ui.sel.id === a.id,
@@ -264,6 +265,17 @@ function dispatch(act) {
       merge(game, act.army, act.from);
       save();
       break;
+    case "nextArmy": {
+      // Hareketi kalan bir sonraki ordu: seçili olanın ardından, sırayla.
+      const mine = game.armies.filter((a) => a.owner === me && a.moves > 0);
+      if (!mine.length) break;
+      const cur = ui.sel?.kind === "army" ? ui.sel.id : -1;
+      const next = mine.find((a) => a.id > cur) ?? mine[0];
+      ui.sel = { kind: "army", id: next.id };
+      const mm = placeAt(next.at);
+      focus(cam, mm.x, mm.y, Math.max(cam.scale, cam.min * 2));
+      break;
+    }
     case "attackAsk":
       ui.modal = { kind: "attack", army: act.army, id: act.id };
       break;

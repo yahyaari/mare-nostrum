@@ -78,6 +78,16 @@ export async function open(url, W = 1280, H = 720) {
       const r = await send("Page.captureScreenshot", { format: "png" });
       writeFileSync(join(dir, name + ".png"), Buffer.from(r.result.data, "base64"));
     },
+    /** Sayfayı yeniden yükle ve oyunun yeniden açılmasını bekle (kayıttan dönüşü sınamak için). */
+    async reload() {
+      const before = log.filter((l) => l.includes("[MareNostrum] ready")).length;
+      await send("Page.reload");
+      for (let t = Date.now(); Date.now() - t < 20000;) {
+        if (log.filter((l) => l.includes("[MareNostrum] ready")).length > before) return;
+        await sleep(150);
+      }
+      throw new Error("yeniden yükleme açılmadı");
+    },
     close() { try { ws.close(); } catch { /* */ } browser.kill(); },
   };
 }

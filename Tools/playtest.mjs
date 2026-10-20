@@ -41,6 +41,15 @@ try {
     if (page.errors) fail("konsolda hata");
   }
   const s = await page.evaluate("JSON.parse(JSON.stringify({ ...PT.stats, over: window.MareNostrum.game.over }))");
+
+  // Kayıttan dönüş: sayfayı yenile, başlangıçta Devam et'e bas, aynı turda mıyız.
+  const before = await page.evaluate("JSON.stringify(window.MareNostrum.game)");
+  await page.reload();
+  await page.evaluate(readFileSync(new URL("./playtest.page.js", import.meta.url), "utf8"));
+  const cont = await page.evaluate("PT.press((a) => a.do === 'continue')");
+  const after = await page.evaluate("JSON.stringify(window.MareNostrum.game)");
+  console.log(cont && after === before ? "kayıttan dönüş: aynı oyun" : "KAYITTAN DÖNÜŞ BOZUK");
+  if (!(cont && after === before)) process.exitCode = 1;
   await page.shot(dir, "99_son");
   console.log(`\nson: tur ${last?.turn} yer ${last?.places} asker ${last?.men} | en yavaş tur ${slow}ms`);
   console.log(`basış ${s.pressed} yükseltme ${s.upgrades} bölük ${s.recruits} ordu ${s.armies} yürüyüş ${s.marches} saldırı ${s.attacks} (zafer ${s.won}) savaş ilanı ${s.wars} ittifak ${s.allies}`);
@@ -49,7 +58,7 @@ try {
   if (missed.length) console.log("bulunamayan düğmeler: " + missed.slice(0, 10).join(" | "));
   console.log(page.errors ? `${page.errors} HATA` : "konsol temiz");
   page.close();
-  process.exit(page.errors ? 1 : 0);
+  process.exit(page.errors ? 1 : process.exitCode ?? 0);
 } catch (e) {
   fail(e.message);
 }

@@ -293,6 +293,15 @@ section("Hareket ve diplomasi (bölüm 6, 8)");
   d.turn++;
   check("ertesi tur edilir", D.declareWar(d, "rome", "gaul")?.type === "war");
   check("savaşla barış teklifi turda bir", D.proposePeace(d, "rome", "gaul") && D.proposePeace(d, "rome", "gaul") === null);
+
+  // Tehdit uyarısı: yanında SAVAŞTIĞI birinin ordusu varsa; tarafsızın ordusu tehdit değil.
+  const w = S.newGame("rome", 7);
+  const c = S.formArmy(w, "carthage", 30, 0);
+  c.at = "syracuse";
+  w.places.syracuse.owner = "carthage";
+  check("tarafsızın ordusu tehdit sayılmaz", M.menace(w, "tarentum") === 0);
+  D.declareWar(w, "carthage", "rome");
+  check("savaştığın ordu yanındaysa tehdit", M.menace(w, "tarentum") === 30 && M.menace(w, "rome") === 0);
 }
 
 // ---------------------------------------------------------------------------------------------

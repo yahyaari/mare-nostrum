@@ -10,7 +10,7 @@ import { CIVS } from "../data/world.js";
 import { estimate } from "../rules/combat.js";
 import { canDeclare, canPropose } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
-import { access, canAttack, defenders, hostile, wallsOf } from "../rules/moves.js";
+import { access, canAttack, defenders, hostile, menace, wallsOf } from "../rules/moves.js";
 import { N, trait } from "../rules/numbers.js";
 import {
   UPGRADES, armiesAt, armyById, budget, key, men, output, placesOf, popCap, recruitCost,
@@ -37,6 +37,14 @@ export function drawUI(ctx, cam, game, ui, boxes) {
         x: cam.w - 12 - END.w, y: cam.h - 12 - END.h, w: END.w, h: END.h,
         label: T.endTurn, act: { do: "endTurn" }, main: true, size: 16,
       });
+      // Hareketi kalan ordular: dar ekranda Turu bitir'in solunda, genişte üstünde.
+      const ready = game.armies.filter((a) => a.owner === game.player && a.moves > 0).length;
+      if (ready) {
+        const nb = narrowOf(cam)
+          ? { x: 12, y: cam.h - 12 - END.h, w: cam.w - 24 - END.w - 8, h: END.h }
+          : { x: cam.w - 12 - END.w, y: cam.h - 12 - END.h - 8 - 40, w: END.w, h: 40 };
+        button(ctx, boxes, { ...nb, label: fill(T.nextArmy, ready), size: 13, act: { do: "nextArmy" } });
+      }
     }
     if (ui.sel?.kind === "place") {
       if (game.places[ui.sel.id].owner === game.player) cityCard(ctx, cam, game, ui, boxes, T);
@@ -55,8 +63,13 @@ export function drawUI(ctx, cam, game, ui, boxes) {
 function drawStart(ctx, cam, ui, boxes, T) {
   ctx.fillStyle = "rgba(239,232,216,0.45)";
   ctx.fillRect(0, 0, cam.w, cam.h);
-  const rowH = 52;
   const W = Math.min(cam.w - 24, 520);
+  // Dar ekranda güçlü ve zayıf yan tek satıra sığmıyor: iki satır, daha yüksek satır.
+  const twoLines = CIVS.some((c) => {
+    const [good, bad] = T.traits[c.id];
+    return measure(ctx, `▲ ${good}   ▼ ${bad}`, { size: 12, italic: true }) > W - 80;
+  });
+  const rowH = twoLines ? 66 : 52;
   const H = 104 + CIVS.length * rowH + 52 + 76 + (ui.saved ? 56 : 0);
   const x = Math.round((cam.w - W) / 2), y = Math.max(12, Math.round((cam.h - H) / 2));
   panel(ctx, x, y, W, H, boxes);
@@ -81,12 +94,11 @@ function drawStart(ctx, cam, ui, boxes, T) {
     ctx.strokeRect(x + 24.5, ry + 12.5, 17, 17);
     text(ctx, c.name[ui.lang], x + 54, ry + 24, { bold: true, size: 16 });
     const [good, bad] = T.traits[c.id];
-    const line = `▲ ${good}   ▼ ${bad}`;
-    const lines = wrap(ctx, line, W - 80, { size: 12 });
-    if (lines.length === 1) text(ctx, line, x + 54, ry + 42, { size: 12, color: INK.soft, italic: true });
+    const o = { size: 12, color: INK.soft, italic: true };
+    if (!twoLines) text(ctx, `▲ ${good}   ▼ ${bad}`, x + 54, ry + 42, o);
     else {
-      // Dar ekranda güçlü ve zayıf yan alt alta değil, kısaltılmış: sadece güçlü yan.
-      text(ctx, wrap(ctx, `▲ ${good}`, W - 80, { size: 12 })[0], x + 54, ry + 42, { size: 12, color: INK.soft, italic: true });
+      text(ctx, `▲ ${good}`, x + 54, ry + 42, o);
+      text(ctx, `▼ ${bad}`, x + 54, ry + 58, o);
     }
     boxes.push({ x: x + 12, y: ry, w: W - 24, h: rowH, act: { do: "pick", civ: c.id } });
   });
@@ -482,6 +494,11 @@ export function eventLines(game, lang) {
   const me = game.player;
   const name = (c) => civName(c, lang, T.free);
   const out = [];
+  // Önce tehlike: yanında düşman ordusu duran kendi yerlerin.
+  for (const id of placesOf(game, me)) {
+    const n = menace(game, id);
+    if (n > 0) out.push([fill(T.evThreat, placeName(id, lang), n), "bad"]);
+  }
   for (const e of game.events) {
     const mine = [e.by, e.on, e.to, e.with, e.attacker, e.defender, e.civ].includes(me);
     if (e.type === "war") out.push([fill(T.evWar, name(e.by), name(e.on)), mine ? "bad" : null]);

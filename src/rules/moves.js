@@ -102,6 +102,16 @@ export function advance(state, army) {
   return steps;
 }
 
+/** Bir yerin yanındaki, sahibinin savaştığı orduların toplam askeri: oyuncuya uyarı için. */
+export function menace(state, id) {
+  const owner = state.places[id].owner;
+  let n = 0;
+  for (const nb of neighbours(id)) {
+    for (const a of armiesAt(state, nb)) if (owner && relation(state, owner, a.owner) === "war") n += men(a);
+  }
+  return n;
+}
+
 /** Saldırabilir mi: komşu, düşman/bağımsız, hareketi var. */
 export function canAttack(state, army, id) {
   return !!army && army.moves > 0 && neighbours(army.at).includes(id) && hostile(access(state, army.owner, id));

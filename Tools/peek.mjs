@@ -133,7 +133,12 @@ await shot("13_diplomasi", `${D({ do: "close" })}; ${D({ do: "open", modal: "dip
 await shot("14_menu", `${D({ do: "close" })}; ${D({ do: "open", modal: "menu" })}`);
 await shot("15_tr_sehir", `${D({ do: "close" })}; ${D({ do: "lang", lang: "tr" })}; M.ui.sel = { kind: 'place', id: 'mediolanum' }; M.redraw()`);
 await shot("16_yabanci_kart", "M.ui.sel = { kind: 'place', id: 'massalia' }; M.look('massalia', 2.2)");
-await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "en" })}; return true; })()`);
+// Tehdit: Kartaca Siraküza'yı almış, savaş açmış, ordusu Tarentum'un yanında.
+await shot("17_tehdit_raporu", `${D({ do: "lang", lang: "en" })}; const g = M.game;
+  g.places.syracuse.owner = 'carthage'; g.relations['carthage|rome'] = 'war';
+  g.armies.push({ id: 999, owner: 'carthage', at: 'syracuse', inf: 80, arch: 20, moves: 1, route: [] });
+  M.ui.sel = null; M.look('tarentum', 2.2); ${D({ do: "open", modal: "report" })}`);
+await shot("18_tehdit_halkasi", D({ do: "close" }));
 
 for (const line of log) console.log("  " + line);
 console.log(bad ? `${bad} HATA` : "konsol temiz");

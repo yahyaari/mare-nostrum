@@ -60,6 +60,7 @@ const MARK = { walk: INK.ink, easy: INK.good, risky: INK.warn, hopeless: INK.bad
 /**
  * Haritayı çiz. `view`:
  *   lang, owners {id: civ|null}, selected (yer id), armies [{id, owner, at, men, selected}],
+ *   threats {id: asker} (oyuncunun tehdit altındaki yerleri),
  *   marks {id: "walk"|"easy"|"risky"|"hopeless"}, route [id, id, ...] (seçili ordunun yolu)
  * Dönen: ordu işaretlerinin kutuları [{ x, y, w, h, army }].
  */
@@ -161,6 +162,18 @@ function drawPlaces(ctx, cam, view, L) {
     const s = toScreen(cam, L.at[p.id].x, L.at[p.id].y);
     if (s.x < -80 || s.y < -60 || s.x > cam.w + 80 || s.y > cam.h + 60) continue;
     shown.push({ p, s });
+  }
+
+  // Tehdit: yanında savaştığı birinin ordusu duran kendi yerin. Geniş, kırmızı, kesik halka.
+  for (const { p, s } of shown) {
+    if (!view.threats?.[p.id]) continue;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 19, 0, TAU);
+    ctx.strokeStyle = INK.bad;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([5, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   // Seçimin işaretleri: yürünebilir yerler ince halka, saldırılabilirler tahmin renginde.

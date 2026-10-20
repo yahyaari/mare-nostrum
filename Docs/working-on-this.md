@@ -7,8 +7,11 @@ push bir dakikada yayınlanır). Medeniyet seçimi, şehir yükseltme, asker bas
 yürüme, otomatik savaş, diplomasi (savaş, ittifak, bozma, barış), bilgisayar rakipler, tur
 raporu, kazanma/kaybetme ve tarayıcıya otomatik kayıt çalışıyor. EN/TR.
 
-Sıradakiler: oyuncu oynadıkça denge; okunabilirlik (hangi şehrin tehlikede olduğu, düşman
-ordularının nereye yürüdüğü); bilgisayarın oyuncuya ittifak/barış teklif etmesi.
+Zorluk (Kolay/Normal/Zor), tehdit uyarısı (yanında düşman ordusu olan şehrin kırmızı halkası ve
+raporda satırı), Sıradaki ordu düğmesi de var.
+
+Sıradakiler: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
+düşman ordularının nereye yürüdüğünü göstermek.
 
 ## Komutlar
 
@@ -19,6 +22,7 @@ node Tools/test.mjs                                 bütün kontroller (tarayıc
 node Tools/bot.mjs 7 200                            7 oyunu bilgisayara oynat, özetini yaz
 node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720          ekran fotoğrafları
 node Tools/peek.mjs http://localhost:8060/ Logs/peek-phone 390 844     telefon, dikey
+node Tools/playtest.mjs http://localhost:8060/ saka 60 easy             tarayıcıda, düğmelere basarak 60 tur oyna
 node Tools/geo.mjs                                  kıyıları Natural Earth'ten yeniden üret
 node Tools/route.mjs                                denize giren yol için ara nokta öner
 ```
