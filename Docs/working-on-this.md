@@ -2,20 +2,21 @@
 
 ## NEREDE KALDIK
 
-**20.10.2026 — 1. adım bitti: harita.** Oyun henüz oynanmıyor. Gerçek kıyılar, 45 yerleşim,
-yollar ve deniz geçişleri çiziliyor. Kaydırma, yakınlaştırma (tekerlek, kıstırma, + / −, oklar),
-yerleşime basınca bilgi kartı, EN/TR geçişi çalışıyor.
+**20.10.2026 — oyun oynanabilir.** Yayında: https://yahyaari.github.io/mare-nostrum/ (master'a
+push bir dakikada yayınlanır). Medeniyet seçimi, şehir yükseltme, asker basma, ordu çıkarma,
+yürüme, otomatik savaş, diplomasi (savaş, ittifak, bozma, barış), bilgisayar rakipler, tur
+raporu, kazanma/kaybetme ve tarayıcıya otomatik kayıt çalışıyor. EN/TR.
 
-**Sıradaki adım: şehirler ve ekonomi** (kurallar.md bölüm 3–5). Oyun durumu (`src/rules/state.js`),
-tur sonu hesabı, şehir paneli: dört yükseltme ve asker basma. Sonra ordular, savaş, diplomasi ve
-bilgisayar rakipler.
+Sıradakiler: oyuncu oynadıkça denge; okunabilirlik (hangi şehrin tehlikede olduğu, düşman
+ordularının nereye yürüdüğü); bilgisayarın oyuncuya ittifak/barış teklif etmesi.
 
 ## Komutlar
 
 ```
 node Tools/serve.mjs . 8060                         oyunu sun  ->  http://localhost:8060
 node Tools/serve.mjs . 8060 0.0.0.0                 aynı ağdaki telefon da girsin
-node Tools/test.mjs                                 bütün kontroller (tarayıcısız, ~1 sn)
+node Tools/test.mjs                                 bütün kontroller (tarayıcısız, birkaç sn)
+node Tools/bot.mjs 7 200                            7 oyunu bilgisayara oynat, özetini yaz
 node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720          ekran fotoğrafları
 node Tools/peek.mjs http://localhost:8060/ Logs/peek-phone 390 844     telefon, dikey
 node Tools/geo.mjs                                  kıyıları Natural Earth'ten yeniden üret
@@ -28,8 +29,9 @@ node Tools/route.mjs                                denize giren yol için ara n
 |---|---|
 | `src/data/` | Değişmeyen veri: `world.js` (medeniyetler, yerleşimler, yollar), `geo.js` (üretilmiş kıyılar), `bounds.js` |
 | `src/geo.js` | İzdüşüm ve karada mı / kıyıya ne kadar uzak. Ekran ve test aynısını kullanıyor. |
-| `src/rules/` | Saf kurallar, DOM yok. Şimdilik `graph.js`: komşular, en kısa yol. |
-| `src/view/` | Kamera, çizim, toprak hücreleri. Hiçbir kuralı değiştirmez. |
+| `src/rules/` | Saf kurallar, DOM yok: `numbers.js` (bütün sayılar), `state.js` (yeni oyun, üretim, yükseltme, asker, ordu), `combat.js`, `moves.js` (hareket, saldırı, ele geçirme), `diplomacy.js`, `ai.js`, `turn.js`, `graph.js`, `rng.js` (tohumlu: kayıtla birlikte saklanıyor) |
+| `Tools/bot.mjs` | TEK bot: oyuncunun yerine `ai.js`'i oynatır. test.mjs de bunu kullanır. |
+| `src/view/` | `camera.js`, `draw.js` (harita, ordular, seçim işaretleri), `ui.js` (bant, kartlar, pencereler), `kit.js` (panel, düğme, simgeler), `regions.js`. Hiçbir kuralı değiştirmez: her düğme bir `act` bırakır, `main.js` çalıştırır. |
 | `src/main.js` | Açılış, girdi, çizim döngüsü. `window.MareNostrum` araçların kapısı. |
 | `Tools/ne/` | Natural Earth 1:50m kaynak verisi (kamu malı). |
 
@@ -57,3 +59,16 @@ oynayacak (HOTICE-Notes/tuzaklar.md, bölüm 6).
 - En yakın zoom 120 px/birim: 1:50m kıyı bunun ötesinde köşeli görünüyor.
 - Kamera, kıyı verisinin bittiği yeri hiçbir ekranda göstermez (test ediliyor). Dik telefonda bu,
   en uzak hâlde bile haritanın yana kaydırılması demek.
+
+## Denge kayıtları
+
+- **NaN tuzağı (20.10):** başlangıç nüfusu `N.start.startPop` diye okunuyordu, sayı `N.startPop`
+  adındaydı. Bütün nüfus ve para NaN oldu; `NaN < 1` her zaman false olduğundan para kontrolü
+  hiç düşmedi ve oyun "çalışıyor" göründü. Bot özetinde herkes 60 tur 3 yerleşimde kalınca
+  görüldü. Şimdi test her tur her sayının gerçek sayı olduğunu kontrol ediyor (hata geri
+  konunca sekiz kontrol düşüyor).
+- **Yiyecek ordunun tavanı.** Buğday 2 + balık 2 iken üç limanlı Kartaca her oyunu kazanıyordu;
+  buğday 4 + balık 1 yapıldı, Kartaca balık yerine para aldı.
+- **Erken oyun.** Bilgisayar 6. turda savaş açabilirken biri 15-25. turda yok oluyordu; şimdi
+  12. tur ve 1.5 kat güç şartı, başkentin suru var, ve bilgisayar komşu düşman garnizonlarını
+  tehdit sayıyor. Test: ilk medeniyet 20. turdan önce düşmüyor (7 oyunda).

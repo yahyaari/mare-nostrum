@@ -111,14 +111,29 @@ if (!ready()) {
   process.exit(3);
 }
 
-await shot("01_genel", "M.setLang('en'); M.select(null); M.overview()");
-await shot("02_yunanistan", "M.look('athens', 4)");
-await shot("03_italya_secili", "M.look('rome', 3); M.select('rome')");
-await shot("04_dogu", "M.select(null); M.look('babylon', 2.2)");
-await shot("05_misir_tr", "M.setLang('tr'); M.look('alexandria', 3); M.select('alexandria')");
-await shot("06_karadeniz_tr", "M.select('neapolis'); M.look('neapolis', 2.5)");
-await shot("07_en_yakin", "M.select(null); M.look('corinth', 99)");
-await evaluate("window.MareNostrum.setLang('en')");
+// Bir eylem, oyunun kendi düğmelerinin bıraktığı biçimde.
+const D = (act) => `M.dispatch(${JSON.stringify(act)})`;
+// Gerçek bir basış: bir yerleşimin ekrandaki yerine, oyunun kendi girdi yolundan.
+const TAP = (id) => `{ const p = M.where('${id}'); M.tap(p.x, p.y); }`;
+
+await shot("01_baslangic", "");
+await shot("02_secim_tr", `${D({ do: "lang", lang: "tr" })}; ${D({ do: "pick", civ: "saka" })}`);
+await shot("03_basla_yardim", `${D({ do: "lang", lang: "en" })}; ${D({ do: "pick", civ: "rome" })}; ${D({ do: "start" })}`);
+await shot("04_harita", D({ do: "close" }));
+await shot("05_sehir_karti", TAP("rome"));
+await shot("06_ordu_cikar", D({ do: "formOpen", id: "rome" }));
+await shot("07_ordu_secili", D({ do: "formOk" }));
+await shot("08_yurudu", TAP("ariminum"));
+await shot("09_tur_raporu", D({ do: "endTurn" }));
+await shot("10_saldiri_isaretleri", `${D({ do: "close" })}; const a = M.game.armies.find((x) => x.owner === 'rome');
+  a.inf = 120; M.ui.sel = { kind: 'army', id: a.id }; M.look('ariminum', 2.6)`);
+await shot("11_saldiri_penceresi", TAP("mediolanum"));
+await shot("12_savas_sonucu", D({ do: "attack" }));
+await shot("13_diplomasi", `${D({ do: "close" })}; ${D({ do: "open", modal: "diplo" })}`);
+await shot("14_menu", `${D({ do: "close" })}; ${D({ do: "open", modal: "menu" })}`);
+await shot("15_tr_sehir", `${D({ do: "close" })}; ${D({ do: "lang", lang: "tr" })}; M.ui.sel = { kind: 'place', id: 'mediolanum' }; M.redraw()`);
+await shot("16_yabanci_kart", "M.ui.sel = { kind: 'place', id: 'massalia' }; M.look('massalia', 2.2)");
+await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "en" })}; return true; })()`);
 
 for (const line of log) console.log("  " + line);
 console.log(bad ? `${bad} HATA` : "konsol temiz");

@@ -60,8 +60,8 @@ oyunun başındaki büyüme alanı orası.
 Her yerleşimin haritadaki toprağı, ona en yakın yerlerdir (en fazla ~350 km). Bu sadece
 çizimdir: kurallar toprağı değil yerleşimleri sayar.
 
-Bağımsız yerleşimler **saldırmaz, büyümez, sadece savunur.** Başlangıçta 3–6 bölük garnizonları
-vardır. Alınınca normal bir şehir olur.
+Bağımsız yerleşimler **saldırmaz, büyümez, sadece savunur.** Şehirleri seviye 2, 30 piyade ve 10
+okçuyla; kaleleri seviye 1, 30 piyade ve 30 okçuyla başlar. Alınınca normal bir şehir olur.
 
 ---
 
@@ -73,7 +73,13 @@ vardır. Alınınca normal bir şehir olur.
 |---|---|
 | **Para** | Vergi: her şehirde, her 20 nüfus için turda 1 para |
 | **Silah** | Sanayi: turda sanayi seviyesi kadar |
-| **Yiyecek** | Tarla: turda gıda seviyesi × 2 buğday. Limanlar buna ek olarak turda +2 balık verir. Buğday ve balık aynı ambara girer. |
+| **Yiyecek** | Tarla: turda tarla seviyesi × 4 buğday. Limanlar buna ek olarak turda +1 balık verir. Buğday ve balık aynı ambara girer. |
+
+Her medeniyet ambarında 30 para, 5 silah ve 10 yiyecekle başlar.
+
+> İlk taslakta buğday 2, balık 2 idi. Bot oynatınca üç limanı olan Kartaca turda +11 yiyecek
+> fazlasıyla başlıyordu, Roma +1, Partlar ve Galyalılar eksiyle. Yiyecek ordunun tavanı
+> olduğu için Kartaca her oyunu kazanıyordu.
 
 ---
 
@@ -85,7 +91,7 @@ Her yerleşimin dört yükseltmesi var:
 |---|---|
 | **Şehir seviyesi** | Nüfus tavanı: seviye × 100 (kalede × 50) |
 | **Sanayi** | Turda seviye kadar silah |
-| **Gıda** | Turda seviye × 2 buğday |
+| **Tarla** | Turda seviye × 4 buğday |
 | **Kışla** | Seviye 1'de piyade, seviye 2'de okçu açılır. Her seviye turda bir bölük daha basmayı sağlar. |
 
 - Şehrin en yüksek seviyesi 5, kalenin 3.
@@ -137,10 +143,15 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 
 **Saldırmadan önce bir tahmin gösterilir:** *Kolay / Zor / Umutsuz.*
 
-1. **Ok yağmuru:** İki tarafın okçuları aynı anda atar. Her okçu bölüğü karşı taraftan 2 asker
+1. **Ok yağmuru:** İki tarafın okçuları aynı anda atar. Her okçu bölüğü karşı taraftan 5 asker
    düşürür.
-2. **Göğüs göğüse:** Her tarafın gücü = piyade × 1 + okçu × 0.5. Bonuslar bu sayıyı çarpar, üstüne
-   ±%10 şans eklenir. Gücü büyük olan kazanır.
+2. **Göğüs göğüse:** Her tarafın gücü = piyade × 1 + okçu × 0.6. Piyadesinden fazla olan okçular
+   korumasız yakalanır ve × 0.25 sayılır. Bonuslar bu sayıyı çarpar, üstüne ±%10 şans eklenir.
+   Gücü büyük olan kazanır.
+
+   Sonuç: tek başına okçu aynı sayıda piyadeye ezilir. Yarı yarıya karışık bir ordu ise aynı
+   sayıda düz piyadeyi yener. (İlk taslaktaki 2 asker ve × 0.5 ile okçu her durumda piyadeden
+   kötüydü.)
 3. **Sonuç:**
    - Kaybeden ordu dağılır.
    - Kazananın kaybı, iki gücün birbirine ne kadar yakın olduğuna bağlıdır:
@@ -153,7 +164,7 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 | Yer | Savunanlara bonus |
 |---|---|
 | Kale | Herkes × 1.5, okçuların ok yağmuru × 2 |
-| Seviye 3 ve üstü şehir | Herkes × 1.25 |
+| Başkent, ve seviye 3 ve üstü şehir | Herkes × 1.25 |
 | Diğerleri | Yok |
 
 ---
@@ -167,7 +178,9 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 - **İttifak bozulursa** önce tarafsız olunur. Savaş ancak bir sonraki tur ilan edilebilir, yani
   sürpriz ihanet yok.
 - Müttefikler birbirinin topraklarından geçebilir ama birbirine saldıramaz.
+- **Barış:** Savaştaki biriyle barış teklif edilebilir. Kaybeden taraf kabul etmeye yatkındır.
 - **Bağımsız yerleşimlere** herkes her zaman saldırabilir.
+- Bilgisayar 12. turdan önce kimseye savaş açmaz. Ancak 1.5 kat güçlüyken açar.
 
 ---
 
@@ -175,13 +188,16 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 
 | Medeniyet | Güçlü yanı | Zayıf yanı |
 |---|---|---|
-| **Roma** | Piyade × 1.25 | Bir bölük 2 para tutar |
-| **Kartaca** | Liman balığı × 2, para × 1.25 | Bütün askerler × 0.85 |
-| **Mısır** | Buğday × 1.5 (Nil) | Silah × 0.75 |
+| **Roma** | Piyade × 1.25 | Bir bölük 1.5 para tutar |
+| **Kartaca** | Ticaret: para × 1.5 | Bütün askerler × 0.85 |
+| **Mısır** | Buğday × 1.15 (Nil) | Silah × 0.75 |
 | **Makedonya** | Savunan piyade × 1.5 (falanks) | Nüfus tavanı × 0.8 |
 | **Partlar** | Okçu × 1.5 | Piyade × 0.75 |
 | **Galyalılar** | Bölük para istemez, nüfus artışı × 1.5 | Okçu × 0.7 |
-| **Sakalar** | Ordular turda iki yol yürür (bozkır atlıları) | Surlu yere saldırı × 0.7, silah ve buğday × 0.75 |
+| **Sakalar** | Ordular turda iki yol yürür (bozkır atlıları) | Surlu yere saldırı × 0.6 |
+
+Bu sayılar 28 bot oyunuyla ayarlandı. Mısır ve Kartaca hâlâ en sık büyüyenler, Roma ortada
+sıkıştığı için en sık düşen. Tarihe de uyuyor; oyuncu oynadıkça bakılacak.
 
 ---
 

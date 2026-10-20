@@ -152,6 +152,195 @@ check("Siraküza kapalıyken başka yoldan", !!around && !around.includes("syrac
 check("bütün yollar kapalıyken güzergâh yok", path("rome", "athens", () => false) === null);
 
 // ---------------------------------------------------------------------------------------------
+section("Yeni oyun (kurallar.md bölüm 4)");
+
+const S = await import("../src/rules/state.js");
+const C = await import("../src/rules/combat.js");
+const M = await import("../src/rules/moves.js");
+const D = await import("../src/rules/diplomacy.js");
+const T = await import("../src/rules/turn.js");
+const { N } = await import("../src/rules/numbers.js");
+const { play } = await import("./bot.mjs");
+
+{
+  const s = S.newGame("rome", 7);
+  const rome = s.places.rome, tar = s.places.tarentum, ari = s.places.ariminum;
+  check("başkent seviye 2", rome.level === 2);
+  check("öteki şehir seviye 1", tar.level === 1 && ari.level === 1);
+  check("nüfus tavanın %75'i", rome.pop === 150 && tar.pop === 75 && ari.pop === 38, `${rome.pop} ${tar.pop} ${ari.pop}`);
+  check("garnizon 30 / 20 / 10", rome.inf === 30 && tar.inf === 20 && ari.inf === 10);
+  check("bağımsız şehir: seviye 2, 30 piyade 10 okçu", s.places.athens.level === 2 && s.places.athens.inf === 30 && s.places.athens.arch === 10);
+  check("bağımsız kale: 30 piyade 30 okçu", s.places.sparta.inf === 30 && s.places.sparta.arch === 30);
+  check("Makedonya nüfusu x0.8", s.places.pella.pop === 120, s.places.pella.pop);
+  check("bütün yapılar 1", Object.values(s.places).every((p) => p.industry === 1 && p.farms === 1 && p.barracks === 1));
+  // Elle hesaplandı: para (150+75+38)/20 = 13.15; silah 1+1+0.5; yiyecek Roma 4 + Tarentum 4+1
+  // balık + Ariminum 2 = 11, eksi 6 bölük = 5.
+  const b = S.budget(s, "rome");
+  check("Roma'nın turluk parası 13.15", Math.abs(b.money - 13.15) < 1e-9, b.money);
+  check("Roma'nın turluk silahı 2.5", b.weapons === 2.5, b.weapons);
+  check("Roma'nın turluk yiyeceği +5", b.food === 5, `${b.food} (bakım ${b.upkeep})`);
+  for (const c of CIVS) check(`${c.id}: başlangıçta yiyecek artıda`, S.budget(s, c.id).food > 0, S.budget(s, c.id).food);
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Yükseltme ve asker");
+
+{
+  const s = S.newGame("rome", 7);
+  s.civs.rome.money = 100;
+  check("tarla 1->2: 20 para", S.upgradeInfo(s, "rome", "farms").cost === 20);
+  check("şehir seviyesi 2->3: 60 para", S.upgradeInfo(s, "rome", "level").cost === 60);
+  check("yapı şehir seviyesini geçemez", S.upgradeInfo(s, "tarentum", "farms").why === "needLevel");
+  check("yükseltme yapılıyor", S.upgrade(s, "rome", "farms") && s.places.rome.farms === 2 && s.civs.rome.money === 80);
+  check("turda bir yükseltme", S.upgradeInfo(s, "rome", "industry").why === "done");
+  s.civs.rome.money = 5;
+  check("parası yetmeyen yükseltemez", S.upgradeInfo(s, "tarentum", "level").why === "money");
+  check("kale en fazla seviye 3", (s.places.ariminum.level = 3, S.upgradeInfo(s, "ariminum", "level").why === "max"));
+
+  const t = S.newGame("gaul", 7);
+  const before = { ...t.civs.gaul }, pop = t.places.bibracte.pop;
+  check("okçu için kışla 2 gerek", S.recruitInfo(t, "bibracte", "arch").why === "needBarracks");
+  check("piyade basılıyor", S.recruit(t, "bibracte", "inf"));
+  check("Galyalılar bölük için para vermez", t.civs.gaul.money === before.money);
+  check("bölük 1 silah 1 yiyecek", t.civs.gaul.weapons === before.weapons - 1 && t.civs.gaul.food === before.food - 1);
+  check("nüfustan 10 kişi", t.places.bibracte.pop === pop - 10 && t.places.bibracte.inf === 40);
+  check("kışla 1: turda bir bölük", S.recruitInfo(t, "bibracte", "inf").why === "done");
+  const r = S.newGame("rome", 7);
+  S.recruit(r, "rome", "inf");
+  check("Roma bir bölük için 1.5 para verir", r.civs.rome.money === 30 - 1.5, r.civs.rome.money);
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Savaş (bölüm 7) - her kuralın vaadi");
+
+{
+  const F = (a, d, walls = null, luck) => C.fight({ civ: null, ...a }, { civ: null, ...d }, walls, luck);
+  const best = [1 + N.luck, 1 - N.luck];
+  check("tek başına okçu, aynı sayıda piyadeye en iyi şansla bile yenilir",
+    !F({ inf: 0, arch: 100 }, { inf: 100, arch: 0 }, null, best).attWins);
+  check("karışık ordu aynı sayıda düz piyadeyi yener", F({ inf: 50, arch: 50 }, { inf: 100, arch: 0 }).attWins);
+  check("denk savaşta kazanan yarısına yakın kaybeder", (() => {
+    const r = F({ inf: 100, arch: 0 }, { inf: 99, arch: 0 });
+    return r.attWins && r.att.inf > 40 && r.att.inf < 60;
+  })());
+  check("iki kat güçlü, sekizde birini kaybeder", F({ inf: 200, arch: 0 }, { inf: 100, arch: 0 }).att.inf === 175);
+  check("kaybeden dağılır", (() => { const r = F({ inf: 50, arch: 0 }, { inf: 100, arch: 0 }); return r.att.inf + r.att.arch === 0; })());
+  check("boş yere kayıpsız girilir", (() => { const r = F({ inf: 10, arch: 0 }, { inf: 0, arch: 0 }); return r.attWins && r.att.inf === 10; })());
+  check("kale: 90 piyade, 30+30 kale garnizonunu alamaz", !F({ inf: 90, arch: 0 }, { inf: 30, arch: 30 }, "castle").attWins);
+  check("aynı garnizon açık arazide 90 piyadeye yenilir", F({ inf: 90, arch: 0 }, { inf: 30, arch: 30 }).attWins);
+  const civF = (ac, a, dc, d, walls = null) => C.fight({ civ: ac, ...a }, { civ: dc, ...d }, walls);
+  check("Roma piyadesi x1.25: 100, 120 Galyalıyı yener", civF("rome", { inf: 100, arch: 0 }, "gaul", { inf: 120, arch: 0 }).attWins);
+  check("Makedonya savunurken x1.5: 140 piyadeyi 100'le durdurur", !civF("gaul", { inf: 140, arch: 0 }, "macedon", { inf: 100, arch: 0 }).attWins);
+  check("Sakalar sura karşı zayıf", civF(null, { inf: 100, arch: 0 }, null, { inf: 70, arch: 0 }, "city").attWins
+    && !civF("saka", { inf: 100, arch: 0 }, null, { inf: 70, arch: 0 }, "city").attWins);
+
+  // Tahmin yalan söylemesin: "kolay" diyorsa her şansta kazanmalı, "umutsuz" diyorsa hiçbirinde.
+  let lies = 0, seen = { easy: 0, risky: 0, hopeless: 0 };
+  for (let i = 0; i < 400; i++) {
+    const a = { civ: null, inf: (i * 37) % 150, arch: (i * 53) % 90 }, d = { civ: null, inf: (i * 29) % 120, arch: (i * 17) % 70 };
+    const walls = [null, "city", "castle"][i % 3];
+    const e = C.estimate(a, d, walls);
+    seen[e.odds]++;
+    for (let k = 0; k <= 10; k++) {
+      const l = [1 - N.luck + (k / 10) * 2 * N.luck, 1 + N.luck - (((k * 7) % 11) / 10) * 2 * N.luck];
+      const won = C.fight(a, d, walls, l).attWins;
+      if ((e.odds === "easy" && !won) || (e.odds === "hopeless" && won)) lies++;
+    }
+  }
+  check("tahmin hiçbir şansta yalan söylemiyor", lies === 0, `${lies} yalan`);
+  check("tahminin üç cevabı da görüldü", seen.easy && seen.risky && seen.hopeless, JSON.stringify(seen));
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Hareket ve diplomasi (bölüm 6, 8)");
+
+{
+  const s = S.newGame("rome", 7);
+  const a = S.formArmy(s, "rome", 30, 0);
+  check("ordu kuruluyor, garnizon boşalıyor", a && s.places.rome.inf === 0);
+  check("tarafsız toprağa girilemez", M.access(s, "rome", "carthage") === null && M.routeTo(s, a, "carthage") === null);
+  check("bağımsıza saldırılır", M.access(s, "rome", "mediolanum") === "free");
+  check("bir turda bir yol", M.order(s, a.id, "mediolanum") === 1 && a.at === "ariminum" && a.moves === 0);
+  check("hareketi bitmiş ordu saldıramaz", !M.canAttack(s, a, "mediolanum"));
+  M.refresh(s, "rome");
+  const big = S.formArmy(s, "tarentum", 20, 0);
+  a.inf = 200;
+  const ev = M.attack(s, a.id, "mediolanum", [1, 1]);
+  check("saldırı kazanılıyor, yer el değiştiriyor", ev?.won && s.places.mediolanum.owner === "rome" && a.at === "mediolanum");
+  check("alınan yerin nüfusunun dörtte biri kaçar", s.places.mediolanum.pop === Math.round(150 * 0.75), s.places.mediolanum.pop);
+  check("kaybeden ordu yok olur", (() => {
+    big.inf = 5;
+    M.attack(s, big.id, "syracuse", [1, 1]);
+    return !S.armyById(s, big.id);
+  })());
+
+  // Sakalar: iki yol.
+  const k = S.newGame("saka", 7);
+  const sa = S.formArmy(k, "olbia", 10, 0);
+  check("Saka ordusu turda iki yol yürür", M.order(k, sa.id, "tanais") === 2 && sa.at === "tanais");
+
+  // Diplomasi: tarafsız -> müttefik -> bozuluyor -> o tur savaş yok -> ertesi tur var.
+  const d = S.newGame("rome", 7);
+  d.relations[S.key("rome", "gaul")] = "ally";
+  const g = S.formArmy(d, "rome", 20, 0);
+  check("müttefik toprağından geçilir", M.access(d, "rome", "bibracte") === "ally");
+  g.at = "gergovia";
+  check("ittifak bozuluyor", D.breakAlliance(d, "rome", "gaul")?.type === "broke" && S.relation(d, "rome", "gaul") === "neutral");
+  check("bozulunca ordu evine döner", S.placesOf(d, "rome").includes(g.at), g.at);
+  check("ittifakın bozulduğu tur savaş ilan edilemez", D.declareWar(d, "rome", "gaul") === null);
+  d.turn++;
+  check("ertesi tur edilir", D.declareWar(d, "rome", "gaul")?.type === "war");
+  check("savaşla barış teklifi turda bir", D.proposePeace(d, "rome", "gaul") && D.proposePeace(d, "rome", "gaul") === null);
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Bot: oyun boyunca değişmezler");
+
+{
+  const bad = [];
+  const isNum = (v) => Number.isFinite(v);
+  const watch = (s, events) => {
+    for (const [c, civ] of Object.entries(s.civs)) {
+      for (const k of ["money", "weapons", "food"]) if (!isNum(civ[k]) || civ[k] < -1e-9) bad.push(`t${s.turn} ${c}.${k}=${civ[k]}`);
+      if (!civ.alive && (S.placesOf(s, c).length || S.armiesOf(s, c).length)) bad.push(`t${s.turn} ölü ${c}'nin malı var`);
+    }
+    for (const [id, p] of Object.entries(s.places)) {
+      for (const k of ["pop", "inf", "arch", "level", "farms", "industry", "barracks"]) {
+        if (!Number.isInteger(p[k]) || p[k] < 0) bad.push(`t${s.turn} ${id}.${k}=${p[k]}`);
+      }
+      for (const k of ["farms", "industry", "barracks"]) if (p[k] > p.level) bad.push(`t${s.turn} ${id}.${k} > seviye`);
+      if (p.pop > S.popCap(p, byId[id].kind) + 1e-9) bad.push(`t${s.turn} ${id} nüfusu tavanı aşıyor`);
+    }
+    for (const a of s.armies) {
+      if (!(a.inf + a.arch > 0) || !Number.isInteger(a.inf) || !Number.isInteger(a.arch)) bad.push(`t${s.turn} ordu ${a.id} ${a.inf}/${a.arch}`);
+      const k = M.access(s, a.owner, a.at);
+      if (k !== "own" && k !== "ally") bad.push(`t${s.turn} ordu ${a.id} (${a.owner}) yabancı yerde: ${a.at} ${k}`);
+      if (!s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);
+    }
+    for (const e of events) if (!e || !e.type) bad.push(`t${s.turn} boş olay`);
+  };
+  const games = [];
+  for (let i = 0; i < 7; i++) games.push(play({ seed: 500 + i, player: CIVS[i].id, turns: 120, watch }));
+  check("hiçbir turda bozuk sayı, bozuk ordu yok", !bad.length, bad.slice(0, 5).join(" | "));
+  const free25 = games.map((g) => g.freeLeft[24] ?? 0);
+  check("25. tura kadar bağımsızların çoğu alınıyor", free25.every((n) => n <= 8), free25.join(" "));
+  check("her oyunda savaş çıkıyor", games.every((g) => g.firstWar !== null && g.firstWar <= 40), games.map((g) => g.firstWar).join(" "));
+  check("barış döneminde kimse savaş açmıyor", games.every((g) => g.firstWar >= N.aiPeace));
+  const first = games.map((g) => g.fallen[0]?.[1] ?? 999);
+  check("ilk medeniyet 20. turdan önce düşmüyor", first.every((t) => t >= 20), first.join(" "));
+
+  // Aynı tohum aynı oyun; ve kayıttan dönen oyun aynı devam eder.
+  const x = play({ seed: 77, player: "egypt", turns: 40 }), y = play({ seed: 77, player: "egypt", turns: 40 });
+  check("aynı tohum aynı oyun", JSON.stringify(x.state) === JSON.stringify(y.state));
+  const { aiTurn } = await import("../src/rules/ai.js");
+  const s1 = S.newGame("macedon", 9);
+  for (let t = 0; t < 15; t++) { aiTurn(s1, "macedon", []); T.endTurn(s1); }
+  const s2 = JSON.parse(JSON.stringify(s1));
+  for (let t = 0; t < 15; t++) { aiTurn(s1, "macedon", []); T.endTurn(s1); aiTurn(s2, "macedon", []); T.endTurn(s2); }
+  check("kayıttan dönen oyun aynı devam ediyor", JSON.stringify(s1) === JSON.stringify(s2));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Kamera");
 
 // Söz: hangi ekranda, hangi köşeye kaydırılmış olursa olsun, kıyı verisinin bittiği yer

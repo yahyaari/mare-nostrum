@@ -1,0 +1,212 @@
+// Ordu hareketi ve saldırı (kurallar.md bölüm 6-7). Saf kurallar, DOM yok.
+//
+// Ordular sadece yerleşimlerde durur. Her ordu her tur `moves` yol yürür (Sakalar 2).
+// Uzak bir yere gönderilen ordu güzergâhını saklar ve her tur kendiliğinden ilerler; ama
+// yabancı bir yere asla kendi başına girmez - saldırı her zaman açık bir emirdir.
+
+import { CIVS } from "../data/world.js";
+import { fight } from "./combat.js";
+import { neighbours, path } from "./graph.js";
+import { N, trait } from "./numbers.js";
+import { between } from "./rng.js";
+import { armiesAt, armyById, info, men, placesOf, relation } from "./state.js";
+
+/**
+ * `civ` buraya girebilir mi, girerse ne olur:
+ *   "own" / "ally"  - yürür
+ *   "enemy" / "free" - saldırır (savaştığı medeniyet / bağımsız)
+ *   null            - giremez (tarafsız birinin toprağı)
+ */
+export function access(state, civ, id) {
+  const owner = state.places[id].owner;
+  const r = relation(state, civ, owner);
+  if (r === "self") return "own";
+  if (r === "free") return "free";
+  if (r === "ally") return "ally";
+  if (r === "war") return "enemy";
+  return null;
+}
+
+export const hostile = (kind) => kind === "enemy" || kind === "free";
+
+/** Surlar: kale güçlü sur; başkent ve büyümüş (3+) şehir hafif sur. */
+export function wallsOf(state, id) {
+  if (info(id).kind === "castle") return "castle";
+  return info(id).capital || state.places[id].level >= N.cityWallLevel ? "city" : null;
+}
+
+/** Bir yeri savunanlar: garnizon ve sahibinin orada duran orduları. */
+export function defenders(state, id) {
+  const pl = state.places[id];
+  const own = armiesAt(state, id).filter((a) => a.owner === pl.owner);
+  return {
+    civ: pl.owner,
+    inf: pl.inf + own.reduce((n, a) => n + a.inf, 0),
+    arch: pl.arch + own.reduce((n, a) => n + a.arch, 0),
+  };
+}
+
+/**
+ * Bir ordunun `dest`e güzergâhı: aradaki her durak kendi ya da müttefik yeri olmalı.
+ * `dest` düşmansa güzergâh onun bir önceki durağında biter (saldırı ayrı emir).
+ */
+export function routeTo(state, army, dest) {
+  if (army.at === dest) return [];
+  const kind = access(state, army.owner, dest);
+  if (kind === null) return null;
+  const walkable = (id) => {
+    const k = access(state, army.owner, id);
+    return k === "own" || k === "ally";
+  };
+  if (hostile(kind)) {
+    // Düşmana komşu, yürünebilir en yakın durak.
+    let best = null;
+    for (const n of neighbours(dest)) {
+      const p = n === army.at ? [army.at] : walkable(n) ? path(army.at, n, walkable) : null;
+      if (p && (!best || p.length < best.length)) best = p;
+    }
+    return best ? best.slice(1) : null;
+  }
+  const p = path(army.at, dest, walkable);
+  return p ? p.slice(1) : null;
+}
+
+/** Güzergâhı koy ve hareketi kalan kadar yürü. Dönen: yürünen adım sayısı. */
+export function order(state, armyId, dest) {
+  const army = armyById(state, armyId);
+  if (!army) return -1;
+  const route = routeTo(state, army, dest);
+  if (route === null) return -1;
+  army.route = route;
+  return advance(state, army);
+}
+
+/**
+ * Ordunun güzergâhında kalan hareketi kadar yürü. Önündeki yer artık yürünemez olduysa
+ * (sahibi değişti, savaş çıktı) durur ve güzergâhı siler: "durur ve sana sorar".
+ */
+export function advance(state, army) {
+  let steps = 0;
+  while (army.moves > 0 && army.route.length) {
+    const next = army.route[0];
+    const k = access(state, army.owner, next);
+    if (!(k === "own" || k === "ally") || !neighbours(army.at).includes(next)) {
+      army.route = [];
+      break;
+    }
+    army.at = next;
+    army.moves -= 1;
+    army.route.shift();
+    steps++;
+  }
+  return steps;
+}
+
+/** Saldırabilir mi: komşu, düşman/bağımsız, hareketi var. */
+export function canAttack(state, army, id) {
+  return !!army && army.moves > 0 && neighbours(army.at).includes(id) && hostile(access(state, army.owner, id));
+}
+
+/**
+ * Saldırı. Dönen olay: { type: "battle", ... }. Kazanırsa yer saldıranın olur, ordu içeri
+ * girer; kaybederse ordu yok olur ve savunanların kayıpları garnizona ve ordulara oranla düşer.
+ */
+export function attack(state, armyId, id, luck = null) {
+  const army = armyById(state, armyId);
+  if (!canAttack(state, army, id)) return null;
+  const pl = state.places[id];
+  const def = defenders(state, id);
+  const walls = wallsOf(state, id);
+  const r = fight({ civ: army.owner, inf: army.inf, arch: army.arch }, def, walls, luck ?? rollLuck(state));
+  const ev = {
+    type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
+    won: r.attWins, before: { att: { inf: army.inf, arch: army.arch }, def: { inf: def.inf, arch: def.arch } },
+    after: { att: r.att, def: r.def },
+  };
+  army.moves = 0;
+  army.route = [];
+
+  if (r.attWins) {
+    army.inf = r.att.inf;
+    army.arch = r.att.arch;
+    const loser = pl.owner;
+    capture(state, id, army.owner);
+    army.at = id;
+    ev.fallen = loser && !state.civs[loser].alive ? loser : null;
+  } else {
+    // Savunanların sağ kalanları: her birim aynı oranda.
+    const keep = (was, now) => (was > 0 ? now / was : 0);
+    const ki = keep(def.inf, r.def.inf), ka = keep(def.arch, r.def.arch);
+    const units = [pl, ...armiesAt(state, id).filter((a) => a.owner === pl.owner)];
+    for (const u of units) {
+      u.inf = Math.round((u.inf * ki) / N.company) * N.company;
+      u.arch = Math.round((u.arch * ka) / N.company) * N.company;
+    }
+    state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && men(a) === 0));
+  }
+  return ev;
+}
+
+const rollLuck = (state) => [between(state, 1 - N.luck, 1 + N.luck), between(state, 1 - N.luck, 1 + N.luck)];
+
+/** Yer el değiştirir: savunanlar yok olur, nüfusun dörtte biri kaçar, yapılar kalır. */
+export function capture(state, id, civ) {
+  const pl = state.places[id];
+  const loser = pl.owner;
+  pl.inf = 0;
+  pl.arch = 0;
+  pl.owner = civ;
+  pl.pop = Math.round(pl.pop * (1 - N.captureLoss));
+  pl.upgraded = true; // alındığı tur yükseltilmez
+  pl.recruited = pl.barracks;
+  // Eski sahibin oradaki orduları savunurken öldü; başkalarının (müttefik) orduları en yakın
+  // kendi yerlerine çekilir, yoksa dağılır.
+  state.armies = state.armies.filter((a) => !(a.at === id && a.owner === loser));
+  for (const a of armiesAt(state, id)) {
+    if (a.owner === civ) continue;
+    const home = nearestOwn(state, a.owner, id);
+    if (home) { a.at = home; a.route = []; } else state.armies = state.armies.filter((x) => x !== a);
+  }
+  if (loser && !placesOf(state, loser).length) eliminate(state, loser);
+}
+
+/** İttifak bozulunca birbirinin topraklarında duran ordular evlerine döner. */
+export function expel(state, a, b) {
+  for (const army of state.armies) {
+    const owner = state.places[army.at].owner;
+    if ((army.owner === a && owner === b) || (army.owner === b && owner === a)) {
+      const home = nearestOwn(state, army.owner, army.at);
+      if (home) { army.at = home; army.route = []; } else army.inf = army.arch = 0;
+    }
+  }
+  state.armies = state.armies.filter((x) => men(x) > 0);
+}
+
+function nearestOwn(state, civ, from) {
+  const seen = new Set([from]);
+  for (const q = [from]; q.length;) {
+    const at = q.shift();
+    for (const n of neighbours(at)) {
+      if (seen.has(n)) continue;
+      if (state.places[n].owner === civ) return n;
+      seen.add(n);
+      q.push(n);
+    }
+  }
+  return null;
+}
+
+/** Son yerini kaybeden medeniyet oyundan çıkar: orduları dağılır, ilişkileri silinir. */
+export function eliminate(state, civ) {
+  state.civs[civ].alive = false;
+  state.armies = state.armies.filter((a) => a.owner !== civ);
+  for (const c of CIVS) {
+    const k = civ < c.id ? `${civ}|${c.id}` : `${c.id}|${civ}`;
+    delete state.relations[k];
+  }
+}
+
+/** Bir medeniyetin ordularına turun başında hareketlerini geri ver. */
+export function refresh(state, civ) {
+  for (const a of state.armies) if (a.owner === civ) a.moves = trait(civ, "moves");
+}

@@ -1,34 +1,18 @@
-// Haritayı çizer. Hiçbir şeyi değiştirmez: kamera, seçim ve sahiplik dışarıdan gelir.
+// Haritayı çizer: kıyılar, topraklar, yollar, yerleşimler, ordular, seçimin işaretleri.
+// Hiçbir şeyi değiştirmez; ne çizileceği `view` ile dışarıdan gelir. Arayüz (paneller,
+// düğmeler) ui.js'te.
 //
 // Harita katmanları harita biriminde bir kere Path2D olarak kurulur, her karede kamera
 // dönüşümüyle çizilir. Çizgi kalınlıkları ekran pikseli cinsinden yazılıyor (`px`), yoksa
 // yakınlaştıkça kıyılar kalınlaşırdı.
 
 import { LAND, LAKES, RIVERS } from "../data/geo.js";
-import { CIVS, FREE_COLOR, PLACES, ROADS } from "../data/world.js";
+import { PLACES, ROADS } from "../data/world.js";
 import { project } from "../geo.js";
-import { byId, neighbours, roadBetween, roadLine } from "../rules/graph.js";
-import { TEXT } from "../text.js";
+import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
+import { INK, SERIF, TAU, colorOf } from "./kit.js";
 import { regions } from "./regions.js";
-
-export const INK = {
-  ink: "#2b2a27",
-  soft: "#6d665b",
-  paper: "#efe8d8",
-  card: "#f7f2e7",
-  sea: "#d6dfdc",
-  ripple: "#a7b9b6",
-  river: "#86a4a9",
-  road: "#86765e",
-  lane: "#5c838c",
-  border: "#c4b598",
-};
-const SERIF = 'Georgia, "Times New Roman", serif';
-const TAU = Math.PI * 2;
-
-const civ = Object.fromEntries(CIVS.map((c) => [c.id, c]));
-export const colorOf = (owner) => (owner ? civ[owner].color : FREE_COLOR);
 
 // ---- bir kere kurulan yollar ----
 
@@ -68,13 +52,18 @@ function layers() {
 /** Bir yerleşimin harita birimindeki yeri. */
 export const placeAt = (id) => layers().at[id];
 
-// ---- kare ----
+/** Bir yerleşimin ekrandaki yeri. */
+export const placeOnScreen = (cam, id) => toScreen(cam, layers().at[id].x, layers().at[id].y);
+
+const MARK = { walk: INK.ink, easy: INK.good, risky: INK.warn, hopeless: INK.bad };
 
 /**
- * Bütün kareyi çizer. `view`: { owners, selected, lang }.
- * Dönüş: bu karede çizilen basılabilir kutular, CSS pikseli - girdi bunlara bakıyor.
+ * Haritayı çiz. `view`:
+ *   lang, owners {id: civ|null}, selected (yer id), armies [{id, owner, at, men, selected}],
+ *   marks {id: "walk"|"easy"|"risky"|"hopeless"}, route [id, id, ...] (seçili ordunun yolu)
+ * Dönen: ordu işaretlerinin kutuları [{ x, y, w, h, army }].
  */
-export function drawFrame(ctx, cam, view, dpr) {
+export function drawMap(ctx, cam, view, dpr) {
   const L = layers();
   const k = cam.scale;
   const px = (n) => n / k;
@@ -140,36 +129,53 @@ export function drawFrame(ctx, cam, view, dpr) {
 
   // Seçili yerleşimin yolları koyu.
   if (view.selected) {
-    for (const n of neighbours(view.selected)) {
-      const r = roadBetween(view.selected, n);
-      const p = new Path2D();
-      trace(p, roadLine(r), false);
-      ctx.strokeStyle = r.sea ? INK.lane : INK.ink;
-      ctx.lineWidth = px(2.8);
-      if (r.sea) ctx.setLineDash([px(6), px(4)]);
-      ctx.stroke(p);
-      ctx.setLineDash([]);
+    for (const n of neighbours(view.selected)) strokeRoad(ctx, roadBetween(view.selected, n), px, 2.8);
+  }
+  // Seçili ordunun güzergâhı: kalın kesik mürekkep.
+  if (view.route?.length > 1) {
+    for (let i = 1; i < view.route.length; i++) {
+      strokeRoad(ctx, roadBetween(view.route[i - 1], view.route[i]), px, 3.6, [px(7), px(5)], INK.ink);
     }
   }
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const boxes = [];
-  drawPlaces(ctx, cam, view, L);
-  drawTitle(ctx, cam, view, boxes);
-  if (view.selected) drawCard(ctx, cam, view, boxes);
-  else drawLegend(ctx, cam, view);
-  return boxes;
+  return drawPlaces(ctx, cam, view, L);
 }
 
-// ---- yerleşimler ----
+function strokeRoad(ctx, r, px, width, dash = null, color = null) {
+  if (!r) return;
+  const p = new Path2D();
+  trace(p, roadLine(r), false);
+  ctx.strokeStyle = color ?? (r.sea ? INK.lane : INK.ink);
+  ctx.lineWidth = px(width);
+  ctx.setLineDash(dash ?? (r.sea ? [px(6), px(4)] : []));
+  ctx.stroke(p);
+  ctx.setLineDash([]);
+}
+
+// ---- yerleşimler ve ordular ----
 
 function drawPlaces(ctx, cam, view, L) {
   const shown = [];
   for (const p of PLACES) {
     const s = toScreen(cam, L.at[p.id].x, L.at[p.id].y);
-    if (s.x < -60 || s.y < -40 || s.x > cam.w + 60 || s.y > cam.h + 40) continue;
+    if (s.x < -80 || s.y < -60 || s.x > cam.w + 80 || s.y > cam.h + 60) continue;
     shown.push({ p, s });
   }
+
+  // Seçimin işaretleri: yürünebilir yerler ince halka, saldırılabilirler tahmin renginde.
+  for (const { p, s } of shown) {
+    const m = view.marks?.[p.id];
+    if (!m) continue;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, m === "walk" ? 12 : 14, 0, TAU);
+    ctx.strokeStyle = MARK[m];
+    ctx.lineWidth = m === "walk" ? 1.5 : 3;
+    ctx.setLineDash(m === "walk" ? [2, 3] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   for (const { p, s } of shown) {
     const color = colorOf(view.owners[p.id]);
     if (p.id === view.selected) {
@@ -188,9 +194,22 @@ function drawPlaces(ctx, cam, view, L) {
     if (p.port) anchor(ctx, s.x + 9, s.y + 6);
   }
 
-  // Adlar: önce başkentler, sonra şehirler, sonra kaleler. Bir ad başka bir adın ya da bir
-  // işaretin üstüne düşecekse yazılmaz - yakınlaşınca yer açılır ve görünür.
-  const taken = shown.map(({ s }) => ({ x: s.x - 8, y: s.y - 8, w: 16, h: 16 }));
+  // Ordu işaretleri: yerleşimin sağ üstünde, yan yana küçük sancaklar.
+  const tokens = [];
+  const at = {};
+  for (const a of view.armies ?? []) (at[a.at] ??= []).push(a);
+  for (const { p, s } of shown) {
+    (at[p.id] ?? []).forEach((a, i) => {
+      const label = a.men >= 1000 ? (a.men / 1000).toFixed(1) + "k" : String(a.men);
+      ctx.font = `bold 10px ${SERIF}`;
+      const w = Math.max(24, ctx.measureText(label).width + 10);
+      tokens.push({ x: s.x + 8 + i * (w + 4), y: s.y - 30, w, h: 16, army: a, label });
+    });
+  }
+
+  // Adlar: önce seçili, sonra başkentler, şehirler, kaleler. Bir ad başka bir adın, bir
+  // işaretin ya da bir sancağın üstüne düşecekse yazılmaz - yakınlaşınca yer açılır.
+  const taken = [...shown.map(({ s }) => ({ x: s.x - 8, y: s.y - 8, w: 16, h: 16 })), ...tokens];
   const rank = (p) => (p.id === view.selected ? 0 : p.capital ? 1 : p.kind === "city" ? 2 : 3);
   for (const { p, s } of [...shown].sort((a, b) => rank(a.p) - rank(b.p))) {
     const name = p.name[view.lang];
@@ -210,6 +229,38 @@ function drawPlaces(ctx, cam, view, L) {
     ctx.fillStyle = INK.ink;
     ctx.fillText(text, s.x, box.y + 1);
   }
+
+  for (const t of tokens) {
+    const { x, y, w, h, army } = t;
+    ctx.strokeStyle = INK.ink;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x, y + h);
+    ctx.lineTo(x, y + h + 9);
+    ctx.stroke();
+    if (army.selected) {
+      ctx.fillStyle = INK.card;
+      ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
+      ctx.setLineDash([3, 2]);
+      ctx.strokeRect(x - 3.5, y - 3.5, w + 7, h + 7);
+      ctx.setLineDash([]);
+    }
+    // Hareketi bitmiş ordu soluk ve yazısı mürekkep: bu tur artık bir şey yapamaz.
+    ctx.fillStyle = INK.card;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = army.spent ? 0.4 : 1;
+    ctx.fillStyle = colorOf(army.owner);
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = army.spent ? INK.ink : "#fff";
+    ctx.font = `bold 10px ${SERIF}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(t.label, x + w / 2, y + h / 2 + 1);
+  }
+  // Parmak için kutuyu biraz büyüt.
+  return tokens.map((t) => ({ x: t.x - 6, y: t.y - 8, w: t.w + 12, h: t.h + 16, army: t.army.id }));
 }
 
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -278,132 +329,4 @@ function anchor(ctx, x, y) {
   ctx.strokeStyle = INK.ink;
   ctx.lineWidth = 1.2;
   ctx.stroke();
-}
-
-// ---- arayüz ----
-
-function panel(ctx, x, y, w, h) {
-  ctx.fillStyle = INK.card;
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = INK.ink;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-  ctx.lineWidth = 0.75;
-  ctx.strokeRect(x + 3.5, y + 3.5, w - 7, h - 7);
-}
-
-function drawTitle(ctx, cam, view, boxes) {
-  const T = TEXT[view.lang];
-  ctx.font = `bold 15px ${SERIF}`;
-  const tw = ctx.measureText(T.title).width;
-  ctx.font = `12px ${SERIF}`;
-  const ew = ctx.measureText(T.era).width;
-  const w = Math.max(tw, ew) + 28;
-  panel(ctx, 12, 12, w, 50);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = INK.ink;
-  ctx.font = `bold 15px ${SERIF}`;
-  ctx.fillText(T.title, 26, 34);
-  ctx.font = `italic 12px ${SERIF}`;
-  ctx.fillStyle = INK.soft;
-  ctx.fillText(T.era, 26, 51);
-
-  // Dil düğmesi: iki kutu, seçili olan dolu.
-  const bw = 38, bh = 30, y = 16;
-  ["en", "tr"].forEach((l, i) => {
-    const x = cam.w - 12 - bw * (2 - i);
-    const on = view.lang === l;
-    ctx.fillStyle = on ? INK.ink : INK.card;
-    ctx.fillRect(x, y, bw, bh);
-    ctx.strokeStyle = INK.ink;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x + 0.5, y + 0.5, bw - 1, bh - 1);
-    ctx.fillStyle = on ? INK.card : INK.ink;
-    ctx.font = `bold 12px ${SERIF}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(l.toUpperCase(), x + bw / 2, y + bh / 2 + 1);
-    boxes.push({ id: "lang:" + l, x, y, w: bw, h: bh });
-  });
-}
-
-function wrap(ctx, text, width) {
-  const lines = [];
-  let line = "";
-  for (const word of text.split(" ")) {
-    const next = line ? line + " " + word : word;
-    if (line && ctx.measureText(next).width > width) { lines.push(line); line = word; }
-    else line = next;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-function drawCard(ctx, cam, view, boxes) {
-  const T = TEXT[view.lang];
-  const p = byId[view.selected];
-  const owner = view.owners[p.id];
-  const w = Math.min(320, cam.w - 24);
-  const pad = 18;
-
-  const kind = [p.capital ? T.capital : null, p.kind === "castle" ? T.castle : T.city, p.port ? T.port : null]
-    .filter(Boolean).join(" · ");
-  const roads = neighbours(p.id).map((n) => {
-    const r = roadBetween(p.id, n);
-    return byId[n].name[view.lang] + (r.sea ? ` (${T.bySea})` : "");
-  }).join(", ");
-  ctx.font = `13px ${SERIF}`;
-  const lines = wrap(ctx, roads, w - pad * 2);
-  const h = 124 + lines.length * 18;
-  const x = 12, y = cam.h - h - 12;
-  panel(ctx, x, y, w, h);
-  boxes.push({ id: "card", x, y, w, h });
-
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = INK.ink;
-  ctx.font = `bold 19px ${SERIF}`;
-  ctx.fillText(p.name[view.lang], x + pad, y + 34);
-
-  ctx.fillStyle = colorOf(owner);
-  ctx.fillRect(x + pad, y + 45, 12, 12);
-  ctx.strokeStyle = INK.ink;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + pad + 0.5, y + 45.5, 11, 11);
-  ctx.fillStyle = INK.ink;
-  ctx.font = `14px ${SERIF}`;
-  ctx.fillText(owner ? civ[owner].name[view.lang] : T.free, x + pad + 20, y + 56);
-  ctx.fillStyle = INK.soft;
-  ctx.font = `italic 13px ${SERIF}`;
-  ctx.fillText(kind, x + pad, y + 77);
-
-  ctx.fillStyle = INK.ink;
-  ctx.font = `bold 12px ${SERIF}`;
-  ctx.fillText(T.roads.toLocaleUpperCase(view.lang === "tr" ? "tr" : "en"), x + pad, y + 102);
-  ctx.font = `13px ${SERIF}`;
-  lines.forEach((l, i) => ctx.fillText(l, x + pad, y + 122 + i * 18));
-}
-
-function drawLegend(ctx, cam, view) {
-  if (cam.w < 640) return;
-  const T = TEXT[view.lang];
-  const rows = [...CIVS.map((c) => [c.color, c.name[view.lang]]), [FREE_COLOR, T.free]];
-  ctx.font = `13px ${SERIF}`;
-  const w = Math.max(...rows.map(([, n]) => ctx.measureText(n).width)) + 56;
-  const h = rows.length * 20 + 24;
-  const x = cam.w - w - 12, y = cam.h - h - 12;
-  panel(ctx, x, y, w, h);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  rows.forEach(([color, name], i) => {
-    const ry = y + 22 + i * 20;
-    ctx.fillStyle = color;
-    ctx.fillRect(x + 16, ry - 6, 12, 12);
-    ctx.strokeStyle = INK.ink;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 16.5, ry - 5.5, 11, 11);
-    ctx.fillStyle = INK.ink;
-    ctx.fillText(name, x + 38, ry + 1);
-  });
 }
