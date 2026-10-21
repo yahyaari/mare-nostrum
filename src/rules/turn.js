@@ -14,6 +14,7 @@ import { advance, refresh } from "./moves.js";
 import { N, UNITS, trait } from "./numbers.js";
 import { armiesOf, budget, empty, info, placesOf, popCap } from "./state.js";
 import { holds } from "./wonders.js";
+import { tickSieges } from "./siege.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -60,6 +61,8 @@ export function endTurn(state) {
   for (const c of CIVS) {
     if (c.id !== state.player && state.civs[c.id].alive) aiTurn(state, c.id, events);
   }
+  // Kuşatmalar bir tur ilerler (üretimden önce: kuşatılan yer bu tur bir şey üretmez).
+  tickSieges(state, events);
   economy(state, events);
   state.turn += 1;
   for (const id in state.places) {

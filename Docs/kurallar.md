@@ -476,3 +476,33 @@ Parthenon; Zeus heykeli ve Mozole haritadaki bir yerleşimde değil.)
   pusula gülü, haritanın üstünde ağır ağır süzülen bulut gölgeleri (uzaktan bakınca beyaz
   bulutlar da), rüzgârda dalgalanan sancaklar. Harita saniyede 20 kare canlı çizilir, sekme
   arkadayken durur.
+
+---
+
+## 20. Kuşatma
+
+Surlu bir yere (kale, başkent, 3. seviye ve üstü şehir) **hemen saldırmak yerine kuşatılabilir**
+(`src/rules/siege.js`). Saldırı penceresinde üç seçenek: Saldır, Kuşat, Vazgeç.
+
+- **Kuşatma başlayınca** ordu o turun hareketini harcar ve hedefin surlarının önüne kamp kurar
+  (haritada hedefe giden yolun üstünde çadırlarıyla; hedefin çevresinde kırmızı halka). Sadece
+  kara yolundan: denizden kuşatma yok (deniz ablukası ayrı, bölüm 15).
+- **Her tur sonunda:** içerideki bütün askerler (garnizon ve sahibinin oradaki orduları) açlıktan
+  **%10** erir, her birimden en az bir adam; her 10 kuşatma makinesi bunu **+%2** hızlandırır, en
+  fazla **%25**. Kuşatılan yer **hiçbir şey üretmez** ve sadakati turda **5** düşer. Kamptaki
+  ordu da salgın ve kaçaklarla turda **%3** erir: uzun kuşatma bedava değil.
+- **Teslim:** içeride kimse kalmayınca yer kuşatana teslim olur, ordu içeri girer.
+- **Kuşatma kalkar:** ordu yürüyünce (o an), saldırınca (kazansa da kaybetse de), oyuncu
+  "Kuşatmayı kaldır" deyince ya da yer artık düşman değilse (barış, ittifak). Kuşatan ordu
+  istediği tur saldırabilir: aç kalmış garnizon zayıftır.
+- **Saldırı penceresi** kuşatmanın turluk erimesini ve yaklaşık kaç turda teslim olacağını
+  söyler; ordu kartı "Kuşatıyor: X · n. tur · içeride N asker" gösterir.
+- **Bilgisayar da kuşatır:** komşusunda kolay hedef yoksa, surlu bir hedefin savunanlarının en
+  az yarısı kadar askeri varsa ve hedef "umutsuz" değil "zor"sa kuşatır; hedef kolaylaşınca
+  saldırır, yoksa bekler.
+
+> Denge (70 oyun): kuşatma bilgisayarın elinde çok güçlü çıktı. Umutsuz hedefleri de kuşatınca
+> ilk düşüş 61 → 40-45 (erimeyi %7'ye, sadakati 3'e indirmek, eşiği dörtte üçe çıkarmak, kamp
+> yıpranması - hiçbiri değiştirmedi; bilgisayarın kuşatmasını kapatınca tam 61: sebep davranış,
+> kural değil). Sadece "zor" hedefleri kuşatınca 51 (en erken 24), donanma ve harikalardan önceki
+> uzun süreli dengeye denk. Partlar 150 turda ayakta 33/70 (önce 37), Sakalar 36/70 (38).

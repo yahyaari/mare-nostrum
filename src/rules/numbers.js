@@ -122,6 +122,9 @@ export const N = {
   // Görevler (bölüm 17): 3. turdan sonra, aynı anda en fazla 2, arası en az 5 tur, gelme
   // ihtimali o tur için yarı yarıya. Süresi geçen görev başkentin sadakatini 5 düşürür.
   missions: { from: 3, spacing: 5, chance: 0.5, max: 2, failLoyalty: 5 },
+  // Kuşatma (bölüm 20): garnizon turda %10 erir, her 10 kuşatma makinesi +%2, en fazla %25;
+  // kuşatılan yerin sadakati turda 5 düşer; kamptaki ordu da salgından turda %3 erir.
+  siege: { starve: 0.1, perEngines: 0.02, max: 0.25, loyalty: 5, camp: 0.03 },
   // Dünya harikaları (bölüm 18): şehri tutanın bütün ülkesine.
   wonders: { pharosFort: 1, pyramidsLoyalty: 2, gardensGrowth: 1.25, artemisMoney: 1.1, colossusTrade: 1.5, parthenonXp: 2 },
 };

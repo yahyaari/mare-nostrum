@@ -20,7 +20,7 @@
   Pages `master`'dan, push'tan ~1 dakika sonra yayında.
 - **Dil:** Arayüz İngilizce asıl, Türkçe ikinci (sağ üst / menü). Belgeler ve kod yorumları
   Türkçe.
-- **Push'tan önce:** `node Tools/test.mjs` (1844 kontrol, hepsi geçmeli). Kurala dokunduysan
+- **Push'tan önce:** `node Tools/test.mjs` (1865 kontrol, hepsi geçmeli). Kurala dokunduysan
   `node Tools/balance.mjs 70`. Arayüze dokunduysan `node Tools/peek.mjs ...` ve
   `node Tools/playtest.mjs ...` (komutlar `working-on-this.md`'de).
 
@@ -42,7 +42,7 @@
 | 21.10 | Liman | Balıkçılık, tersane, ticaret, liman kalesi; liman kartı iki sekmeli; Roma liman oldu (Ostia). |
 | 21.10 | Yürüyüş | Ordular yol uzunluğuna göre yürüyor, iz bırakıyor; dokunuş önce hızlandırır, sonra bitirir. |
 
-**Şu anki durum (21.10 akşam):** kayıt sürümü 6 (eskiler kendiliğinden yükseltiliyor), 1844 kontrol geçiyor,
+**Şu anki durum (21.10 akşam):** kayıt sürümü 6 (eskiler kendiliğinden yükseltiliyor), 1865 kontrol geçiyor,
 70 bot oyununda ilk medeniyetin düşüşü ortalama 51. tur (en erken 25), her oyunda savaş çıkıyor,
 "en büyük" çıkan medeniyet oyundan oyuna değişiyor.
 
@@ -108,7 +108,9 @@ kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sa
 
 **Savaş sisi ve süsler YAPILDI (21.10, kullanıcı "fog ve görsel güzellikler"):** kurallar.md 19. `rules/sight.js` (kendi+müttefik yer ve orduların bir yol ötesi), `view/atlas.js` (sis dokusu haritaya bağlı, dost toprak yumuşak kenarla açık; Latince deniz/bölge adları; pusula gülü; bulut gölgeleri sprite ile). Sancaklar dalgalanır; harita 20 kare/sn canlı. Menüde Savaş sisi aç-kapa. 8 yeni kontrol (1844). Tarayıcıda: sis uzak orduyu saklıyor, görülen ordu görünüyor, sis kapalıyken hepsi görünüyor (`Tools/fogcheck.mjs` - ilk denemede kamera kaymasını beklemediğim için yanlış ölçtü).
 
-**Sırada (plan sırası): kuşatma, büyüyen şehirler, kronik, savaş sahnesi, arazi/mevsim, iki kişi; en son öğretici.**
+**Kuşatma YAPILDI (21.10, kullanıcı "devam et"):** `rules/siege.js`, kurallar.md 20. Surlu yere Saldır / Kuşat / Vazgeç; kamp hedefin yolunda çadırlarla, hedefte kırmızı halka; turda %10 erime (makineyle +%2/10, en çok %25), üretim yok, sadakat −5, kamp −%3; teslim; yürüyünce/saldırınca/barışta kalkar. Bilgisayar sadece "zor" hedefi kuşatır (dengeyi bu tuttu: ilk düşüş 51). 21 yeni kontrol (1865). Ordu alanı `besieging` (`siege` kuşatma makinesi sayısı - isim çakışmasına dikkat).
+
+**Sırada (plan sırası): büyüyen şehirler, kronik, savaş sahnesi, arazi/mevsim, iki kişi; en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`

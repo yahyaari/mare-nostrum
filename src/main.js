@@ -23,7 +23,8 @@ import * as anim from "./view/anim.js";
 import * as sound from "./view/sound.js";
 import { relation } from "./rules/state.js";
 import { sight } from "./rules/sight.js";
-import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
+import { besiege, lift } from "./rules/siege.js";
+import { alongRoad, drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
 import { drawUI, eventLines, missionText } from "./view/ui.js";
 import { chipRise } from "./view/hud.js";
@@ -209,7 +210,10 @@ function mapView() {
     id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0, ships: a.ships,
     selected: ui.sel?.kind === "army" && ui.sel.id === a.id,
     spent: a.owner === game.player && a.moves <= 0,
+    // Kuşatan ordu kendi yerinde değil, hedefin surlarının önünde kamp kurmuş görünür.
+    camp: a.besieging ? alongRoad(a.at, a.besieging, 0.6) : null,
   }));
+  view.sieges = Object.fromEntries(game.armies.filter((a) => a.besieging).map((a) => [a.besieging, a.owner]));
   const a = ownArmy();
   if (a) {
     view.marks = {};
@@ -557,6 +561,22 @@ function dispatch(act) {
     }
     case "attackAsk":
       ui.modal = { kind: "attack", army: act.army, id: act.id };
+      break;
+    case "besiege": {
+      // Saldırı penceresinden: hemen saldırmak yerine kuşat.
+      if (m?.kind !== "attack") break;
+      ui.modal = null;
+      if (besiege(game, m.army, m.id)) {
+        sound.war();
+        anim.pulse(m.id, INK.bad);
+        ui.sel = { kind: "army", id: m.army };
+      }
+      save();
+      break;
+    }
+    case "lift":
+      lift(game, act.army);
+      save();
       break;
     case "attack": {
       if (m?.kind !== "attack") break;

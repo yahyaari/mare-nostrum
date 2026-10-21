@@ -132,8 +132,13 @@ export function popCap(place, kind) {
 }
 
 /** Bir yerleşimin turluk üretimi. */
+/** Bu yer kuşatmada mı (bir ordu önünde kamp kurmuş). */
+export const besieged = (state, id) => state.armies.some((a) => a.besieging === id);
+
 export function output(state, id) {
   const pl = state.places[id], p = byId[id], c = pl.owner;
+  // Kuşatılan yer bir şey üretemez: tarlaya da limana da çıkılmıyor.
+  if (besieged(state, id)) return { money: 0, weapons: 0, food: 0 };
   const castle = p.kind === "castle" ? N.castleOutput : 1;
   // Zorluk: bilgisayar medeniyetlerinin üretimi (oyuncunun değil).
   const ai = c && c !== state.player ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;

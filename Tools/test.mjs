@@ -985,6 +985,115 @@ const SI = await import("../src/rules/sight.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Kuşatma (bölüm 20)");
+
+const SG = await import("../src/rules/siege.js");
+const { roadBetween: roadBetweenT } = await import("../src/rules/graph.js");
+{
+  const setup = () => {
+    const s = S.newGame("rome", 7);
+    const a = S.formArmy(s, "ariminum", 10, 0);
+    a.inf = 150;
+    s.places.mediolanum.inf = 100;
+    s.places.mediolanum.arch = 0;
+    return { s, a };
+  };
+  let { s, a } = setup();
+  check("Mediolanum Ariminum'a kara yoluyla komşu", neighbours("ariminum").includes("mediolanum") && !roadBetweenT("ariminum", "mediolanum").sea);
+  s.places.mediolanum.level = 2;
+  check("sursuz yer kuşatılmaz", !M.wallsOf(s, "mediolanum") && !SG.canBesiege(s, a, "mediolanum"));
+  s.places.mediolanum.level = 3;
+  check("3. seviye şehir surlu: kuşatılabilir", SG.canBesiege(s, a, "mediolanum"));
+  const t = S.newGame("rome", 7);
+  const fleetArmy = S.formArmy(t, "tarentum", 10, 0);
+  fleetArmy.inf = 30;
+  fleetArmy.ships = 2;
+  t.places.syracuse.level = 3;
+  check("deniz yolundan kuşatma olmaz (deniz ablukası ayrı)", roadBetweenT("tarentum", "syracuse").sea && M.canAttack(t, fleetArmy, "syracuse") && !SG.canBesiege(t, fleetArmy, "syracuse"));
+
+  check("kuşatma başlar, ordu bu turun hareketini harcar", SG.besiege(s, a.id, "mediolanum") && a.besieging === "mediolanum" && a.moves === 0);
+  check("kuşatılan yer bir şey üretmez", Object.values(S.output(s, "mediolanum")).every((v) => v === 0) && S.besieged(s, "mediolanum"));
+  check("kuşatma ikinci kez başlamaz", !SG.besiege(s, a.id, "mediolanum"));
+  SG.tickSieges(s, []);
+  check("bir tur: garnizon %10 erir", s.places.mediolanum.inf === 90);
+  SG.tickSieges(s, []);
+  check("iki tur: 90 -> 81", s.places.mediolanum.inf === 81);
+
+  // Sahibi olan yerin sadakati düşer.
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  s.places.mediolanum.owner = "gaul";
+  s.relations[S.key("rome", "gaul")] = "war";
+  SG.besiege(s, a.id, "mediolanum");
+  const lo = s.places.mediolanum.loyalty;
+  SG.tickSieges(s, []);
+  check("kuşatılan yerin sadakati turda 5 düşer", s.places.mediolanum.loyalty === lo - N.siege.loyalty);
+  // Barış: yer artık düşman değil, kuşatma kalkar ve erime durur.
+  s.relations[S.key("rome", "gaul")] = "ally";
+  const left = s.places.mediolanum.inf;
+  SG.tickSieges(s, []);
+  check("barışta (ittifakta) kuşatma kalkar, erime durur", !a.besieging && s.places.mediolanum.inf === left && !S.besieged(s, "mediolanum"));
+
+  // Yürüyen ordu kuşatmayı bırakır.
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  SG.besiege(s, a.id, "mediolanum");
+  a.moves = 1;
+  M.order(s, a.id, "rome");
+  check("yürüdüğü anda kuşatma kalkar (tur sonunu beklemez)", a.at !== "ariminum" && !a.besieging && !S.besieged(s, "mediolanum"));
+  const g0 = s.places.mediolanum.inf;
+  SG.tickSieges(s, []);
+  check("yürüyen ordu kuşatmayı bırakır", a.at !== "ariminum" && !a.besieging && s.places.mediolanum.inf === g0);
+
+  // Saldırı kuşatmayı bitirir.
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  SG.besiege(s, a.id, "mediolanum");
+  a.moves = 1;
+  M.attack(s, a.id, "mediolanum", [1, 1]);
+  check("saldırı kuşatmayı bitirir", !a.besieging);
+
+  // Teslim: garnizon tükenince kuşatan içeri girer.
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  s.places.mediolanum.inf = 3;
+  SG.besiege(s, a.id, "mediolanum");
+  SG.tickSieges(s, []);
+  check("son askerler: her tur en az bir adam (3 -> 2)", s.places.mediolanum.inf === 2 && s.places.mediolanum.owner === null);
+  s.places.mediolanum.inf = 1;
+  const ev = SG.tickSieges(s, []);
+  check("garnizon tükenince yer teslim olur", s.places.mediolanum.owner === "rome" && a.at === "mediolanum" && !a.besieging && ev.some((e) => e.type === "surrender" && e.place === "mediolanum"));
+
+  // Kuşatma makineleri erimeyi hızlandırır, ama sınırlı.
+  check("makinesiz %10, 20 makineyle %14, 200 makineyle en fazla %25",
+    SG.siegeRate({ siege: 0 }) === 0.1 && Math.abs(SG.siegeRate({ siege: 20 }) - 0.14) < 1e-9 && SG.siegeRate({ siege: 200 }) === N.siege.max);
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  const slow = SG.turnsToFall(s, a, "mediolanum");
+  a.siege = 40;
+  check("makineyle teslim süresi kısalır", SG.turnsToFall(s, a, "mediolanum") < slow && slow > 3);
+
+  // Bilgisayar da kuşatır: kolay olmayan surlu hedefin önünde, yeterince büyük orduyla.
+  const g = S.newGame("gaul", 7);
+  const ra = S.formArmy(g, "ariminum", 10, 0);
+  ra.inf = 240;
+  g.places.mediolanum.level = 3;
+  g.places.mediolanum.inf = 220;
+  check("bilgisayar için hedef zor (kolay değil, umutsuz değil)", M.forecast(g, ra, "rome", "mediolanum").odds === "risky");
+  const { aiTurn } = await import("../src/rules/ai.js");
+  aiTurn(g, "rome", []);
+  check("bilgisayar zor surlu hedefi kuşatır", g.armies.some((x) => x.owner === "rome" && x.besieging === "mediolanum"));
+  // Umutsuz hedefi kuşatmaz: kuşatma imkânsızı değil, zoru bitirmek için (denge, kurallar.md 20).
+  const h = S.newGame("gaul", 7);
+  const rb = S.formArmy(h, "ariminum", 10, 0);
+  rb.inf = 160;
+  h.places.mediolanum.level = 3;
+  h.places.mediolanum.inf = 220;
+  aiTurn(h, "rome", []);
+  check("bilgisayar umutsuz hedefi kuşatmaz", M.forecast(h, { at: "ariminum", inf: 160, arch: 0 }, "rome", "mediolanum").odds === "hopeless" && !h.armies.some((x) => x.besieging === "mediolanum"));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
 
 {

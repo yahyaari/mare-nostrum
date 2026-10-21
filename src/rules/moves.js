@@ -113,6 +113,9 @@ export function advance(state, army) {
     }
     // Ekran için iz: kim nereden nereye yürüdü (state.trace sadece ekran isterse var, kayda girmez).
     state.trace?.push({ type: "move", army: army.id, owner: army.owner, men: men(army), ships: army.ships, from: army.at, to: next });
+    // Yürüyen ordu kuşatmayı bırakır.
+    delete army.besieging;
+    delete army.besiegedSince;
     army.at = next;
     army.moves -= 1;
     army.route.shift();
@@ -179,6 +182,9 @@ export function shipsAt(state, id) {
 export function attack(state, armyId, id, luck = null) {
   const army = armyById(state, armyId);
   if (!canAttack(state, army, id)) return null;
+  // Saldırı kuşatmayı bitirir (kazansa da kaybetse de).
+  delete army.besieging;
+  delete army.besiegedSince;
   const pl = state.places[id];
   // Denizden saldırı: önce limandaki gemilerle deniz savaşı. Filo batarsa ordu denizde kaybolur.
   let navalEv = null;

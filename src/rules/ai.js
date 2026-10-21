@@ -11,6 +11,7 @@ import { appoint, appointInfo } from "./generals.js";
 import { rebels } from "./loyalty.js";
 import { neighbours, path, roadBetween } from "./graph.js";
 import { access, advance, attack, canAttack, defenders, forecast, hostile, order, refresh } from "./moves.js";
+import { besiege, canBesiege } from "./siege.js";
 import { LEVELS, N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import {
@@ -262,14 +263,26 @@ function military(state, civ, events) {
     if (men(a) >= 80 && !appointInfo(state, a.id).why && state.civs[civ].money >= N.generals.cost + 25) appoint(state, a.id);
   }
 
-  // 2. Komşudaki kolay hedeflere ordularla saldır (denizden ancak gemisi yetiyorsa).
+  // 2. Komşudaki kolay hedeflere ordularla saldır (denizden ancak gemisi yetiyorsa). Kolay
+  // hedef yoksa ve yanında zorlu bir sur varsa kuşat (ordu en az savunanların yarısıysa).
+  // Kuşatan ordu, hedefi kolaylaşınca saldırır; yoksa beklemeye devam eder.
   for (const a of armiesOf(state, civ)) {
     if (a.moves <= 0) continue;
     const target = bestTarget(state, civ, a, neighbours(a.at).filter((n) => canAttack(state, a, n)));
     if (target) {
       const ev = attack(state, a.id, target);
       if (ev) events.push(ev);
+      continue;
     }
+    if (a.besieging) { a.moves = 0; continue; }
+    let siege = null, score = -Infinity;
+    for (const n of neighbours(a.at)) {
+      if (!canBesiege(state, a, n) || men(a) < men(defenders(state, n)) * 0.5) continue;
+      if (odds(state, a, civ, n).odds === "hopeless") continue;
+      const s = worth(state, n);
+      if (s > score) { siege = n; score = s; }
+    }
+    if (siege) besiege(state, a.id, siege, events);
   }
 
   // 3. Garnizonların fazlasından vurucu kuvvet: komşuda kolay hedef varsa çık ve vur.
@@ -303,7 +316,7 @@ function military(state, civ, events) {
     }
   }
   for (const a of armiesOf(state, civ)) {
-    if (a.moves <= 0 || a.route.length) continue;
+    if (a.moves <= 0 || a.route.length || a.besieging) continue;
     // Kendi limanındaysa gemiye bin: denizden de hedef seçebilsin.
     const pl = state.places[a.at];
     if (pl.owner === civ && pl.ships > 0 && !canSail(a)) {

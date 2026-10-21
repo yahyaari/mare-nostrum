@@ -574,6 +574,11 @@ function drawPlaces(ctx, cam, view, L) {
   };
   for (const { p, s } of shown) {
     if (view.threats?.[p.id]) ring(s, 30, INK.bad, 2.5, [6, 4]);
+    // Kuşatma: surların çevresinde koyu kırmızı, kalın, kesik bir halka.
+    if (view.sieges?.[p.id] !== undefined) {
+      ring(s, 36, "rgba(40,16,10,0.55)", 6, [4, 4]);
+      ring(s, 36, "rgba(178,52,40,0.95)", 3, [4, 4]);
+    }
     if (p.id === view.selected) ring(s, 24, GOLD_LIGHT, 2.2, null, "rgba(236,212,154,0.28)");
     const m = view.marks?.[p.id];
     if (m === "walk") ring(s, 21, "rgba(243,231,201,0.95)", 1.8, [3, 4]);
@@ -640,7 +645,11 @@ function drawPlaces(ctx, cam, view, L) {
     // Sisin içindeki yabancı ordu görünmez (yürürken de: bulunduğu nokta açık mı).
     if (view.fog && a.owner !== view.me && !(a.float ? clear(a.float, view.seen, POS) : view.seen.has(a.at))) continue;
     // Yolda olan (animasyonla yürüyen) ordu bir yerleşime bağlı değil, yolun üstünde.
-    if (a.float) {
+    if (a.camp && !a.float) {
+      // Kuşatan ordunun kampı: hedefe giden yolun üstünde, surların önünde.
+      const s = toScreen(cam, a.camp.x, a.camp.y);
+      tokens.push({ x: s.x - 8 * zt, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), camp: true });
+    } else if (a.float) {
       const s = toScreen(cam, a.float.x, a.float.y);
       if (a.sea && a.ships > 0) tokens.push(fleetBox(a, s.x, s.y + 6 * zt, { moving: true, flip: a.dir < 0 }));
       else tokens.push({ x: s.x - 8 * zt, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), moving: true });
@@ -719,6 +728,11 @@ function drawPlaces(ctx, cam, view, L) {
         ctx.lineWidth = 1.6;
         ctx.stroke();
       }
+      // Kamp: askerin arkasında iki çadır.
+      if (t.camp) {
+        tent(ctx, -10, h - 3, 11, army.owner);
+        tent(ctx, 1, h - 9, 9, army.owner);
+      }
       // Karadaki ordunun gemileri varsa (limanda değil): ayağının altında küçük bir tekne.
       const boat = army.ships > 0;
       if (boat) ship(ctx, feet.x + 2, feet.y + 2, 0.8);
@@ -739,6 +753,32 @@ function drawPlaces(ctx, cam, view, L) {
 
 // Filonun kutusu (zt = 1'de): öndeki kadırganın su hattı (ax, ay), etiket `tag`tan sonra.
 const FLEET = { ax: 30, ay: 43, h: 50, tag: 57, k: 1.15 };
+
+/** Kamp çadırı: krem bez, sahibinin renginde şerit, koyu kapı. (x, y) zeminin ortası. */
+function tent(ctx, x, y, s, owner) {
+  ctx.beginPath();
+  ctx.moveTo(x - s * 0.7, y);
+  ctx.lineTo(x, y - s);
+  ctx.lineTo(x + s * 0.7, y);
+  ctx.closePath();
+  ctx.fillStyle = "#e9dcbc";
+  ctx.fill();
+  ctx.strokeStyle = "#3b3024";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - s * 0.36, y - s * 0.5);
+  ctx.lineTo(x + s * 0.36, y - s * 0.5);
+  ctx.strokeStyle = colorOf(owner);
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - s * 0.45);
+  ctx.strokeStyle = "#3b3024";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
 
 /** Ordunun sayı etiketi: koyu, sahibinin renginde çerçeveli; generalliyse altın yıldız. */
 function tag(ctx, army, label, tx, ty, tw, base) {
