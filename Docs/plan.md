@@ -88,6 +88,8 @@ Tanit, Mısır ankh, Makedonya Vergina güneşi, Partlar yay-ok, Galya tekerlek,
 bağımsız kule), direkli sancak, şehir/kale maketi, isim levhası (Cinzel), asker figürü, gemi.
 Yazı tipleri Google Fonts'tan (index.html). Basış sancağa da tutar (`reach`).
 
+**2. ve 3. aşama YAPILDI (21.10):** `src/view/hud.js`: üst bant (asılı sancak, para/buğday/silah/nüfus, MÖ yıl + tur, rapor ve menü madalyonları), alt menü (Ordu ve Şehirler listeleri - yeni pencereler `armies`/`cities`, Diplomasi, Harita = uzaklaş/başkente dön), sağ altta sıradaki ordu, mini harita (basınca oraya kayar), Turu bitir. `kit.js`: parşömen panel (dokulu kâğıt, koyu çerçeve, altın iç çizgi, köşe baklavaları), kabarık kâğıt düğmeler, asıl eylem koyu-altın; yazı EB Garamond (boy x1.12), başlıklar Cinzel. Kartın başında şehrin çevresinin arazisi ve büyük maketi (`drawVignette`, ekranda yer varsa). Renkli kareler yerine armalı kalkan (`shield`). Tur şeridi koyu-altın. 1 tur = 1 yıl (MÖ 270'ten geri).
+
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`
 (3355×1560, ~800 KB). Kıyılarımızla aynı veri olduğu için birebir oturuyor; en yakın zumda bile

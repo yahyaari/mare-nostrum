@@ -22,31 +22,21 @@ import { options as letterOptions } from "../rules/events.js";
 import {
   INK, SERIF, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, panel, text, wrap,
 } from "./kit.js";
+import { BOTTOM_H, TOP, drawBottomBar, drawRightColumn, drawTopBar } from "./hud.js";
+import { CREAM, DARK, GOLD, GOLD_DARK, roundRect, shield, soldier } from "./pieces.js";
+import { drawVignette } from "./draw.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
-const narrowOf = (cam) => cam.w < 640;
-export const topHeight = (cam) => (narrowOf(cam) ? 82 : 56);
-const END = { w: 168, h: 50 };
 
-export function drawUI(ctx, cam, game, ui, boxes) {
+export function drawUI(ctx, cam, game, ui, boxes, view) {
   const T = TEXT[ui.lang];
   if (ui.screen === "start") {
     drawStart(ctx, cam, ui, boxes, T);
   } else {
-    drawTop(ctx, cam, game, ui, boxes, T);
+    drawTopBar(ctx, cam, game, ui, boxes, T);
     if (!game.over) {
-      button(ctx, boxes, {
-        x: cam.w - 12 - END.w, y: cam.h - 12 - END.h, w: END.w, h: END.h,
-        label: T.endTurn, act: { do: "endTurn" }, main: true, size: 16,
-      });
-      // Hareketi kalan ordular: dar ekranda Turu bitir'in solunda, genişte üstünde.
-      const ready = game.armies.filter((a) => a.owner === game.player && a.moves > 0).length;
-      if (ready) {
-        const nb = narrowOf(cam)
-          ? { x: 12, y: cam.h - 12 - END.h, w: cam.w - 24 - END.w - 8, h: END.h }
-          : { x: cam.w - 12 - END.w, y: cam.h - 12 - END.h - 8 - 40, w: END.w, h: 40 };
-        button(ctx, boxes, { ...nb, label: fill(T.nextArmy, ready), size: 13, act: { do: "nextArmy" } });
-      }
+      drawBottomBar(ctx, cam, game, ui, boxes, T);
+      drawRightColumn(ctx, cam, game, ui, boxes, T, view);
     }
     if (ui.sel?.kind === "place") {
       if (game.places[ui.sel.id].owner === game.player) cityCard(ctx, cam, game, ui, boxes, T);
@@ -63,9 +53,12 @@ export function drawUI(ctx, cam, game, ui, boxes) {
 // Başlangıç
 
 function drawStart(ctx, cam, ui, boxes, T) {
-  ctx.fillStyle = "rgba(239,232,216,0.45)";
+  const veil = ctx.createRadialGradient(cam.w / 2, cam.h / 2, cam.h * 0.2, cam.w / 2, cam.h / 2, Math.hypot(cam.w, cam.h) * 0.6);
+  veil.addColorStop(0, "rgba(15,11,7,0.25)");
+  veil.addColorStop(1, "rgba(15,11,7,0.6)");
+  ctx.fillStyle = veil;
   ctx.fillRect(0, 0, cam.w, cam.h);
-  const W = Math.min(cam.w - 24, 520);
+  const W = Math.min(cam.w - 24, 540);
   // Dar ekranda güçlü ve zayıf yan tek satıra sığmıyor: iki satır, daha yüksek satır.
   const twoLines = CIVS.some((c) => {
     const [good, bad] = T.traits[c.id];
@@ -75,26 +68,24 @@ function drawStart(ctx, cam, ui, boxes, T) {
   const H = 104 + CIVS.length * rowH + 52 + 76 + (ui.saved ? 56 : 0);
   const x = Math.round((cam.w - W) / 2), y = Math.max(12, Math.round((cam.h - H) / 2));
   panel(ctx, x, y, W, H, boxes);
-  text(ctx, T.title, x + W / 2, y + 42, { bold: true, size: 26, align: "center" });
-  text(ctx, T.era, x + W / 2, y + 64, { italic: true, size: 14, color: INK.soft, align: "center" });
+  text(ctx, T.title, x + W / 2, y + 44, { title: true, bold: true, size: 30, align: "center" });
+  ornament(ctx, x + W / 2, y + 56, 150);
+  text(ctx, T.era, x + W / 2, y + 76, { italic: true, size: 14, color: INK.soft, align: "center" });
   text(ctx, T.chooseCiv, x + 22, y + 94, { bold: true, size: 13 });
 
   CIVS.forEach((c, i) => {
     const ry = y + 104 + i * rowH;
     const on = ui.pick === c.id;
     if (on) {
-      ctx.fillStyle = INK.paper;
-      ctx.fillRect(x + 12, ry + 2, W - 24, rowH - 4);
-      ctx.strokeStyle = INK.ink;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 13, ry + 3, W - 26, rowH - 6);
+      roundRect(ctx, x + 13, ry + 2, W - 26, rowH - 4, 4);
+      ctx.fillStyle = "rgba(120,85,40,0.13)";
+      ctx.fill();
+      ctx.strokeStyle = GOLD_DARK;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
     }
-    ctx.fillStyle = c.color;
-    ctx.fillRect(x + 24, ry + 12, 18, 18);
-    ctx.strokeStyle = INK.ink;
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(x + 24.5, ry + 12.5, 17, 17);
-    text(ctx, c.name[ui.lang], x + 54, ry + 24, { bold: true, size: 16 });
+    shield(ctx, c.id, x + 22, ry + 8, 22);
+    text(ctx, c.name[ui.lang], x + 54, ry + 24, { title: true, bold: true, size: 16 });
     const [good, bad] = T.traits[c.id];
     const o = { size: 12, color: INK.soft, italic: true };
     if (!twoLines) text(ctx, `▲ ${good}   ▼ ${bad}`, x + 54, ry + 42, o);
@@ -138,62 +129,6 @@ function langToggle(ctx, cam, ui, boxes, y) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Üst bant
-
-function drawTop(ctx, cam, game, ui, boxes, T) {
-  const narrow = narrowOf(cam);
-  const H = topHeight(cam);
-  ctx.fillStyle = INK.card;
-  ctx.fillRect(0, 0, cam.w, H);
-  ctx.strokeStyle = INK.ink;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(0, H - 0.5);
-  ctx.lineTo(cam.w, H - 0.5);
-  ctx.moveTo(0, H - 4.5);
-  ctx.lineTo(cam.w, H - 4.5);
-  ctx.lineWidth = 0.75;
-  ctx.stroke();
-  boxes.push({ x: 0, y: 0, w: cam.w, h: H, act: null });
-
-  const me = game.player;
-  ctx.fillStyle = colorOf(me);
-  ctx.fillRect(14, 12, 16, 16);
-  ctx.strokeStyle = INK.ink;
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(14.5, 12.5, 15, 15);
-  text(ctx, civName(me, ui.lang), 38, 26, { bold: true, size: 16 });
-  text(ctx, fill(T.turn, game.turn), 38, 44, { italic: true, size: 12, color: INK.soft });
-
-  // Sağda: menü ve diplomasi
-  const mw = 40, dw = narrow ? 96 : 120;
-  button(ctx, boxes, { x: cam.w - 12 - mw, y: 9, w: mw, h: 34, label: "≡", size: 20, act: { do: "open", modal: "menu" } });
-  button(ctx, boxes, { x: cam.w - 12 - mw - 8 - dw, y: 9, w: dw, h: 34, label: T.diplomacy, size: 13, act: { do: "open", modal: "diplo" } });
-
-  // Kaynaklar: ambardaki ve turluk değişim
-  const civ = game.civs[me], b = budget(game, me);
-  for (const [k, have, d] of [["money", civ.money, b.money], ["weapons", civ.weapons, b.weapons], ["food", civ.food, b.food]]) {
-    const c = chip(cam, k);
-    const w = amount(ctx, k, fmt(have), c.x, c.y, { size: 16, bold: true });
-    text(ctx, delta(d), c.x + w + 6, c.y, { size: 12, color: d < 0 ? INK.bad : INK.good, bold: true });
-  }
-}
-
-/** Üst banttaki bir kaynağın yeri (yazının taban çizgisinin solu). */
-function chip(cam, k) {
-  const narrow = narrowOf(cam);
-  const i = ["money", "weapons", "food"].indexOf(k);
-  const step = narrow ? (cam.w - 28) / 3 : 130;
-  return { x: (narrow ? 14 : 200) + i * step, y: narrow ? 70 : 34 };
-}
-
-/** Bir kaynağın değişimi yükselirken nereden çıksın: sayının hemen altı. */
-export const chipRise = (cam, k) => {
-  const c = chip(cam, k);
-  return { x: c.x + 40, y: c.y + 32 };
-};
-
-// ---------------------------------------------------------------------------------------------
 // Kartlar
 
 /** Kartın sağ üst köşesinde kapatma düğmesi: telefonda kart haritanın yarısını kaplıyor. */
@@ -203,10 +138,8 @@ function closeX(ctx, boxes, r) {
 }
 
 function cardRect(cam, h) {
-  const narrow = narrowOf(cam);
-  const w = narrow ? cam.w - 24 : 360;
-  const bottom = narrow ? cam.h - 12 - END.h - 10 : cam.h - 12;
-  return { x: 12, y: Math.max(topHeight(cam) + 8, bottom - h), w, h };
+  // Sol altta; üstü bandın ve ondan sarkan sancağın altında kalır.
+  return { x: 12, y: Math.max(TOP + 40, cam.h - 12 - h), w: 360, h };
 }
 
 function kindLine(id, game, T) {
@@ -226,13 +159,15 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   // yapıları, gemi, filo). Sekme çubuğu başlığın altında, kart iki sekmede de aynı boyda.
   const tabs = p.port ? 42 : 0;
   const tab = p.port && ui.cardTab === "port" ? "port" : "city";
-  const r = cardRect(cam, 538 + tabs);
+  const vh = vignetteHeight(cam, 538 + tabs);
+  const r = cardRect(cam, 538 + tabs + vh);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
+  if (vh) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: vh - 4 });
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
-  let y = r.y;
+  let y = r.y + vh;
 
-  text(ctx, p.name[ui.lang], x, y + 32, { bold: true, size: 20 });
+  text(ctx, p.name[ui.lang], x, y + 32, { title: true, bold: true, size: 20 });
   text(ctx, kindLine(id, game, T), x, y + 52, { italic: true, size: 13, color: INK.soft });
 
   const cap = popCap(pl, p.kind);
@@ -288,13 +223,20 @@ function cityTab(ctx, game, boxes, T, id, x, right, r, y) {
   text(ctx, `${T.loyalty}  ${lo}`, x, y + 138, { bold: true, size: 13 });
   text(ctx, delta(dr), x + measure(ctx, `${T.loyalty}  ${lo}`, { bold: true, size: 13 }) + 8, y + 138, { size: 12, bold: true, color: dr < 0 ? INK.bad : INK.good });
   const bw0 = r.w - 36 - 110;
-  ctx.fillStyle = INK.paper;
-  ctx.fillRect(x, y + 146, bw0, 6);
+  ctx.fillStyle = "rgba(90,70,40,0.18)";
+  ctx.fillRect(x, y + 145, bw0, 8);
+  const lg = ctx.createLinearGradient(0, y + 145, 0, y + 153);
+  lg.addColorStop(0, color);
+  lg.addColorStop(1, "rgba(0,0,0,0.35)");
   ctx.fillStyle = color;
-  ctx.fillRect(x, y + 146, (bw0 * lo) / 100, 6);
-  ctx.strokeStyle = INK.faint;
+  ctx.fillRect(x, y + 145, (bw0 * lo) / 100, 8);
+  ctx.fillStyle = lg;
+  ctx.globalAlpha = 0.5;
+  ctx.fillRect(x, y + 145, (bw0 * lo) / 100, 8);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "#5a4630";
   ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 146.5, bw0 - 1, 5);
+  ctx.strokeRect(x + 0.5, y + 145.5, bw0 - 1, 7);
   const gi = gamesInfo(game, id);
   if (gi.why !== "max") {
     const gx = right - 100, gy = y + 124;
@@ -394,6 +336,36 @@ function rule(ctx, x1, x2, y) {
   ctx.stroke();
 }
 
+/** Başlığın altında: iki yana uzanan çizgi, ortada baklava. */
+function ornament(ctx, cx, y, w) {
+  ctx.strokeStyle = GOLD_DARK;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - w / 2, y + 0.5);
+  ctx.lineTo(cx - 8, y + 0.5);
+  ctx.moveTo(cx + 8, y + 0.5);
+  ctx.lineTo(cx + w / 2, y + 0.5);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, y - 4);
+  ctx.lineTo(cx + 5, y + 0.5);
+  ctx.lineTo(cx, y + 5);
+  ctx.lineTo(cx - 5, y + 0.5);
+  ctx.closePath();
+  ctx.fillStyle = GOLD;
+  ctx.fill();
+}
+
+/**
+ * Kartın başındaki manzaranın boyu: kart ekrana sığdıkça en fazla 120, sığmıyorsa hiç
+ * (720 piksellik ekranda şehir kartına yer kalmıyor).
+ */
+function vignetteHeight(cam, h) {
+  const room = cam.h - (TOP + 40) - 12 - h;
+  const vh = Math.min(120, room);
+  return vh >= 60 ? vh : 0;
+}
+
 /** Başkasının ya da bağımsız bir yerin kartı. */
 function placeCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
@@ -404,18 +376,16 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
   const W = cardRect(cam, 0).w;
   const lines = wrap(ctx, roads, W - 36, { size: 13 });
   const h = 150 + lines.length * 18 + (can ? 52 : 0);
-  const r = cardRect(cam, h);
+  const vh = vignetteHeight(cam, h);
+  const r = cardRect(cam, h + vh);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
+  if (vh) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: vh - 4 });
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
-  const y = r.y;
+  const y = r.y + vh;
 
-  text(ctx, p.name[ui.lang], x, y + 32, { bold: true, size: 20 });
-  ctx.fillStyle = colorOf(pl.owner);
-  ctx.fillRect(x, y + 43, 12, 12);
-  ctx.strokeStyle = INK.ink;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 43.5, 11, 11);
+  text(ctx, p.name[ui.lang], x, y + 32, { title: true, bold: true, size: 20 });
+  shield(ctx, pl.owner, x, y + 40, 13);
   const w = text(ctx, civName(pl.owner, ui.lang, T.free), x + 20, y + 54, { size: 14 });
   if (pl.owner) {
     const rel = relation(game, me, pl.owner);
@@ -459,11 +429,8 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   const x = r.x + 18;
   let y = r.y + 32;
 
-  ctx.fillStyle = colorOf(a.owner);
-  ctx.fillRect(x, y - 14, 16, 16);
-  ctx.strokeStyle = INK.ink;
-  ctx.strokeRect(x + 0.5, y - 13.5, 15, 15);
-  text(ctx, `${T.army} · ${civName(a.owner, ui.lang)}`, x + 24, y, { bold: true, size: 18 });
+  shield(ctx, a.owner, x, y - 17, 17);
+  text(ctx, `${T.army} · ${civName(a.owner, ui.lang)}`, x + 24, y, { title: true, bold: true, size: 18 });
   y += 26;
   text(ctx, troops(T, a), x, y, { size: 14 });
   if (g) {
@@ -514,19 +481,27 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
 }
 
 function drawToast(ctx, cam, s) {
-  ctx.font = `bold 14px ${SERIF}`;
-  const w = Math.min(cam.w - 24, ctx.measureText(s).width + 36);
-  const x = (cam.w - w) / 2, y = cam.h - 12 - END.h - 56;
-  ctx.fillStyle = INK.ink;
-  ctx.fillRect(x, y, w, 40);
-  text(ctx, s, cam.w / 2, y + 21, { bold: true, size: 14, color: INK.card, align: "center", base: "middle" });
+  const w = Math.min(cam.w - 24, measure(ctx, s, { bold: true, size: 15 }) + 44);
+  const x = (cam.w - w) / 2, y = cam.h - BOTTOM_H - 58;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 10;
+  roundRect(ctx, x, y, w, 42, 5);
+  ctx.fillStyle = "rgba(22,18,14,0.95)";
+  ctx.fill();
+  ctx.restore();
+  roundRect(ctx, x + 0.5, y + 0.5, w - 1, 41, 5);
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  text(ctx, s, cam.w / 2, y + 22, { bold: true, size: 15, color: CREAM, align: "center", base: "middle" });
 }
 
 // ---------------------------------------------------------------------------------------------
 // Pencereler
 
 function modalFrame(ctx, cam, boxes, h, wMax = 440) {
-  ctx.fillStyle = "rgba(43,42,39,0.35)";
+  ctx.fillStyle = "rgba(12,9,6,0.5)";
   ctx.fillRect(0, 0, cam.w, cam.h);
   boxes.push({ x: 0, y: 0, w: cam.w, h: cam.h, act: null });
   const w = Math.min(cam.w - 24, wMax);
@@ -540,6 +515,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, form: formModal, diplo: diploModal, report: reportModal, battle: battleModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
+    armies: armiesModal, cities: citiesModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -562,7 +538,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   const bySea = roadBetween(a.at, m.id)?.sea && shipsAt(game, m.id) > 0;
   const r = modalFrame(ctx, cam, boxes, 290 + (bySea ? 22 : 0));
   const x = r.x + 22;
-  text(ctx, fill(T.attackQ, placeName(m.id, ui.lang)), r.x + r.w / 2, r.y + 40, { bold: true, size: 20, align: "center" });
+  text(ctx, fill(T.attackQ, placeName(m.id, ui.lang)), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   text(ctx, T.yours, x, r.y + 76, { bold: true, size: 13 });
   text(ctx, troops(T, a), x, r.y + 96, { size: 13 });
   text(ctx, T.defenders, x, r.y + 124, { bold: true, size: 13 });
@@ -590,7 +566,7 @@ function formModal(ctx, cam, game, ui, boxes, T, m) {
   if (pl.ships > 0) rows.push(["ships", T.ships]);
   const r = modalFrame(ctx, cam, boxes, 146 + rows.length * 52 + (pl.ships > 0 ? 22 : 0));
   const x = r.x + 22, right = r.x + r.w - 22;
-  text(ctx, `${T.formArmy} · ${placeName(m.id, ui.lang)}`, r.x + r.w / 2, r.y + 40, { bold: true, size: 19, align: "center" });
+  text(ctx, `${T.formArmy} · ${placeName(m.id, ui.lang)}`, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 19, align: "center" });
   rows.forEach(([type, label], i) => {
     const y = r.y + 64 + i * 52;
     const max = pl[type];
@@ -615,26 +591,22 @@ function diploModal(ctx, cam, game, ui, boxes, T) {
   const others = CIVS.filter((c) => c.id !== me);
   const rowH = 56;
   const r = modalFrame(ctx, cam, boxes, 84 + others.length * rowH + 70, 560);
-  text(ctx, T.diplomacy, r.x + r.w / 2, r.y + 40, { bold: true, size: 20, align: "center" });
+  text(ctx, T.diplomacy, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   const narrow = r.w < 460;
   others.forEach((c, i) => {
     const y = r.y + 62 + i * rowH;
     const x = r.x + 18;
     const alive = game.civs[c.id].alive;
-    ctx.fillStyle = c.color;
-    ctx.fillRect(x, y + 10, 14, 14);
-    ctx.strokeStyle = INK.ink;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 10.5, 13, 13);
-    text(ctx, c.name[ui.lang], x + 22, y + 22, { bold: true, size: 14, color: alive ? INK.ink : INK.faint });
+    shield(ctx, c.id, x, y + 6, 17);
+    text(ctx, c.name[ui.lang], x + 26, y + 22, { title: true, bold: true, size: 14, color: alive ? INK.ink : INK.faint });
     if (!alive) {
-      text(ctx, fill(T.evFallen, ""), x + 22, y + 40, { italic: true, size: 12, color: INK.faint });
+      text(ctx, fill(T.evFallen, ""), x + 26, y + 40, { italic: true, size: 12, color: INK.faint });
       return;
     }
     const rel = relation(game, me, c.id);
     const [label, color] = rel === "war" ? [T.war, INK.bad] : rel === "ally" ? [T.ally, INK.good] : [T.neutral, INK.soft];
     const info = `${label} · ${fill(T.soldiers, strength(game, c.id))}` + (narrow ? "" : ` · ${fill(T.placesN, placesOf(game, c.id).length)}`);
-    text(ctx, info, x + 22, y + 40, { italic: true, size: 12, color });
+    text(ctx, info, x + 26, y + 40, { italic: true, size: 12, color });
 
     const acts = rel === "neutral"
       ? [[T.declare, { do: "askWar", civ: c.id }, !canDeclare(game, me, c.id)], [T.propose, { do: "ally", civ: c.id }, !canPropose(game, me, c.id)]]
@@ -688,7 +660,7 @@ function reportModal(ctx, cam, game, ui, boxes, T) {
   const rows = lines.flatMap(([s, tone]) => wrap(ctx, s, W, { size: 14 }).map((l, i) => [l, tone, i === 0]));
   const shown = rows.slice(0, 14);
   const r = modalFrame(ctx, cam, boxes, 96 + shown.length * 22 + 70, 460);
-  text(ctx, fill(T.turn, game.turn), r.x + r.w / 2, r.y + 40, { bold: true, size: 20, align: "center" });
+  text(ctx, fill(T.turn, game.turn), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   shown.forEach(([l, tone, first], i) => {
     const y = r.y + 80 + i * 22;
     const color = tone === "good" ? INK.good : tone === "bad" ? INK.bad : INK.ink;
@@ -712,7 +684,7 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
   else if (e.naval?.won && e.naval.sunk) extra.unshift([fill(T.navalWin, e.naval.sunk), INK.good]);
   const r = modalFrame(ctx, cam, boxes, 190 + extra.length * 22);
   text(ctx, e.won ? fill(T.won, where) : fill(T.lost, where), r.x + r.w / 2, r.y + 50, {
-    bold: true, size: 19, align: "center", color: e.won ? INK.good : INK.bad,
+    title: true, bold: true, size: 19, align: "center", color: e.won ? INK.good : INK.bad,
   });
   text(ctx, fill(T.losses, lost), r.x + r.w / 2, r.y + 84, { size: 14, align: "center" });
   extra.forEach(([s, color], i) => text(ctx, s, r.x + r.w / 2, r.y + 108 + i * 22, { size: 14, bold: true, align: "center", color }));
@@ -721,7 +693,7 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
   const r = modalFrame(ctx, cam, boxes, 316, 360);
-  text(ctx, T.menu, r.x + r.w / 2, r.y + 40, { bold: true, size: 20, align: "center" });
+  text(ctx, T.menu, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   const x = r.x + 20, w = r.w - 40;
   button(ctx, boxes, { x, y: r.y + 62, w, h: 42, label: T.resume, main: true, size: 15, act: { do: "close" } });
   button(ctx, boxes, { x, y: r.y + 114, w, h: 42, label: T.help, size: 15, act: { do: "open", modal: "help" } });
@@ -737,7 +709,7 @@ function helpModal(ctx, cam, game, ui, boxes, T) {
   const W = Math.min(cam.w - 24, 520) - 64;
   const rows = T.helpLines.flatMap((s, n) => wrap(ctx, s, W, { size: 14 }).map((l, i) => [l, i === 0 ? n + 1 : null]));
   const r = modalFrame(ctx, cam, boxes, 90 + rows.length * 21 + 76, 520);
-  text(ctx, T.help, r.x + r.w / 2, r.y + 40, { bold: true, size: 20, align: "center" });
+  text(ctx, T.help, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   rows.forEach(([l, n], i) => {
     const y = r.y + 82 + i * 21;
     if (n) text(ctx, n + ".", r.x + 24, y, { bold: true, size: 14 });
@@ -777,13 +749,9 @@ function decideModal(ctx, cam, game, ui, boxes, T) {
   const body = wrap(ctx, L.body, W - 48, { size: 14 });
   const r = modalFrame(ctx, cam, boxes, 92 + body.length * 20 + L.options.length * 54 + 14, 460);
   if (it.type === "offer") {
-    ctx.fillStyle = colorOf(it.civ);
-    ctx.fillRect(r.x + r.w / 2 - 9, r.y + 16, 18, 18);
-    ctx.strokeStyle = INK.ink;
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(r.x + r.w / 2 - 8.5, r.y + 16.5, 17, 17);
+    shield(ctx, it.civ, r.x + r.w / 2 - 10, r.y + 12, 20);
   }
-  text(ctx, L.title, r.x + r.w / 2, r.y + (it.type === "offer" ? 58 : 44), { bold: true, size: 19, align: "center" });
+  text(ctx, L.title, r.x + r.w / 2, r.y + (it.type === "offer" ? 58 : 44), { title: true, bold: true, size: 19, align: "center" });
   body.forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 84 + i * 20, { size: 14, align: "center", color: INK.soft, italic: true }));
   const by = r.y + 96 + body.length * 20;
   L.options.forEach((o, i) => {
@@ -794,10 +762,85 @@ function decideModal(ctx, cam, game, ui, boxes, T) {
   });
 }
 
+/** Uzun bir listenin bu sayfası ve sayfa düğmeleri; dönen: { rows, pages, page }. */
+function paged(list, per, m) {
+  const pages = Math.max(1, Math.ceil(list.length / per));
+  const page = Math.max(0, Math.min(m.page ?? 0, pages - 1));
+  return { rows: list.slice(page * per, page * per + per), pages, page };
+}
+
+function pager(ctx, boxes, r, y, pg) {
+  if (pg.pages <= 1) return;
+  const cx = r.x + r.w / 2;
+  button(ctx, boxes, { x: cx - 92, y, w: 44, h: 32, label: "‹", size: 18, off: pg.page === 0, act: { do: "modalPage", page: pg.page - 1 } });
+  text(ctx, `${pg.page + 1} / ${pg.pages}`, cx, y + 21, { bold: true, size: 14, align: "center" });
+  button(ctx, boxes, { x: cx + 48, y, w: 44, h: 32, label: "›", size: 18, off: pg.page >= pg.pages - 1, act: { do: "modalPage", page: pg.page + 1 } });
+}
+
+/** Satır zemini: tek sıralar hafif koyu, basılınca o satırın eylemi. */
+function listRow(ctx, boxes, r, y, h, i, act) {
+  if (i % 2 === 0) {
+    ctx.fillStyle = "rgba(90,70,40,0.07)";
+    ctx.fillRect(r.x + 12, y, r.w - 24, h);
+  }
+  boxes.push({ x: r.x + 12, y, w: r.w - 24, h, act });
+}
+
+/** Alt menüden: oyuncunun orduları. Satıra basınca ordu seçilir ve harita oraya kayar. */
+function armiesModal(ctx, cam, game, ui, boxes, T, m) {
+  const mine = game.armies.filter((a) => a.owner === game.player);
+  const rowH = 50;
+  const pg = paged(mine, Math.max(3, Math.floor((cam.h - 260) / rowH)), m);
+  const listH = Math.max(1, pg.rows.length) * rowH + (pg.pages > 1 ? 44 : 0);
+  const r = modalFrame(ctx, cam, boxes, 84 + listH + 74, 560);
+  text(ctx, T.armiesTitle, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  const x = r.x + 22, right = r.x + r.w - 24;
+  if (!mine.length) text(ctx, T.noArmies, r.x + r.w / 2, r.y + 90, { italic: true, size: 14, color: INK.soft, align: "center" });
+  pg.rows.forEach((a, i) => {
+    const y = r.y + 62 + i * rowH;
+    listRow(ctx, boxes, r, y, rowH - 2, i, { do: "pickArmy", army: a.id });
+    soldier(ctx, a.owner, x + 10, y + rowH - 9, 1, {});
+    const g = a.general ? `  ·  ★ ${a.general.name}` : "";
+    text(ctx, placeName(a.at, ui.lang) + g, x + 30, y + 20, { bold: true, size: 15 });
+    text(ctx, troops(T, a) + (a.ships ? `  ·  ⛵ ${a.ships}` : ""), x + 30, y + 39, { size: 13, color: INK.soft });
+    const [state, color] = a.route.length ? [fill(T.marching, placeName(a.route[a.route.length - 1], ui.lang)), INK.ink]
+      : a.moves > 0 ? [fill(T.movesLeft, a.moves), INK.good] : [T.spentShort, INK.faint];
+    text(ctx, state, right, y + 20, { italic: true, size: 13, color, align: "right" });
+  });
+  pager(ctx, boxes, r, r.y + 62 + pg.rows.length * rowH + 6, pg);
+  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+}
+
+/** Alt menüden: oyuncunun yerleşimleri, önce başkent, sonra büyükten küçüğe. */
+function citiesModal(ctx, cam, game, ui, boxes, T, m) {
+  const ids = placesOf(game, game.player).sort((a, b) => (byId[b].capital ? 1 : 0) - (byId[a].capital ? 1 : 0) || game.places[b].pop - game.places[a].pop);
+  const rowH = 50;
+  const pg = paged(ids, Math.max(3, Math.floor((cam.h - 260) / rowH)), m);
+  const r = modalFrame(ctx, cam, boxes, 84 + Math.max(1, pg.rows.length) * rowH + (pg.pages > 1 ? 44 : 0) + 74, 600);
+  text(ctx, T.citiesTitle, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  const x = r.x + 22, right = r.x + r.w - 24;
+  pg.rows.forEach((id, i) => {
+    const y = r.y + 62 + i * rowH, pl = game.places[id], p = byId[id];
+    listRow(ctx, boxes, r, y, rowH - 2, i, { do: "pickPlace", id });
+    const nw = text(ctx, p.name[ui.lang], x, y + 20, { bold: true, size: 15 });
+    text(ctx, kindLine(id, game, T), x + nw + 10, y + 20, { italic: true, size: 12, color: INK.soft });
+    const lo = pl.loyalty;
+    const lc = lo < N.loyalty.revolt ? INK.bad : lo < N.loyalty.unrest ? INK.warn : INK.good;
+    const pw = amount(ctx, "pop", `${pl.pop} / ${Math.round(popCap(pl, p.kind))}`, x, y + 40, { size: 13 });
+    const gw = text(ctx, `·  ${fill(T.garrisonN, men(pl))}`, x + pw + 10, y + 40, { size: 13, color: INK.soft });
+    text(ctx, `·  ${fill(T.loyaltyShort, lo)}`, x + pw + gw + 20, y + 40, { size: 13, bold: true, color: lc });
+    const threat = menace(game, id);
+    if (threat > 0) text(ctx, T.threatShort, right, y + 20, { bold: true, italic: true, size: 13, color: INK.bad, align: "right" });
+    else if (blockaded(game, id)) text(ctx, T.blockadeNote, right, y + 20, { bold: true, italic: true, size: 12, color: INK.bad, align: "right" });
+  });
+  pager(ctx, boxes, r, r.y + 62 + pg.rows.length * rowH + 6, pg);
+  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+}
+
 function overModal(ctx, cam, game, ui, boxes, T) {
   const won = game.over.result === "won";
   const r = modalFrame(ctx, cam, boxes, 210);
-  text(ctx, won ? T.victory : T.defeat, r.x + r.w / 2, r.y + 56, { bold: true, size: 28, align: "center", color: won ? INK.good : INK.bad });
+  text(ctx, won ? T.victory : T.defeat, r.x + r.w / 2, r.y + 56, { title: true, bold: true, size: 28, align: "center", color: won ? INK.good : INK.bad });
   text(ctx, fill(won ? T.victoryText : T.defeatText, game.over.turn), r.x + r.w / 2, r.y + 94, { size: 14, align: "center" });
   oneButton(ctx, boxes, r, { label: T.newGame, act: { do: "newGame" } });
 }

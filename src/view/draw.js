@@ -8,7 +8,7 @@
 
 import { LAND, LAKES, RIVERS } from "../data/geo.js";
 import { PLACES, ROADS } from "../data/world.js";
-import { project } from "../geo.js";
+import { SIZE, project } from "../geo.js";
 import { BOUNDS } from "../data/bounds.js";
 import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
@@ -124,6 +124,116 @@ const TERRAIN = typeof Image !== "undefined" ? new Image() : null;
 if (TERRAIN) {
   TERRAIN.onload = () => { stillKey = ""; window.MareNostrum?.redraw?.(); };
   TERRAIN.src = "assets/terrain.jpg";
+}
+
+// ---- kartın manzarası ----
+
+/**
+ * Şehir kartının başındaki resim: yerleşimin çevresinin arazisi yakından, ortasında büyük
+ * maketi ve sancağı, altı kâğıda doğru solar. (Kullanıcının görselindeki liman tablosunun
+ * yerine; resim yok, arazi resmi ve maket var.)
+ */
+const FY = 0.7;
+
+export function drawVignette(ctx, id, owner, r) {
+  const p = byIdPlace[id], m = POS[id];
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(r.x, r.y, r.w, r.h);
+  ctx.clip();
+  ctx.fillStyle = "#4f6f73";
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  if (TERRAIN?.complete && TERRAIN.naturalWidth) {
+    const a = project(BOUNDS.w - PAY, BOUNDS.n + PAY), b = project(BOUNDS.e + PAY, BOUNDS.s - PAY);
+    const kx = TERRAIN.naturalWidth / (b.x - a.x), ky = TERRAIN.naturalHeight / (b.y - a.y);
+    // Yerleşim resmin yatay ortasında, dikeyde FY kadar aşağıda: maket tam onun üstünde durur.
+    const hw = 1.6, hh = (hw * r.h) / r.w;
+    ctx.drawImage(TERRAIN, (m.x - hw - a.x) * kx, (m.y - 2 * hh * FY - a.y) * ky, 2 * hw * kx, 2 * hh * ky, r.x, r.y, r.w, r.h);
+  }
+  ctx.globalAlpha = 0.14;
+  ctx.fillStyle = colorOf(owner);
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.globalAlpha = 1;
+  const z = Math.min(2.4, r.h / 50);
+  const cx = r.x + r.w / 2, cy = r.y + r.h * FY;
+  const f = flagSize(p, owner, z * 0.62);
+  banner(ctx, owner, cx, cy - 3 * z, f.w, f.h, f.pole, { gold: p.capital && !!owner });
+  if (p.kind === "castle") castleModel(ctx, cx, cy + 2 * z, z * 1.1);
+  else cityModel(ctx, cx, cy + 2 * z, z, p.capital);
+  // Üstte ve altta solma: üst koyu, alt kâğıda.
+  const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+  g.addColorStop(0, "rgba(20,14,8,0.35)");
+  g.addColorStop(0.3, "rgba(20,14,8,0)");
+  g.addColorStop(0.78, "rgba(241,229,200,0)");
+  g.addColorStop(1, "rgba(241,229,200,0.85)");
+  ctx.fillStyle = g;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.restore();
+  ctx.strokeStyle = "#2a2016";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+}
+
+// ---- mini harita ----
+//
+// Görünen sınırların tamamı küçük bir kutuda: arazi, sahiplerin renkleri, yerleşimler birer
+// nokta, ve kameranın gördüğü yer bir çerçeve. Sahiplik değişmedikçe önbellekten basılır.
+
+let miniCanvas = null, miniKey = "";
+
+export function drawMinimap(ctx, r, cam, owners) {
+  const L = layers();
+  const key = [r.w, r.h, TERRAIN?.complete ? 1 : 0, PLACES.map((p) => owners[p.id] ?? "-").join(",")].join("|");
+  if (key !== miniKey) {
+    miniKey = key;
+    const k = 2; // keskin dursun
+    miniCanvas ??= document.createElement("canvas");
+    miniCanvas.width = Math.round(r.w * k);
+    miniCanvas.height = Math.round(r.h * k);
+    const c = miniCanvas.getContext("2d");
+    const sx = miniCanvas.width / SIZE.x, sy = miniCanvas.height / SIZE.y;
+    c.setTransform(sx, 0, 0, sy, 0, 0);
+    c.fillStyle = "#4f6f73";
+    c.fillRect(0, 0, SIZE.x, SIZE.y);
+    if (TERRAIN?.complete && TERRAIN.naturalWidth) {
+      const a = project(BOUNDS.w - PAY, BOUNDS.n + PAY), b = project(BOUNDS.e + PAY, BOUNDS.s - PAY);
+      c.drawImage(TERRAIN, a.x, a.y, b.x - a.x, b.y - a.y);
+    } else {
+      c.fillStyle = "#c9b98f";
+      c.fill(L.land, "evenodd");
+    }
+    c.save();
+    c.clip(L.dry, "evenodd");
+    for (const cell of L.cells) {
+      const owner = owners[cell.id];
+      if (!owner) continue;
+      c.globalAlpha = 0.55;
+      c.fillStyle = colorOf(owner);
+      c.fill(cell.path);
+    }
+    c.restore();
+    c.globalAlpha = 1;
+    for (const p of PLACES) {
+      c.beginPath();
+      c.arc(POS[p.id].x, POS[p.id].y, (p.capital ? 2.6 : 1.7) / sx, 0, TAU);
+      c.fillStyle = colorOf(owners[p.id]);
+      c.fill();
+      c.lineWidth = 0.8 / sx;
+      c.strokeStyle = "#1c1712";
+      c.stroke();
+    }
+  }
+  ctx.drawImage(miniCanvas, r.x, r.y, r.w, r.h);
+  // Kameranın gördüğü yer
+  const fx = r.w / SIZE.x, fy = r.h / SIZE.y;
+  const x0 = Math.max(r.x, r.x + (cam.x - cam.w / 2 / cam.scale) * fx), y0 = Math.max(r.y, r.y + (cam.y - cam.h / 2 / cam.scale) * fy);
+  const x1 = Math.min(r.x + r.w, r.x + (cam.x + cam.w / 2 / cam.scale) * fx), y1 = Math.min(r.y + r.h, r.y + (cam.y + cam.h / 2 / cam.scale) * fy);
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+  ctx.strokeStyle = CREAM;
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
 }
 
 function paintTerrain(ctx, view, L, px, W, H) {
@@ -632,40 +742,45 @@ export function drawOverlay(ctx, cam, fx) {
   for (const e of fx) {
     if (e.kind === "float" && e.screen) floatText(ctx, e.screen.x, e.screen.y, e);
     if (e.kind !== "banner") continue;
-    // Ortadan geçen bir kâğıt şerit: önce açılır, durur, sonra solar.
+    // Ortadan geçen koyu bir şerit, altın kenarlı: önce açılır, durur, sonra solar.
     const open = e.p < 0.2 ? e.p / 0.2 : 1;
     const fade = e.p > 0.7 ? 1 - (e.p - 0.7) / 0.3 : 1;
-    const h = 92 * (0.6 + 0.4 * open);
+    const h = 96 * (0.6 + 0.4 * open);
     const y = cam.h * 0.42 - h / 2;
-    ctx.globalAlpha = fade * 0.94;
-    ctx.fillStyle = INK.card;
+    ctx.globalAlpha = fade * 0.92;
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, "#2c241b");
+    g.addColorStop(0.5, "#1a1510");
+    g.addColorStop(1, "#2c241b");
+    ctx.fillStyle = g;
     ctx.fillRect(0, y, cam.w, h);
     ctx.globalAlpha = fade;
-    ctx.strokeStyle = INK.ink;
-    ctx.lineWidth = 1.5;
-    for (const yy of [y + 0.5, y + h - 0.5]) {
+    ctx.strokeStyle = "#c9a45a";
+    ctx.lineWidth = 2;
+    for (const yy of [y + 1, y + h - 1]) {
       ctx.beginPath();
       ctx.moveTo(0, yy);
       ctx.lineTo(cam.w, yy);
       ctx.stroke();
     }
-    ctx.lineWidth = 0.75;
-    for (const yy of [y + 4.5, y + h - 4.5]) {
+    ctx.strokeStyle = "rgba(201,164,90,0.45)";
+    ctx.lineWidth = 1;
+    for (const yy of [y + 5.5, y + h - 5.5]) {
       ctx.beginPath();
       ctx.moveTo(0, yy);
       ctx.lineTo(cam.w, yy);
       ctx.stroke();
     }
     const slide = (1 - open) * 30;
-    ctx.fillStyle = INK.ink;
+    ctx.fillStyle = CREAM;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = `bold 34px ${SERIF}`;
-    ctx.fillText(e.text, cam.w / 2 - slide, y + h / 2 - (e.sub ? 8 : 0));
+    ctx.font = `700 34px ${TITLE}`;
+    ctx.fillText(e.text.toLocaleUpperCase(), cam.w / 2 - slide, y + h / 2 - (e.sub ? 8 : 0));
     if (e.sub) {
-      ctx.font = `italic 14px ${SERIF}`;
-      ctx.fillStyle = INK.soft;
-      ctx.fillText(e.sub, cam.w / 2 - slide, y + h / 2 + 22);
+      ctx.font = `italic 16px ${SERIF}`;
+      ctx.fillStyle = GOLD_LIGHT;
+      ctx.fillText(e.sub, cam.w / 2 - slide, y + h / 2 + 24);
     }
     ctx.globalAlpha = 1;
   }

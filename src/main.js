@@ -21,7 +21,9 @@ import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.j
 import * as anim from "./view/anim.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf } from "./view/kit.js";
-import { chipRise, drawUI, eventLines } from "./view/ui.js";
+import { drawUI, eventLines } from "./view/ui.js";
+import { chipRise } from "./view/hud.js";
+import { SIZE } from "./geo.js";
 import { trait } from "./rules/numbers.js";
 
 const started = performance.now();
@@ -97,7 +99,7 @@ function redraw() {
     const view = anim.shape(mapView());
     tokens = drawMap(ctx, cam, view, dpr);
     boxes = [];
-    drawUI(ctx, cam, game, ui, boxes);
+    drawUI(ctx, cam, game, ui, boxes, view);
     drawOverlay(ctx, cam, view.fx);
     if (anim.busy() || gliding) redraw();
     if (!anim.busy()) settle();
@@ -310,6 +312,35 @@ function dispatch(act) {
     case "cardTab":
       ui.cardTab = act.tab;
       break;
+    case "modalPage":
+      if (m) m.page = act.page;
+      break;
+    case "pickArmy": {
+      // Ordu listesinden: seç, haritayı oraya kaydır.
+      const a = armyById(game, act.army);
+      ui.modal = null;
+      if (!a) break;
+      ui.sel = { kind: "army", id: a.id };
+      const mm = placeAt(a.at);
+      glide(mm.x, mm.y, Math.max(cam.scale, cam.min * 2.4));
+      break;
+    }
+    case "pickPlace": {
+      ui.modal = null;
+      ui.sel = { kind: "place", id: act.id };
+      const mm = placeAt(act.id);
+      glide(mm.x, mm.y, Math.max(cam.scale, cam.min * 2.4));
+      break;
+    }
+    case "overview":
+      // Harita düğmesi: yakındaysan bütün haritayı göster, uzaktaysan başkentine dön.
+      if (cam.scale > cam.min * 1.15) glide(SIZE.x / 2, SIZE.y / 2, cam.min, 600);
+      else lookAtHome();
+      break;
+    case "minimap":
+      // Mini haritada basılan yer ekranın ortasına gelir.
+      glide(act.fx * SIZE.x, act.fy * SIZE.y);
+      break;
     case "deselect":
       ui.sel = null;
       break;
@@ -321,7 +352,7 @@ function dispatch(act) {
       // Gösteri: önce tur şeridi, sonra rakiplerin hamleleri sırayla, en son kendi
       // ordularının güzergâh adımları. Kaynakların artışı üst banttan yükselir.
       const t = anim.clock();
-      anim.banner(fill(T().turn, game.turn), T().era);
+      anim.banner(fill(T().turn, game.turn), fill(T().year, Math.max(1, 271 - game.turn)));
       anim.timeline(trace, t + 900, visible, me);
       ["money", "weapons", "food"].forEach((k, i) => {
         const d = Math.round((game.civs[me][k] - before[k]) * 10) / 10;
@@ -557,7 +588,9 @@ function tap(x, y) {
   for (let i = boxes.length - 1; i >= 0; i--) {
     const b = boxes[i];
     if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
-      if (b.act) dispatch(b.act);
+      // Mini harita: eylemi basılan noktayı da bilmeli.
+      if (b.act?.do === "minimap") dispatch({ ...b.act, fx: (x - b.x) / b.w, fy: (y - b.y) / b.h });
+      else if (b.act) dispatch(b.act);
       return; // kutunun boş yeri de basışı yutar
     }
   }

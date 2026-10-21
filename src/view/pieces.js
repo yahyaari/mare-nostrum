@@ -294,6 +294,34 @@ export function banner(ctx, owner, x, y, w, h, pole, o = {}) {
   emblem(ctx, owner, x, top + h * 0.43, w * 0.32);
 }
 
+/**
+ * Küçük kalkan: sahibinin renginde, altın kenarlı, ortasında arması. Listelerde ve kartlarda
+ * renkli karenin yerine. (x, y) sol üst, `s` genişlik (boyu 1.2 katı).
+ */
+export function shield(ctx, owner, x, y, s) {
+  const h = s * 1.2, color = colorOf(owner);
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + s, y);
+    ctx.lineTo(x + s, y + h * 0.55);
+    ctx.quadraticCurveTo(x + s, y + h * 0.85, x + s / 2, y + h);
+    ctx.quadraticCurveTo(x, y + h * 0.85, x, y + h * 0.55);
+    ctx.closePath();
+  };
+  path();
+  const g = ctx.createLinearGradient(x, 0, x + s, 0);
+  g.addColorStop(0, shade(color, -0.2));
+  g.addColorStop(0.5, shade(color, 0.08));
+  g.addColorStop(1, shade(color, -0.3));
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = GOLD_DARK;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  emblem(ctx, owner, x + s / 2, y + h * 0.45, s * 0.3);
+}
+
 // ---- maketler ----
 
 function gable(ctx, x, y, w, h, roof) {
