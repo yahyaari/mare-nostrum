@@ -96,6 +96,8 @@ orman bulur, `src/data/trees.js` 5367 ağaç; uzakta seyrekleşir, yerleşim dib
 Durağan katman ekrandan %30 büyük çiziliyor, kaydırırken sadece yeri değişiyor (başsız Edge'de
 kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sabit.
 
+**Donanma görünüşü (21.10, kullanıcı: "gemiler denizlerde donanma olarak gözüksün, kara ordusu gibi değil, denizden yürüsün"):** gemili ordu limanda denizde filo (1-3 kadırga, `pieces.galley/fleet`), deniz yolunda kadırga olarak yüzer (yönüne bakar, köpük izi), karada asker; limanda bekleyen gemiler demirli, yelkeni sarılı. Limanın denize bakan yönü kıyı verisinden (`draw.js seaDir`). Kural düzeltmesi: askersiz filo artık denize açılır, karadan yürümez (`canSail`, `moves.canUse`; kurallar.md 15).
+
 **Görünüm bitti. Sırada: Görevler** (alt menüye "Görevler" düğmesi onunla gelecek).
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi

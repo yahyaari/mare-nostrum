@@ -82,7 +82,7 @@ export function timeline(trace, start, visible, own = null) {
         const walk = legs.reduce((a, b) => a + b, 0);
         const C = seen ? CLASH : 0;
         const dur = walk + (m.attack ? C : 0);
-        out.push({ kind: "march", t0: cursor, dur: Math.max(dur, 1), legs, army: m.army, owner: m.owner, men: m.men, path: m.path, attack: m.attack });
+        out.push({ kind: "march", t0: cursor, dur: Math.max(dur, 1), legs, army: m.army, owner: m.owner, men: m.men, ships: m.ships, path: m.path, attack: m.attack });
         if (m.attack) {
           const at = m.path[m.path.length - 1];
           const last = legs[legs.length - 1] ?? 0;
@@ -111,7 +111,7 @@ function segments(trace) {
   for (const e of trace) {
     if (e.owner !== owner) { seg = []; out.push(seg); owner = e.owner; }
     let m = seg.find((x) => x.army === e.army && x.path[x.path.length - 1] === e.from && !x.attack);
-    if (!m) { m = { army: e.army, owner: e.owner, men: e.men, path: [e.from], attack: null }; seg.push(m); }
+    if (!m) { m = { army: e.army, owner: e.owner, men: e.men, ships: e.ships ?? 0, path: [e.from], attack: null }; seg.push(m); }
     m.path.push(e.to);
     if (e.type === "attack") m.attack = { won: e.won, oldOwner: e.oldOwner };
   }
@@ -157,7 +157,12 @@ export function shape(view) {
       const n = i.path.length - 1;
       const walk = i.legs.reduce((a, b) => a + b, 0);
       const e = Math.max(0, t - i.t0);
-      let pos, alpha = 1, sea = false, walking = false;
+      let pos, alpha = 1, sea = false, walking = false, dir = 1;
+      // Hangi yöne gidiyor (kadırga o yöne baksın): yolun biraz ilerisi solda mı sağda mı.
+      const heading = (a, b, f) => {
+        const f0 = Math.min(f, 0.97);
+        return alongRoad(a, b, f0 + 0.03).x < alongRoad(a, b, f0).x ? -1 : 1;
+      };
       if (n > 0 && e < walk) {
         // Hangi yoldayız, ve o yolun ne kadarındayız.
         let k = 0, before = 0;
@@ -167,13 +172,17 @@ export function shape(view) {
         // Saldırı yolunda hedefin içine girmez, kapısında durur.
         const stop = i.attack && k === n - 1 ? 0.78 : 1;
         pos = alongRoad(i.path[k], i.path[k + 1], f * stop);
+        dir = heading(i.path[k], i.path[k + 1], f * stop);
         walking = e > 0;
         fx.push({ kind: "trail", path: i.path, k, f: f * stop, color: colorOf(i.owner), sea });
       } else if (n > 0 && i.attack) {
+        // Kapıda çarpışırken: denizden geldiyse hâlâ gemide.
+        sea = !!roadBetween(i.path[n - 1], i.path[n])?.sea;
+        dir = heading(i.path[n - 1], i.path[n], 0.78);
         pos = alongRoad(i.path[n - 1], i.path[n], i.attack.won ? 0.78 + 0.22 * Math.min(1, (e - walk) / (i.dur - walk)) : 0.78);
         if (!i.attack.won) alpha = Math.max(0, 1 - (e - walk) / (i.dur - walk));
       } else pos = placeAt(i.path[n]);
-      moving.push({ id: i.army, owner: i.owner, men: i.men, float: pos, alpha, at: null, sea, walking });
+      moving.push({ id: i.army, owner: i.owner, men: i.men, ships: i.ships ?? 0, float: pos, alpha, at: null, sea, walking, dir });
     } else if (p >= 0 && p < 1) {
       if (i.kind === "clash") fx.push({ kind: "clash", at: i.at, p });
       else if (i.kind === "float") fx.push({ kind: "float", at: i.at, screen: i.screen, p, text: i.text, color: i.color, size: i.size });

@@ -311,7 +311,12 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
 - **Deniz yolları (kesik çizgiler) gemi ister:** bir gemi 25 asker taşır. Ordu, gemileri bütün
   askerlerini taşıyabiliyorsa deniz yolunu kullanabilir; yoksa o yollar onun için yok.
   Gemiler ordunun içinde durur; ordu çıkarırken limandaki gemileri de alırsın. Sadece gemiden
-  oluşan bir filo da ordu sayılır (karaya saldıramaz).
+  oluşan bir filo da ordu sayılır: **denizden gider, karadan yürümez, karaya saldıramaz.**
+  (21.10'a kadar askersiz filo deniz yolunu hiç kullanamıyordu, sadece karadan yürüyordu - bir
+  hataydı. Eski kayıtta karada kalmış bir filo bir limana dönebilsin diye kara yolu açık.)
+- **Haritada:** gemili ordu limandayken denizde bir filo olarak durur (gemi sayısı kadar, en
+  fazla üç kadırga; askerliyse küpeştede kalkanlar), deniz yolunda kadırga olarak yüzer, karada
+  asker figürüdür. Limanda bekleyen gemiler denizde yelkeni sarılı demirli durur.
 - **Başlangıç gemileri:** liman olan başkentte 2, öteki limanlarda 1, büyük bağımsız
   limanlarda 2, öteki bağımsız limanlarda 1.
 - **Deniz savaşı:** denizden bir limana saldırınca önce limandaki (ve sahibinin oradaki

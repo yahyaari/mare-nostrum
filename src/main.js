@@ -7,7 +7,7 @@
 import { CIVS, PLACES } from "./data/world.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rules/diplomacy.js";
 import { neighbours, roadBetween } from "./rules/graph.js";
-import { access, attack, canAttack, forecast, hostile, menace, needsShips, order, routeTo } from "./rules/moves.js";
+import { access, attack, canAttack, canUse, forecast, hostile, menace, needsShips, order, routeTo } from "./rules/moves.js";
 import {
   VERSION, armyById, buildShip, canSail, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, split, station, upgrade,
 } from "./rules/state.js";
@@ -151,6 +151,7 @@ function mapView() {
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
   view.hover = ui.hover ?? null;
+  view.docked = Object.fromEntries(PLACES.filter((p) => p.port && game.places[p.id].ships > 0).map((p) => [p.id, game.places[p.id].ships]));
   view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));
   view.unrest = Object.fromEntries(placesOf(game, game.player)
     .filter((id) => game.places[id].loyalty < N.loyalty.unrest).map((id) => [id, game.places[id].loyalty]));
@@ -172,7 +173,7 @@ function mapView() {
         for (const n of neighbours(id)) {
           const k = access(game, a.owner, n);
           if (seen.has(n) || !(k === "own" || k === "ally")) continue;
-          if (roadBetween(id, n).sea && !canSail(a)) continue; // gemisiz deniz yolu yok
+          if (!canUse(a, roadBetween(id, n))) continue; // gemisiz deniz yolu, askersiz kara yolu yok
           seen.add(n);
           next.push(n);
           view.marks[n] = "walk";
@@ -511,8 +512,9 @@ function dispatch(act) {
 // ---- haritaya basış ----
 
 function tapMap(x, y) {
-  // Ordu sancağı
-  const t = [...tokens].reverse().find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
+  // Ordu. Limandaki filo uzaktan bakınca kendi şehrinin üstüne düşebiliyor: şehrin tam
+  // üstüne basıldıysa şehir kazanır.
+  const t = tokenAt(x, y);
   const mine = ownArmy();
   if (t) {
     const a = armyById(game, t.army);
@@ -561,6 +563,14 @@ function tapPlace(id) {
   } else if (trace.length) anim.pulse(a.at, INK.ink, arrive);
   save();
   redraw();
+}
+
+/** Basılan yerdeki ordu; filo, bir şehrin tam üstündeyse sayılmaz (şehir kazanır). */
+function tokenAt(x, y) {
+  const t = [...tokens].reverse().find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
+  if (!t?.fleet) return t;
+  const pl = nearest(x, y);
+  return pl && reach(cam, pl.id, x, y) < 16 ? null : t;
 }
 
 /** Basılan yere en yakın yerleşim (maketi ya da sancağı), yeterince yakınsa. */
@@ -639,7 +649,7 @@ function hoverAt(p) {
     }
   }
   if (!key && game && ui.screen === "game" && !blocking) {
-    const t = [...tokens].reverse().find((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h);
+    const t = tokenAt(p.x, p.y);
     const pl = t ? null : nearest(p.x, p.y);
     if (t) { key = "a" + t.army; hot = true; }
     else if (pl) { key = "p" + pl.id; hot = true; place = pl.id; }

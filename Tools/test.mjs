@@ -597,6 +597,19 @@ section("Donanma (bölüm 15)");
   a.ships = 2;
   check("2 gemi yeter: deniz yolu açılır", S.canSail(a) && M.order(s, a.id, "lilybaeum") === 1 && a.at === "lilybaeum");
 
+  // Askersiz filo (kullanıcı: "gemiler denizden yürüsün"): denizden gider, karadan yürümez,
+  // saldıramaz. Eskiden canSail asker istiyordu ve filo sadece karadan yürüyebiliyordu.
+  const navy = S.formArmy(s, "carthage", 0, 0, 0, 0, 2);
+  check("askersiz filo denize açılır", S.canSail(navy) && M.routeTo(s, navy, "lilybaeum")?.length === 1);
+  const landRoad = ROADS.find((r) => !r.sea && (r.a === "carthage" || r.b === "carthage"));
+  check("askersiz filo limandan karaya yürümez", landRoad && !M.canUse(navy, landRoad) && M.routeTo(s, navy, "cirta") === null);
+  check("askersiz filo saldıramaz", !M.canAttack(s, navy, "caralis"));
+  check("askerli ordu kara yolunu kullanır", M.canUse(a, landRoad));
+  navy.at = "memphis";
+  check("karada kalmış filo limana dönebilir", M.canUse(navy, ROADS.find((r) => !r.sea && (r.a === "memphis" || r.b === "memphis"))));
+  navy.at = "carthage";
+  S.station(s, navy.id);
+
   // Deniz savaşı: denizden saldırıda önce limandaki gemiler.
   const sea = (ships, defShips, civ = "rome") => {
     const g = S.newGame(civ, 7);

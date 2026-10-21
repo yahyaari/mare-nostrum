@@ -6,7 +6,7 @@
 
 import { CIVS } from "../data/world.js";
 import { estimate, fight, naval, navalOdds } from "./combat.js";
-import { neighbours, path, roadBetween } from "./graph.js";
+import { byId, neighbours, path, roadBetween } from "./graph.js";
 import { bestAt, bury, has, learn } from "./generals.js";
 import { N, UNITS, trait } from "./numbers.js";
 import { between } from "./rng.js";
@@ -46,6 +46,17 @@ export function defenders(state, id) {
 }
 
 /**
+ * Bu ordu bu yolu kullanabilir mi. Deniz yolu, gemiler orduyu taşıyabiliyorsa (`sail`).
+ * Askersiz filo karadan yürümez - ancak karada kalmışsa (eski kayıtlarda filolar karadan
+ * yürüyebiliyordu) bir limana dönebilsin diye kara yolu açık.
+ */
+export function canUse(army, road, sail = canSail(army)) {
+  if (!road) return false;
+  if (road.sea) return sail;
+  return men(army) > 0 || !byId[army.at]?.port;
+}
+
+/**
  * Bir ordunun `dest`e güzergâhı: aradaki her durak kendi ya da müttefik yeri olmalı.
  * `dest` düşmansa güzergâh onun bir önceki durağında biter (saldırı ayrı emir).
  */
@@ -57,8 +68,7 @@ export function routeTo(state, army, dest, sail = canSail(army)) {
     const k = access(state, army.owner, id);
     return k === "own" || k === "ally";
   };
-  // Deniz yolu ancak gemiler orduyu taşıyabiliyorsa (bir gemi 20 asker).
-  const usable = (r) => !r.sea || sail;
+  const usable = (r) => canUse(army, r, sail);
   if (hostile(kind)) {
     // Düşmana komşu, yürünebilir en yakın durak - ve oradan düşmana giden yol da kullanılabilir olmalı.
     let best = null;
@@ -96,12 +106,12 @@ export function advance(state, army) {
     const next = army.route[0];
     const k = access(state, army.owner, next);
     const road = roadBetween(army.at, next);
-    if (!(k === "own" || k === "ally") || !road || (road.sea && !canSail(army))) {
+    if (!(k === "own" || k === "ally") || !canUse(army, road)) {
       army.route = [];
       break;
     }
     // Ekran için iz: kim nereden nereye yürüdü (state.trace sadece ekran isterse var, kayda girmez).
-    state.trace?.push({ type: "move", army: army.id, owner: army.owner, men: men(army), from: army.at, to: next });
+    state.trace?.push({ type: "move", army: army.id, owner: army.owner, men: men(army), ships: army.ships, from: army.at, to: next });
     army.at = next;
     army.moves -= 1;
     army.route.shift();
@@ -172,7 +182,7 @@ export function attack(state, armyId, id, luck = null) {
     sinkAt(state, id, nr.def);
     army.ships = nr.att;
     if (!nr.attWins) {
-      state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), from: army.at, to: id, won: false, oldOwner: pl.owner });
+      state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: army.ships, from: army.at, to: id, won: false, oldOwner: pl.owner });
       bury(state, army.owner, army.general);
       state.armies = state.armies.filter((a) => a !== army);
       return {
@@ -192,7 +202,7 @@ export function attack(state, armyId, id, luck = null) {
     after: { att: r.att, def: r.def }, naval: navalEv,
   };
   state.trace?.push({
-    type: "attack", army: army.id, owner: army.owner, men: men(army), from: army.at, to: id,
+    type: "attack", army: army.id, owner: army.owner, men: men(army), ships: army.ships, from: army.at, to: id,
     won: r.attWins, oldOwner: pl.owner,
   });
   army.moves = 0;

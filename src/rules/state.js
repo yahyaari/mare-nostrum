@@ -89,7 +89,9 @@ export const empty = (u) => men(u) === 0 && !(u.ships > 0);
 /** Karada dövüşenler (gemi ayrı sayılır). */
 export const landMen = (u) => men(u);
 /** Bir ordunun gemileri taşıyabildiği kadar askeri var mı: deniz yolundan geçebilir mi. */
-export const canSail = (u) => (u.ships ?? 0) * N.navy.carry >= men(u) && men(u) > 0;
+// Askersiz filo da denize açılır (kullanıcı 21.10: "gemiler denizden yürüsün"); eskiden asker
+// şartı vardı ve sadece gemiden filo deniz yolunu hiç kullanamıyordu.
+export const canSail = (u) => (u.ships ?? 0) > 0 && (u.ships ?? 0) * N.navy.carry >= men(u);
 
 /**
  * Abluka: limanın deniz yollarının öbür ucunda, sahibiyle savaşan birinin, limandakinden

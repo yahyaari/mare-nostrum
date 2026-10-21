@@ -589,6 +589,161 @@ export function soldier(ctx, owner, x, y, z = 1, o = {}) {
   ctx.restore();
 }
 
+/**
+ * Kadırga, yandan: kürekler, burnunda mahmuz ve göz, kıçında kıvrık süs, direkte sahibinin
+ * renginde armalı yelken. (x, y) su hattının ortası; `s` = 1'de gövde ~44 piksel.
+ * `o`: flip (sola bakar), furled (limanda: yelken sarılı), troops (askerli: küpeştede
+ * kalkanlar), wake (yürüyor: arkasında köpük), gold (seçili).
+ */
+export function galley(ctx, owner, x, y, s = 1, o = {}) {
+  const color = colorOf(owner);
+  const d = o.flip ? -1 : 1;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s * d, s);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // Suya düşen gölge
+  ctx.fillStyle = "rgba(8,26,34,0.3)";
+  ctx.beginPath();
+  ctx.ellipse(1, 2, 23, 3.4, 0, 0, TAU);
+  ctx.fill();
+  if (o.wake) {
+    ctx.strokeStyle = "rgba(240,246,240,0.7)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-18, 0.5);
+    ctx.lineTo(-38, -3.5);
+    ctx.moveTo(-18, 1.5);
+    ctx.lineTo(-38, 6);
+    ctx.moveTo(22, 1);
+    ctx.quadraticCurveTo(25, -1, 27, 1);
+    ctx.stroke();
+  }
+  // Kürekler (gövdenin arkasında)
+  ctx.strokeStyle = "#d8c29a";
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  for (let i = 0; i < 7; i++) {
+    const ox = -12 + i * 4;
+    ctx.moveTo(ox, -1.5);
+    ctx.lineTo(ox - 3.5, 5);
+  }
+  ctx.stroke();
+  // Direk, seren ve yelken
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(0, -4);
+  ctx.lineTo(0, -31);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, -31);
+  ctx.lineTo(-7, -29.5);
+  ctx.lineTo(0, -28);
+  ctx.fill();
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(-11, -27);
+  ctx.lineTo(11, -27);
+  ctx.stroke();
+  if (o.furled) {
+    ctx.strokeStyle = CREAM;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-10, -26);
+    ctx.lineTo(10, -26);
+    ctx.stroke();
+  } else {
+    const sail = () => {
+      ctx.beginPath();
+      ctx.moveTo(-10, -26.5);
+      ctx.lineTo(10, -26.5);
+      ctx.quadraticCurveTo(13.5, -18, 10, -9.5);
+      ctx.lineTo(-10, -9.5);
+      ctx.quadraticCurveTo(-6.5, -18, -10, -26.5);
+      ctx.closePath();
+    };
+    sail();
+    const g = ctx.createLinearGradient(-10, 0, 13, 0);
+    g.addColorStop(0, shade(color, -0.3));
+    g.addColorStop(0.6, shade(color, 0.1));
+    g.addColorStop(1, shade(color, -0.15));
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = o.gold ? GOLD_LIGHT : shade(color, -0.55);
+    ctx.lineWidth = o.gold ? 1.4 : 0.9;
+    ctx.stroke();
+  }
+  // Gövde
+  const hull = () => {
+    ctx.beginPath();
+    ctx.moveTo(-16, -5);
+    ctx.lineTo(14, -5);
+    ctx.quadraticCurveTo(18, -5, 19, -2);
+    ctx.lineTo(23.5, 0.5);
+    ctx.lineTo(17, 1.8);
+    ctx.quadraticCurveTo(0, 3.8, -15, 1.6);
+    ctx.quadraticCurveTo(-19, -1, -16, -5);
+    ctx.closePath();
+  };
+  hull();
+  const hg = ctx.createLinearGradient(0, -5, 0, 3);
+  hg.addColorStop(0, "#6e4a2b");
+  hg.addColorStop(1, "#33200f");
+  ctx.fillStyle = hg;
+  ctx.fill();
+  ctx.strokeStyle = "#1c120a";
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+  // Kıç süsü
+  ctx.strokeStyle = "#4a2f1a";
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-16, -4.5);
+  ctx.quadraticCurveTo(-23, -10, -20.5, -15.5);
+  ctx.quadraticCurveTo(-18.5, -17.5, -17.2, -14.5);
+  ctx.stroke();
+  // Küpeştede sahibinin renginde şerit, askerliyse kalkanlar; burunda göz.
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-15, -3.3);
+  ctx.lineTo(16, -3.3);
+  ctx.stroke();
+  if (o.troops) {
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.arc(-11 + i * 4.4, -5.6, 1.7, 0, TAU);
+      ctx.fillStyle = shade(color, -0.15);
+      ctx.fill();
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = CREAM;
+  ctx.beginPath();
+  ctx.arc(16.5, -2, 1, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  // Arma yelkende, aynalanmadan.
+  if (!o.furled) emblem(ctx, owner, x + d * 1 * s, y - 18 * s, 5 * s);
+}
+
+/**
+ * Filo: gemi sayısı kadar (en fazla üç) kadırga, arkadakiler küçük ve yukarıda. (x, y) öndeki
+ * kadırganın su hattı.
+ */
+export function fleet(ctx, owner, x, y, ships, z = 1, o = {}) {
+  const d = o.flip ? -1 : 1;
+  const spots = [[0, 0, 1], [-18, -10, 0.8], [15, -13, 0.7]].slice(0, Math.max(1, Math.min(3, ships)));
+  for (const [dx, dy, k] of [...spots].sort((a, b) => a[1] - b[1])) {
+    galley(ctx, owner, x + dx * z * d, y + dy * z, k * z, { ...o, wake: o.wake && k === 1 });
+  }
+}
+
 /** Ordunun altında küçük bir gemi: ordunun gemisi var ya da şu an denizde. */
 export function ship(ctx, x, y, z = 1) {
   ctx.save();
