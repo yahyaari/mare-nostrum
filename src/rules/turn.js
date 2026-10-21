@@ -11,7 +11,7 @@ import { roll, settleInbox } from "./events.js";
 import { tick } from "./loyalty.js";
 import { advance, refresh } from "./moves.js";
 import { N, UNITS, trait } from "./numbers.js";
-import { armiesOf, budget, info, placesOf, popCap } from "./state.js";
+import { armiesOf, budget, empty, info, placesOf, popCap } from "./state.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -36,7 +36,7 @@ export function economy(state, events) {
           lost += n;
         }
       }
-      state.armies = state.armies.filter((a) => a.inf + a.arch > 0);
+      state.armies = state.armies.filter((a) => !empty(a));
       events.push({ type: "famine", turn: state.turn, civ: c.id, lost });
     }
     for (const id of placesOf(state, c.id)) {

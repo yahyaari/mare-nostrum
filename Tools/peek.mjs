@@ -173,6 +173,23 @@ await shot("29_ordu_cikar_dort", D({ do: "formOpen", id: "rome" }));
 await evaluate(`(() => { const M = window.MareNostrum; M.dispatch({ do: "close" }); return true; })()`);
 await shot("27_general_kart", `${D({ do: "close" })}; const a = M.game.armies.find((x) => x.owner === 'rome' && x.general);
   M.ui.sel = { kind: 'army', id: a.id }; M.redraw()`);
+// Donanma: Kartaca ile yeni oyun.
+await shot("30_kartaca_liman", `M.ui.modal = null; ${D({ do: "newGame" })}; ${D({ do: "pick", civ: "carthage" })}; ${D({ do: "start" })};
+  ${D({ do: "close" })}; M.game.civs.carthage.money = 80; M.ui.sel = { kind: 'place', id: 'carthage' }; M.look('carthage', 2.4)`);
+await shot("31_gemili_ordu_cikar", D({ do: "formOpen", id: "carthage" }));
+await shot("32_denizde", `M.ui.modal.ships = 2; ${D({ do: "formOk" })}; ${TAP("lilybaeum")}; ${AT(190)}`);
+await shot("33_deniz_saldiri", `${DONE}; const g = M.game; const a = g.armies.find((x) => x.owner === 'carthage');
+  a.at = 'carthage'; a.moves = 1; a.inf = 70; a.ships = 3; a.route = []; M.ui.sel = { kind: 'army', id: a.id }; M.look('carthage', 2.2);
+  ${TAP("caralis")}`);
+await shot("34_deniz_zafer", `${D({ do: "attack" })}; ${DONE}`);
+await shot("35_abluka", `${D({ do: "close" })}; const g = M.game; g.relations['carthage|rome'] = 'war';
+  g.places.lilybaeum.owner = 'carthage'; g.places.syracuse.owner = 'rome';
+  g.armies.push({ id: 990, owner: 'rome', at: 'syracuse', inf: 0, arch: 0, cav: 0, siege: 0, ships: 4, moves: 1, route: [], general: null });
+  g.places.tarentum.ships = 0; g.armies.push({ id: 991, owner: 'carthage', at: 'syracuse', inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, moves: 0, route: [], general: null });
+  g.armies = g.armies.filter((x) => x.id !== 991);
+  g.places.syracuse.owner = 'carthage'; g.places.tarentum.owner = 'carthage'; g.armies.find((x) => x.id === 990).at = 'epidamnos';
+  g.places.epidamnos.owner = 'rome';
+  M.ui.sel = { kind: 'place', id: 'tarentum' }; M.look('tarentum', 2.4)`);
 await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "en" })}; return true; })()`);
 
 for (const line of log) console.log("  " + line);

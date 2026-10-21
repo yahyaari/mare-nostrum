@@ -6,13 +6,14 @@
 
 import { CIVS, PLACES } from "./data/world.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rules/diplomacy.js";
-import { neighbours } from "./rules/graph.js";
-import { access, attack, canAttack, forecast, hostile, menace, order, routeTo } from "./rules/moves.js";
+import { neighbours, roadBetween } from "./rules/graph.js";
+import { access, attack, canAttack, forecast, hostile, menace, needsShips, order, routeTo } from "./rules/moves.js";
 import {
-  VERSION, armyById, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, split, station, upgrade,
+  VERSION, armyById, buildShip, canSail, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, split, station, upgrade,
 } from "./rules/state.js";
 import { resolve as answer } from "./rules/events.js";
 import { appoint } from "./rules/generals.js";
+import { blockaded } from "./rules/state.js";
 import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
@@ -146,11 +147,12 @@ function mapView() {
   if (!game) return view;
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
+  view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));
   view.unrest = Object.fromEntries(placesOf(game, game.player)
     .filter((id) => game.places[id].loyalty < N.loyalty.unrest).map((id) => [id, game.places[id].loyalty]));
   view.threats = Object.fromEntries(placesOf(game, game.player).map((id) => [id, menace(game, id)]).filter(([, n]) => n > 0));
   view.armies = game.armies.map((a) => ({
-    id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0,
+    id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0, ships: a.ships,
     selected: ui.sel?.kind === "army" && ui.sel.id === a.id,
     spent: a.owner === game.player && a.moves <= 0,
   }));
@@ -166,6 +168,7 @@ function mapView() {
         for (const n of neighbours(id)) {
           const k = access(game, a.owner, n);
           if (seen.has(n) || !(k === "own" || k === "ally")) continue;
+          if (roadBetween(id, n).sea && !canSail(a)) continue; // gemisiz deniz yolu yok
           seen.add(n);
           next.push(n);
           view.marks[n] = "walk";
@@ -175,7 +178,7 @@ function mapView() {
     }
     if (a.moves > 0) {
       for (const n of neighbours(a.at)) {
-        if (!hostile(access(game, a.owner, n))) continue;
+        if (!canAttack(game, a, n)) continue;
         view.marks[n] = forecast(game, a, a.owner, n).odds;
       }
     }
@@ -335,6 +338,13 @@ function dispatch(act) {
       save();
       break;
     }
+    case "buildShip":
+      if (buildShip(game, act.id)) {
+        anim.rise(act.id, T().addShip, INK.lane);
+        anim.pulse(act.id, INK.lane);
+      }
+      save();
+      break;
     case "games":
       if (holdGames(game, act.id)) {
         anim.rise(act.id, `${T().loyalty} +${N.loyalty.gamesGain}`, INK.good);
@@ -368,7 +378,7 @@ function dispatch(act) {
       break;
     case "formOpen": {
       const pl = game.places[act.id];
-      ui.modal = { kind: "form", id: act.id, inf: pl.inf, arch: pl.arch, cav: pl.cav, siege: pl.siege };
+      ui.modal = { kind: "form", id: act.id, inf: pl.inf, arch: pl.arch, cav: pl.cav, siege: pl.siege, ships: pl.ships };
       break;
     }
     case "formStep": {
@@ -377,7 +387,7 @@ function dispatch(act) {
       break;
     }
     case "formOk": {
-      const a = formArmy(game, m.id, m.inf, m.arch, m.cav ?? 0, m.siege ?? 0);
+      const a = formArmy(game, m.id, m.inf, m.arch, m.cav ?? 0, m.siege ?? 0, m.ships ?? 0);
       ui.modal = null;
       if (a) {
         ui.sel = { kind: "army", id: a.id };
@@ -498,11 +508,12 @@ function tapPlace(id) {
     return redraw();
   }
   if (hostile(k) && neighbours(a.at).includes(id)) {
-    // Yanında ama hareketi bitmiş: bilgi kartını göster.
+    // Yanında ama saldıramıyor: gemisi yetmiyorsa söyle, yoksa (hareketi bitmiş) bilgi kartı.
+    if (roadBetween(a.at, id).sea && !canSail(a) && a.moves > 0) { toast(T().needShips); return; }
     ui.sel = { kind: "place", id };
     return redraw();
   }
-  if (routeTo(game, a, id) === null) { toast(T().noPath); return; }
+  if (routeTo(game, a, id) === null) { toast(needsShips(game, a, id) ? T().needShips : T().noPath); return; }
   const [, trace] = traced(() => order(game, a.id, id));
   anim.timeline(trace, anim.clock(), () => true, 380);
   if (a.route.length) {

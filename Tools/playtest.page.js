@@ -130,7 +130,7 @@ window.PT = (() => {
       if (!g.armies.includes(a) || a.moves <= 0) continue;
       if (!(await tapArmy(a.id))) { stats.missed.push("ordu seçilemedi " + a.id); continue; }
       const odds = (id) => moves.forecast(g, a, me, id).odds;
-      const near = graph.neighbours(a.at).filter((n) => moves.hostile(moves.access(g, me, n)) && odds(n) === "easy");
+      const near = graph.neighbours(a.at).filter((n) => moves.canAttack(g, a, n) && odds(n) === "easy");
       if (near.length) {
         await tapPlace(near[0]);
         if (await press((x) => x.do === "attack", "saldır düğmesi")) {

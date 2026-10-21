@@ -276,13 +276,14 @@ function drawPlaces(ctx, cam, view, L) {
     }
     if (p.kind === "castle") castle(ctx, s.x, s.y, color);
     else city(ctx, s.x, s.y, color, p.capital);
-    if (p.port) anchor(ctx, s.x + 9, s.y + 6);
+    if (p.port) anchor(ctx, s.x + 9, s.y + 6, view.blockade?.[p.id]);
   }
 
   // Ordu işaretleri: yerleşimin sağ üstünde, yan yana küçük sancaklar.
   const tokens = [];
   const at = {};
-  const label = (a) => (a.men >= 1000 ? (a.men / 1000).toFixed(1) + "k" : String(a.men));
+  // Sadece gemiden filo: sancakta gemi sayısı.
+  const label = (a) => (a.men <= 0 && a.ships ? "⛵" + a.ships : a.men >= 1000 ? (a.men / 1000).toFixed(1) + "k" : String(a.men));
   ctx.font = `bold 10px ${SERIF}`;
   for (const a of view.armies ?? []) {
     // Yolda olan (animasyonla yürüyen) sancak bir yerleşime bağlı değil, yolun üstünde.
@@ -325,6 +326,7 @@ function drawPlaces(ctx, cam, view, L) {
   for (const t of tokens) {
     const { x, y, w, h, army } = t;
     ctx.globalAlpha = army.alpha ?? 1;
+    if (army.ships > 0 || army.sea) boat(ctx, x, y + h + 3, w);
     // Gölge: sancak haritanın üstünde duruyor, kâğıda yapışık değil.
     ctx.fillStyle = "rgba(43,42,39,0.22)";
     ctx.fillRect(x + 2.5, y + 2.5, w, h);
@@ -420,7 +422,7 @@ function castle(ctx, x, y, color) {
   ctx.lineJoin = "round";
 }
 
-function anchor(ctx, x, y) {
+function anchor(ctx, x, y, blockaded = false) {
   const shape = () => {
     ctx.beginPath();
     ctx.arc(x, y - 4.5, 1.3, 0, TAU);
@@ -436,6 +438,22 @@ function anchor(ctx, x, y) {
   ctx.lineWidth = 3.4;
   ctx.stroke();
   shape();
+  // Ablukadaki liman: kırmızı çapa.
+  ctx.strokeStyle = blockaded ? INK.bad : INK.ink;
+  ctx.lineWidth = blockaded ? 1.8 : 1.2;
+  ctx.stroke();
+}
+
+/** Sancağın altında küçük bir tekne: ordunun gemisi var ya da şu an denizde. */
+function boat(ctx, x, y, w) {
+  ctx.beginPath();
+  ctx.moveTo(x - 3, y);
+  ctx.lineTo(x + w + 3, y);
+  ctx.quadraticCurveTo(x + w, y + 6, x + w / 2, y + 6);
+  ctx.quadraticCurveTo(x, y + 6, x - 3, y);
+  ctx.closePath();
+  ctx.fillStyle = "#7a5a3a";
+  ctx.fill();
   ctx.strokeStyle = INK.ink;
   ctx.lineWidth = 1.2;
   ctx.stroke();

@@ -9,6 +9,7 @@
 // Hiçbir kuralı değiştirmez. Ekrana dokununca hepsi biter (`finish`).
 
 import { colorOf } from "./kit.js";
+import { roadBetween } from "../rules/graph.js";
 import { alongRoad, placeAt } from "./draw.js";
 
 export const LEG = 420; // bir yolu yürümek, ms
@@ -124,9 +125,10 @@ export function shape(view) {
       const legs = i.path.length - 1;
       const walk = legs * i.leg;
       const e = Math.max(0, t - i.t0);
-      let pos, alpha = 1;
+      let pos, alpha = 1, sea = false;
       if (legs > 0 && e < walk) {
         const k = Math.min(legs - 1, Math.floor(e / i.leg));
+        sea = !!roadBetween(i.path[k], i.path[k + 1])?.sea; // deniz yolunda: gemide
         // Saldırı yolunda hedefin içine girmez, kapısında durur.
         const stop = i.attack && k === legs - 1 ? 0.78 : 1;
         pos = alongRoad(i.path[k], i.path[k + 1], ease((e - k * i.leg) / i.leg) * stop);
@@ -134,7 +136,7 @@ export function shape(view) {
         pos = alongRoad(i.path[legs - 1], i.path[legs], i.attack.won ? 0.78 + 0.22 * Math.min(1, (e - walk) / (i.dur - walk)) : 0.78);
         if (!i.attack.won) alpha = Math.max(0, 1 - (e - walk) / (i.dur - walk));
       } else pos = placeAt(i.path[legs]);
-      moving.push({ id: i.army, owner: i.owner, men: i.men, float: pos, alpha, at: null });
+      moving.push({ id: i.army, owner: i.owner, men: i.men, float: pos, alpha, at: null, sea });
     } else if (p >= 0 && p < 1) {
       if (i.kind === "clash") fx.push({ kind: "clash", at: i.at, p });
       else if (i.kind === "float") fx.push({ kind: "float", at: i.at, screen: i.screen, p, text: i.text, color: i.color, size: i.size });

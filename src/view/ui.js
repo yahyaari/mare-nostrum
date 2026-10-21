@@ -9,10 +9,10 @@
 import { CIVS } from "../data/world.js";
 import { canDeclare, canPropose } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
-import { access, canAttack, defenders, forecast, hostile, menace, wallsOf } from "../rules/moves.js";
+import { access, canAttack, defenders, forecast, hostile, menace, shipsAt, wallsOf } from "../rules/moves.js";
 import { N, UNITS, trait } from "../rules/numbers.js";
 import {
-  UPGRADES, armiesAt, armyById, budget, gamesInfo, key, men, output, placesOf, popCap, recruitCost,
+  UPGRADES, armiesAt, armyById, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -212,7 +212,7 @@ function cardRect(cam, h) {
 function kindLine(id, game, T) {
   const p = byId[id], pl = game.places[id];
   return [p.capital ? T.capital : null, p.kind === "castle" ? T.castle : T.city, p.port ? T.port : null]
-    .filter(Boolean).join(" · ") + " · " + fill(T.lvl, pl.level);
+    .filter(Boolean).join(" · ") + " · " + fill(T.lvl, pl.level) + (pl.ships ? ` · ${pl.ships} ${T.ships}` : "");
 }
 
 /** "120 piyade · 40 okçu · 20 süvari": piyade ve okçu hep, ötekiler varsa. */
@@ -222,7 +222,8 @@ function troops(T, u) {
 
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const r = cardRect(cam, 538);
+  const shipRow = p.port ? 54 : 0;
+  const r = cardRect(cam, 538 + shipRow);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
@@ -239,6 +240,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
 
   const o = output(game, id);
   text(ctx, T.perTurn, x, y + 126, { italic: true, size: 12, color: INK.soft });
+  if (blockaded(game, id)) text(ctx, T.blockadeNote, right, y + 80, { italic: true, bold: true, size: 12, color: INK.bad, align: "right" });
   let cx = x + measure(ctx, T.perTurn, { italic: true, size: 12 }) + 12;
   for (const k of ["money", "weapons", "food"]) cx += amount(ctx, k, delta(o[k]), cx, y + 126, { size: 13 }) + 14;
 
@@ -309,9 +311,19 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   });
 
   button(ctx, boxes, {
-    x, y: y + 428, w: r.w - 36, h: 32, label: T.formArmy, size: 13,
-    off: men(pl) === 0, act: { do: "formOpen", id },
+    x, y: y + 428 + shipRow, w: r.w - 36, h: 32, label: T.formArmy, size: 13,
+    off: men(pl) === 0 && !pl.ships, act: { do: "formOpen", id },
   });
+  if (p.port) {
+    // Gemi: tek düğme, altında maliyet (ya da neden yapılamadığı). Asker hakkından yer.
+    const si = shipInfo(game, id);
+    const locked = si.why === "notPort";
+    button(ctx, boxes, {
+      x, y: y + 428, w: r.w - 36, h: 46, label: `⛵ ${T.addShip}  ·  ${pl.ships} ${T.ships}`, size: 13, off: !!si.why,
+      act: { do: "buildShip", id },
+      sub: (cx2, cy2, color) => (locked ? null : costLine(ctx, { money: N.navy.cost.money, weapons: N.navy.cost.weapons }, cx2, cy2 + 2, color)),
+    });
+  }
 }
 
 function whyText(why, T) {
@@ -396,7 +408,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   const g = a.general;
   // Generali olan ordu: ad ve yetenek satırı. Olmayan kendi ordun: kendi satırında "General ata".
   const genH = g ? 22 + (g.traits.length ? 18 : 0) : mine ? 40 : 0;
-  const h = 116 + genH + (a.route.length ? 20 : 0) + hint.length * 16 + (mine ? 52 : 0);
+  const h = 116 + genH + (a.ships ? 20 : 0) + (a.route.length ? 20 : 0) + hint.length * 16 + (mine ? 52 : 0);
   const r = cardRect(cam, h);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   closeX(ctx, boxes, r);
@@ -420,6 +432,10 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
       y += 18;
       text(ctx, g.traits.map((t) => T.skills[t][0] + " (" + T.skills[t][1] + ")").join(", "), x, y, { size: 12, italic: true, color: INK.soft });
     }
+  }
+  if (a.ships) {
+    y += 20;
+    text(ctx, `⛵ ${a.ships} ${T.ships} · ${fill(T.carry, a.ships * N.navy.carry)}`, x, y, { size: 13, color: canSail(a) ? INK.ink : INK.bad });
   }
   y += 22;
   const maxMoves = trait(a.owner, "moves") + (g?.traits.includes("swift") ? 1 : 0);
@@ -499,7 +515,8 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   if (!a) return;
   const d = defenders(game, m.id), walls = wallsOf(game, m.id);
   const e = forecast(game, a, a.owner, m.id);
-  const r = modalFrame(ctx, cam, boxes, 290);
+  const bySea = roadBetween(a.at, m.id)?.sea && shipsAt(game, m.id) > 0;
+  const r = modalFrame(ctx, cam, boxes, 290 + (bySea ? 22 : 0));
   const x = r.x + 22;
   text(ctx, fill(T.attackQ, placeName(m.id, ui.lang)), r.x + r.w / 2, r.y + 40, { bold: true, size: 20, align: "center" });
   text(ctx, T.yours, x, r.y + 76, { bold: true, size: 13 });
@@ -507,10 +524,18 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   text(ctx, T.defenders, x, r.y + 124, { bold: true, size: 13 });
   text(ctx, men(d) ? troops(T, d) : T.undefended, x, r.y + 144, { size: 13 });
   text(ctx, `${T.walls}: ${walls === "castle" ? T.wallsCastle : walls === "city" ? T.wallsCity : T.wallsNone}`, x, r.y + 166, { size: 13, color: INK.soft });
+  let oy = r.y + 196;
+  if (bySea) {
+    // Önce deniz savaşı: kaybedilirse ordu batar.
+    const [sl, sc] = oddsLabel(e.sea, T);
+    const sw = text(ctx, fill(T.navalOdds, a.ships, shipsAt(game, m.id)) + " · ", x, r.y + 190, { size: 13 });
+    text(ctx, sl, x + sw, r.y + 190, { size: 13, bold: true, color: sc });
+    oy += 18;
+  }
   const [label, color] = oddsLabel(e.odds, T);
-  const ow = text(ctx, `${T.odds}: `, x, r.y + 196, { size: 15 });
-  text(ctx, label, x + ow, r.y + 196, { size: 15, bold: true, color });
-  text(ctx, fill(T.expect, e.lost, e.killed), x, r.y + 216, { size: 12, italic: true, color: INK.soft });
+  const ow = text(ctx, `${T.odds}: `, x, oy, { size: 15 });
+  text(ctx, label, x + ow, oy, { size: 15, bold: true, color });
+  text(ctx, fill(T.expect, e.lost, e.killed), x, oy + 20, { size: 12, italic: true, color: INK.soft });
   twoButtons(ctx, boxes, r, { label: T.attack, act: { do: "attack" } }, { label: T.cancel, act: { do: "close" } });
 }
 
@@ -518,20 +543,27 @@ function formModal(ctx, cam, game, ui, boxes, T, m) {
   const pl = game.places[m.id];
   // Garnizonda olan türler (piyade ve okçu her zaman).
   const rows = UNITS.filter((k) => k === "inf" || k === "arch" || pl[k] > 0).map((k) => [k, T[k]]);
-  const r = modalFrame(ctx, cam, boxes, 146 + rows.length * 52);
+  if (pl.ships > 0) rows.push(["ships", T.ships]);
+  const r = modalFrame(ctx, cam, boxes, 146 + rows.length * 52 + (pl.ships > 0 ? 22 : 0));
   const x = r.x + 22, right = r.x + r.w - 22;
   text(ctx, `${T.formArmy} · ${placeName(m.id, ui.lang)}`, r.x + r.w / 2, r.y + 40, { bold: true, size: 19, align: "center" });
   rows.forEach(([type, label], i) => {
     const y = r.y + 64 + i * 52;
     const max = pl[type];
+    const step = type === "ships" ? 1 : N.company;
     text(ctx, label[0].toLocaleUpperCase(ui.lang) + label.slice(1), x, y + 26, { bold: true, size: 14 });
     const bx = right - 210;
-    button(ctx, boxes, { x: bx, y, w: 40, h: 38, label: "−", size: 18, off: m[type] <= 0, act: { do: "formStep", type, by: -N.company } });
+    button(ctx, boxes, { x: bx, y, w: 40, h: 38, label: "−", size: 18, off: m[type] <= 0, act: { do: "formStep", type, by: -step } });
     text(ctx, `${m[type]} / ${max}`, bx + 80, y + 25, { bold: true, size: 14, align: "center" });
-    button(ctx, boxes, { x: bx + 120, y, w: 40, h: 38, label: "+", size: 18, off: m[type] >= max, act: { do: "formStep", type, by: N.company } });
+    button(ctx, boxes, { x: bx + 120, y, w: 40, h: 38, label: "+", size: 18, off: m[type] >= max, act: { do: "formStep", type, by: step } });
     button(ctx, boxes, { x: bx + 166, y, w: 44, h: 38, label: T.all, size: 11, off: m[type] >= max, act: { do: "formStep", type, by: Infinity } });
   });
-  twoButtons(ctx, boxes, r, { label: T.march, act: { do: "formOk" }, off: men(m) <= 0 }, { label: T.cancel, act: { do: "close" } });
+  if (pl.ships > 0) {
+    // Seçilen gemiler seçilen askeri taşıyor mu: denize açılabilir mi.
+    const ok = (m.ships ?? 0) * N.navy.carry >= men(m);
+    text(ctx, fill(T.carry, (m.ships ?? 0) * N.navy.carry) + " · " + T.shipHint, r.x + r.w / 2, r.y + r.h - 76, { size: 12, italic: true, align: "center", color: ok ? INK.soft : INK.warn });
+  }
+  twoButtons(ctx, boxes, r, { label: T.march, act: { do: "formOk" }, off: men(m) <= 0 && !(m.ships > 0) }, { label: T.cancel, act: { do: "close" } });
 }
 
 function diploModal(ctx, cam, game, ui, boxes, T) {
@@ -594,9 +626,10 @@ export function eventLines(game, lang) {
     else if (e.type === "battle" && mine) {
       const where = placeName(e.place, lang);
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
-      else out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
+      else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
     if (e.type === "battle" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
+    if (e.type === "battle" && e.drowned && e.defender === me) out.push([fill(T.evDrowned, name(e.attacker), placeName(e.place, lang)), "good"]);
     if (e.type === "riot" && e.civ === me) out.push([fill(T.evRiot, placeName(e.place, lang)), null]);
     if (e.type === "revolt" && e.civ === me) out.push([fill(T.evRevolt, placeName(e.place, lang)), "bad"]);
     if (e.type === "revolt" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
@@ -631,6 +664,8 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
   if (e.gen?.up) extra.push([fill(T.genUp, e.gen.name, e.gen.up), INK.warn]);
   if (e.gen?.trait) extra.push([fill(T.genSkill, T.skills[e.gen.trait][0], T.skills[e.gen.trait][1]), INK.warn]);
   if (e.genFell) extra.push([fill(T.genFell, e.genFell), INK.bad]);
+  if (e.drowned) extra.unshift([T.drowned, INK.bad]);
+  else if (e.naval?.won && e.naval.sunk) extra.unshift([fill(T.navalWin, e.naval.sunk), INK.good]);
   const r = modalFrame(ctx, cam, boxes, 190 + extra.length * 22);
   text(ctx, e.won ? fill(T.won, where) : fill(T.lost, where), r.x + r.w / 2, r.y + 50, {
     bold: true, size: 19, align: "center", color: e.won ? INK.good : INK.bad,

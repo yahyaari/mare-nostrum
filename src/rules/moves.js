@@ -5,12 +5,12 @@
 // yabancı bir yere asla kendi başına girmez - saldırı her zaman açık bir emirdir.
 
 import { CIVS } from "../data/world.js";
-import { estimate, fight } from "./combat.js";
-import { neighbours, path } from "./graph.js";
+import { estimate, fight, naval, navalOdds } from "./combat.js";
+import { neighbours, path, roadBetween } from "./graph.js";
 import { bestAt, bury, has, learn } from "./generals.js";
 import { N, UNITS, trait } from "./numbers.js";
 import { between } from "./rng.js";
-import { armiesAt, armyById, info, men, placesOf, relation } from "./state.js";
+import { armiesAt, armyById, canSail, empty, info, men, placesOf, relation } from "./state.js";
 
 /**
  * `civ` buraya girebilir mi, girerse ne olur:
@@ -49,7 +49,7 @@ export function defenders(state, id) {
  * Bir ordunun `dest`e güzergâhı: aradaki her durak kendi ya da müttefik yeri olmalı.
  * `dest` düşmansa güzergâh onun bir önceki durağında biter (saldırı ayrı emir).
  */
-export function routeTo(state, army, dest) {
+export function routeTo(state, army, dest, sail = canSail(army)) {
   if (army.at === dest) return [];
   const kind = access(state, army.owner, dest);
   if (kind === null) return null;
@@ -57,18 +57,24 @@ export function routeTo(state, army, dest) {
     const k = access(state, army.owner, id);
     return k === "own" || k === "ally";
   };
+  // Deniz yolu ancak gemiler orduyu taşıyabiliyorsa (bir gemi 20 asker).
+  const usable = (r) => !r.sea || sail;
   if (hostile(kind)) {
-    // Düşmana komşu, yürünebilir en yakın durak.
+    // Düşmana komşu, yürünebilir en yakın durak - ve oradan düşmana giden yol da kullanılabilir olmalı.
     let best = null;
     for (const n of neighbours(dest)) {
-      const p = n === army.at ? [army.at] : walkable(n) ? path(army.at, n, walkable) : null;
+      if (!usable(roadBetween(n, dest))) continue;
+      const p = n === army.at ? [army.at] : walkable(n) ? path(army.at, n, walkable, usable) : null;
       if (p && (!best || p.length < best.length)) best = p;
     }
     return best ? best.slice(1) : null;
   }
-  const p = path(army.at, dest, walkable);
+  const p = path(army.at, dest, walkable, usable);
   return p ? p.slice(1) : null;
 }
+
+/** Bu orduyu bir yere götürmek gemi istiyor mu: karadan yol yok ama denizden var. */
+export const needsShips = (state, army, dest) => routeTo(state, army, dest) === null && routeTo(state, army, dest, true) !== null;
 
 /** Güzergâhı koy ve hareketi kalan kadar yürü. Dönen: yürünen adım sayısı. */
 export function order(state, armyId, dest) {
@@ -89,7 +95,8 @@ export function advance(state, army) {
   while (army.moves > 0 && army.route.length) {
     const next = army.route[0];
     const k = access(state, army.owner, next);
-    if (!(k === "own" || k === "ally") || !neighbours(army.at).includes(next)) {
+    const road = roadBetween(army.at, next);
+    if (!(k === "own" || k === "ally") || !road || (road.sea && !canSail(army))) {
       army.route = [];
       break;
     }
@@ -119,16 +126,31 @@ export function menace(state, id) {
  */
 export function forecast(state, unit, civ, id) {
   const pl = state.places[id];
-  return estimate(
+  const from = unit.at ?? null;
+  const bySea = from && roadBetween(from, id)?.sea;
+  const sea = bySea ? navalOdds({ civ, ships: unit.ships ?? 0 }, { civ: pl.owner, ships: shipsAt(state, id) }) : "easy";
+  const land = estimate(
     { civ, inf: unit.inf, arch: unit.arch, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null },
     { ...defenders(state, id), gen: bestAt(state, id, pl.owner) },
     wallsOf(state, id),
   );
+  // Denizde batılırsa karaya çıkılmaz: tahmin ikisinin kötüsü.
+  const rank = { easy: 0, risky: 1, hopeless: 2 };
+  if (rank[sea] > rank[land.odds]) return { ...land, odds: sea, sea };
+  return { ...land, sea };
 }
 
 /** Saldırabilir mi: komşu, düşman/bağımsız, hareketi var. */
 export function canAttack(state, army, id) {
-  return !!army && army.moves > 0 && neighbours(army.at).includes(id) && hostile(access(state, army.owner, id));
+  if (!army || army.moves <= 0 || men(army) <= 0) return false;
+  const road = roadBetween(army.at, id);
+  return !!road && (!road.sea || canSail(army)) && hostile(access(state, army.owner, id));
+}
+
+/** Bir yerin gemileri: limandakiler ve sahibinin orada duran ordularınınkiler. */
+export function shipsAt(state, id) {
+  const pl = state.places[id];
+  return pl.ships + armiesAt(state, id).filter((a) => a.owner === pl.owner).reduce((n, a) => n + a.ships, 0);
 }
 
 /**
@@ -139,6 +161,24 @@ export function attack(state, armyId, id, luck = null) {
   const army = armyById(state, armyId);
   if (!canAttack(state, army, id)) return null;
   const pl = state.places[id];
+  // Denizden saldırı: önce limandaki gemilerle deniz savaşı. Filo batarsa ordu denizde kaybolur.
+  let navalEv = null;
+  if (roadBetween(army.at, id).sea && shipsAt(state, id) > 0) {
+    const nr = naval({ civ: army.owner, ships: army.ships }, { civ: pl.owner, ships: shipsAt(state, id) }, luck ?? rollLuck(state));
+    navalEv = { won: nr.attWins, sunk: shipsAt(state, id) - nr.def, lost: army.ships - nr.att };
+    sinkAt(state, id, nr.def);
+    army.ships = nr.att;
+    if (!nr.attWins) {
+      state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), from: army.at, to: id, won: false, oldOwner: pl.owner });
+      bury(state, army.owner, army.general);
+      state.armies = state.armies.filter((a) => a !== army);
+      return {
+        type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id, won: false, drowned: true,
+        naval: navalEv, before: { att: pickUnits(army), def: pickUnits(defenders(state, id)) },
+        after: { att: pickUnits({}), def: pickUnits(defenders(state, id)) }, genFell: army.general?.name,
+      };
+    }
+  }
   const def = defenders(state, id);
   const walls = wallsOf(state, id);
   const defGen = bestAt(state, id, pl.owner);
@@ -146,7 +186,7 @@ export function attack(state, armyId, id, luck = null) {
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
     won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },
-    after: { att: r.att, def: r.def },
+    after: { att: r.att, def: r.def }, naval: navalEv,
   };
   state.trace?.push({
     type: "attack", army: army.id, owner: army.owner, men: men(army), from: army.at, to: id,
@@ -174,13 +214,25 @@ export function attack(state, armyId, id, luck = null) {
     bury(state, army.owner, army.general);
     if (army.general) ev.genFell = army.general.name;
     if (defGen) learn(state, defGen, true);
-    for (const a of state.armies) if (a.at === id && a.owner === pl.owner && men(a) === 0) bury(state, a.owner, a.general);
-    state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && men(a) === 0));
+    for (const a of state.armies) if (a.at === id && a.owner === pl.owner && empty(a)) bury(state, a.owner, a.general);
+    state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && empty(a)));
   }
   return ev;
 }
 
 const pickUnits = (u) => Object.fromEntries(UNITS.map((k) => [k, u[k] ?? 0]));
+
+/** Bir yerin gemilerini `left` kadara indirir: önce limandakiler, sonra ordularınkiler batar. */
+function sinkAt(state, id, left) {
+  const pl = state.places[id];
+  let sink = shipsAt(state, id) - left;
+  const own = armiesAt(state, id).filter((a) => a.owner === pl.owner);
+  for (const u of [pl, ...own]) {
+    const n = Math.min(u.ships, sink);
+    u.ships -= n;
+    sink -= n;
+  }
+}
 
 const rollLuck = (state) => [between(state, 1 - N.luck, 1 + N.luck), between(state, 1 - N.luck, 1 + N.luck)];
 
@@ -189,6 +241,7 @@ export function capture(state, id, civ) {
   const pl = state.places[id];
   const loser = pl.owner;
   for (const k of UNITS) pl[k] = 0;
+  pl.ships = 0; // limandaki gemiler yakıldı
   pl.owner = civ;
   pl.pop = Math.round(pl.pop * (1 - N.captureLoss));
   pl.upgraded = true; // alındığı tur yükseltilmez
@@ -213,10 +266,10 @@ export function expel(state, a, b) {
     const owner = state.places[army.at].owner;
     if ((army.owner === a && owner === b) || (army.owner === b && owner === a)) {
       const home = nearestOwn(state, army.owner, army.at);
-      if (home) { army.at = home; army.route = []; } else for (const k of UNITS) army[k] = 0;
+      if (home) { army.at = home; army.route = []; } else { for (const k of UNITS) army[k] = 0; army.ships = 0; }
     }
   }
-  state.armies = state.armies.filter((x) => men(x) > 0);
+  state.armies = state.armies.filter((x) => !empty(x));
 }
 
 function nearestOwn(state, civ, from) {

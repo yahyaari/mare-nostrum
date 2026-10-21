@@ -215,7 +215,7 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 | Medeniyet | Güçlü yanı | Zayıf yanı |
 |---|---|---|
 | **Roma** | Piyade × 1.25 | Bir bölük 1.5 para tutar |
-| **Kartaca** | Ticaret: para × 1.5 | Bütün askerler × 0.85 |
+| **Kartaca** | Ticaret: para × 1.5, gemiler × 1.5 | Bütün askerler × 0.85 |
 | **Mısır** | Buğday × 1.15 (Nil) | Silah × 0.75 |
 | **Makedonya** | Savunan piyade × 1.5 (falanks) | Nüfus tavanı × 0.9 |
 | **Partlar** | Okçu × 1.5 | Piyade × 0.75 |
@@ -302,6 +302,31 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
 - İki ordu birleşirse tecrübeli general komutayı alır; bölünen ordunun yeni yarısı generalsiz.
 - Bilgisayar 80+ askerlik ordularına parası varsa general atar.
 - Saldırı tahmini generalleri hesaba katar (iki taraf için de).
+
+## 15. Donanma
+
+- **Gemi** limanlarda yapılır: 4 para, 2 silah, 5 nüfus (tayfa). Asker basma hakkından yer.
+  Gemi başına turda yarım yiyecek bakım.
+- **Deniz yolları (kesik çizgiler) gemi ister:** bir gemi 25 asker taşır. Ordu, gemileri bütün
+  askerlerini taşıyabiliyorsa deniz yolunu kullanabilir; yoksa o yollar onun için yok.
+  Gemiler ordunun içinde durur; ordu çıkarırken limandaki gemileri de alırsın. Sadece gemiden
+  oluşan bir filo da ordu sayılır (karaya saldıramaz).
+- **Başlangıç gemileri:** liman olan başkentte 2, öteki limanlarda 1, büyük bağımsız
+  limanlarda 2, öteki bağımsız limanlarda 1.
+- **Deniz savaşı:** denizden bir limana saldırınca önce limandaki (ve sahibinin oradaki
+  ordularının) gemileriyle çarpışılır. Güç = gemi sayısı × denizcilik (Kartaca × 1.5) × şans.
+  Kaybeden filonun hepsi batar; kazanan, güçler yakınsa çok gemi kaybeder. **Filo yenilirse
+  ordu denizde kaybolur;** kazanırsa karaya çıkar ve kara savaşı başlar. Saldırı tahmini deniz
+  savaşını da sayar.
+- **Alınan limanın gemileri yanar.**
+- **Abluka:** sahibiyle savaşta olan birinin, deniz yolunun öbür ucunda limandakinden çok gemisi
+  duruyorsa liman ablukadadır: balık gelmez, vergi yarıya iner. Haritada çapası kırmızı.
+
+> Denge: donanma gelince denizler gerçek bir engel oldu. İlk denemede bilgisayar neredeyse hiç
+> denize açılamadı (gemi için sanayi 2 isteniyordu ve limana bir savunma gemisi bırakıyordu) ve
+> ilk düşüş 143. tura fırladı. Tersane şartı kalktı, bir gemi 25 asker taşıyor, bilgisayar
+> limandaki gemilere biniyor: ilk düşüş 70 oyunda 61. tur (donanmadan önce 41). Dünya biraz
+> daha yavaş - oyuncunun nefes alacak zamanı daha çok.
 
 ---
 

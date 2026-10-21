@@ -92,6 +92,16 @@ export const N = {
   // Olaylar (bölüm 13): her medeniyete her tur bu ihtimalle bir olay; ilk birkaç tur yok.
   events: { chance: 0.16, from: 4 },
 
+  // Donanma (bölüm 15). Gemi tek tek sayılır (bölük değil).
+  navy: {
+    cost: { money: 4, weapons: 2 },
+    pop: 5, // tayfa
+    carry: 25, // bir geminin taşıdığı asker
+    upkeep: 0.5, // gemi başına turda yiyecek
+    start: { capital: 2, port: 1, freeBig: 2, free: 1 },
+    blockadeMoney: 0.5, // ablukadaki limanın vergisi
+  },
+
   // Generaller (bölüm 14)
   generals: { cost: 30, perLevel: 0.06, xpWin: 3, xpLoss: 1 },
 
@@ -110,7 +120,7 @@ export const LEVELS = {
 // Medeniyetlerin güçlü ve zayıf yanları (bölüm 9). Yazılmayan her şey 1.
 export const TRAITS = {
   rome: { inf: 1.25, recruitMoney: 1.5 },
-  carthage: { money: 1.5, all: 0.85 },
+  carthage: { money: 1.5, all: 0.85, navy: 1.5 },
   egypt: { wheat: 1.15, weapons: 0.75 },
   macedon: { defInf: 1.5, popCap: 0.9 },
   parthia: { arch: 1.5, inf: 0.75 },

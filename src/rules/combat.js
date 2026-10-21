@@ -57,6 +57,25 @@ export function fight(att, def, walls, luck = [1, 1]) {
 }
 
 /**
+ * Deniz savaşı: gemi gemiye. Güç = gemi x medeniyetin denizciliği x şans. Kaybeden filonun
+ * hepsi batar; kazanan, güçler ne kadar yakınsa o kadar gemi kaybeder. Eşitlikte savunan.
+ */
+export function naval(att, def, luck = [1, 1]) {
+  const a = att.ships * trait(att.civ, "navy") * luck[0];
+  const d = def.ships * trait(def.civ, "navy") * luck[1];
+  const attWins = def.ships === 0 ? att.ships > 0 : a > d;
+  const [winShips, losePow, winPow] = attWins ? [att.ships, d, a] : [def.ships, a, d];
+  const left = winShips - (winPow > 0 ? Math.round(winShips * (losePow / winPow) ** 2 * N.winnerLoss) : 0);
+  return { attWins, att: attWins ? left : 0, def: attWins ? 0 : left };
+}
+
+export function navalOdds(att, def) {
+  if (!def.ships) return "easy";
+  if (naval(att, def, [1 - N.luck, 1 + N.luck]).attWins) return "easy";
+  return naval(att, def, [1 + N.luck, 1 - N.luck]).attWins ? "risky" : "hopeless";
+}
+
+/**
  * Saldırmadan önce tahmin: en kötü şansla bile kazanıyorsa "easy", en iyi şansla bile
  * kaybediyorsa "hopeless", arası "risky". Kayıplar şanssız (1, 1) hesapla.
  */

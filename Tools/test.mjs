@@ -180,7 +180,8 @@ const { play } = await import("./bot.mjs");
   const b = S.budget(s, "rome");
   check("Roma'nın turluk parası 13.15", Math.abs(b.money - 13.15) < 1e-9, b.money);
   check("Roma'nın turluk silahı 2.5", b.weapons === 2.5, b.weapons);
-  check("Roma'nın turluk yiyeceği +5", b.food === 5, `${b.food} (bakım ${b.upkeep})`);
+  // Tarentum limanındaki tek geminin yarım yiyecek bakımı: 5 - 0.5.
+  check("Roma'nın turluk yiyeceği +4.5", b.food === 4.5, `${b.food} (bakım ${b.upkeep})`);
   for (const c of CIVS) check(`${c.id}: başlangıçta yiyecek artıda`, S.budget(s, c.id).food > 0, S.budget(s, c.id).food);
 }
 
@@ -272,7 +273,8 @@ section("Hareket ve diplomasi (bölüm 6, 8)");
   check("alınan yerin nüfusunun dörtte biri kaçar", s.places.mediolanum.pop === Math.round(150 * 0.75), s.places.mediolanum.pop);
   check("kaybeden ordu yok olur", (() => {
     big.inf = 5;
-    M.attack(s, big.id, "syracuse", [1, 1]);
+    big.at = "mediolanum"; // karadan: Siraküza deniz aşırı, gemisiz gidilmez; Mediolanum artık Roma'nın
+    M.attack(s, big.id, "massalia", [1, 1]);
     return !S.armyById(s, big.id);
   })());
 
@@ -571,6 +573,90 @@ section("Süvari ve kuşatma makinesi (bölüm 5, 7)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Donanma (bölüm 15)");
+
+{
+  const s = S.newGame("carthage", 7);
+  check("başlangıç gemileri: liman başkenti 2, liman 1, büyük bağımsız 2, bağımsız 1, karada 0",
+    s.places.carthage.ships === 2 && s.places.gades.ships === 1 && s.places.syracuse.ships === 2 && s.places.massalia.ships === 1 && s.places.rome.ships === 0);
+  check("karada gemi yapılmaz", S.shipInfo(s, "memphis").why === "notPort");
+  const pop = s.places.carthage.pop;
+  check("gemi: 4 para, 2 silah, 5 nüfus", S.buildShip(s, "carthage") && s.places.carthage.ships === 3
+    && s.civs.carthage.money === 26 && s.civs.carthage.weapons === 3 && s.places.carthage.pop === pop - 5);
+  check("gemi asker hakkından yer", S.recruitInfo(s, "carthage", "inf").why === "done");
+
+  // Deniz yolu gemi ister: bir gemi 25 asker.
+  const a = S.formArmy(s, "carthage", 30, 0);
+  check("gemisiz ordu Sicilya'ya yol bulamaz", M.routeTo(s, a, "lilybaeum") === null && M.needsShips(s, a, "lilybaeum"));
+  a.ships = 1;
+  check("1 gemi 30 askere yetmez", !S.canSail(a) && M.routeTo(s, a, "lilybaeum") === null);
+  a.ships = 2;
+  check("2 gemi yeter: deniz yolu açılır", S.canSail(a) && M.order(s, a.id, "lilybaeum") === 1 && a.at === "lilybaeum");
+
+  // Deniz savaşı: denizden saldırıda önce limandaki gemiler.
+  const sea = (ships, defShips, civ = "rome") => {
+    const g = S.newGame(civ, 7);
+    const from = civ === "rome" ? "tarentum" : "carthage";
+    const target = civ === "rome" ? "syracuse" : "lilybaeum";
+    if (civ !== "rome") { g.places.lilybaeum.owner = null; g.places.lilybaeum.inf = 30; }
+    g.places[target].ships = defShips;
+    const army = S.formArmy(g, from, 10, 0);
+    army.inf = 50; army.ships = ships;
+    const ev = M.attack(g, army.id, target, [1, 1]);
+    return { g, ev, army, target };
+  };
+  const lost = sea(2, 3);
+  check("filo yenilirse ordu denizde kaybolur", lost.ev?.drowned && !S.armyById(lost.g, lost.army.id) && lost.g.places.syracuse.owner === null);
+  check("kazanan filo da gemi kaybeder", lost.g.places.syracuse.ships > 0 && lost.g.places.syracuse.ships < 3);
+  const won = sea(4, 2);
+  check("filo kazanırsa karaya çıkılır", won.ev && !won.ev.drowned && won.ev.naval?.won && won.g.places.syracuse.ships === 0);
+  check("Kartaca gemisi x1.5: 3 gemi 4 gemiyi yener", sea(3, 4, "carthage").ev?.naval?.won && !sea(3, 4, "rome").ev?.naval?.won);
+  check("tahmin deniz savaşını sayar", M.forecast(lost.g, { at: "tarentum", inf: 500, arch: 0, ships: 1 }, "rome", "syracuse").odds === "hopeless");
+
+  // Abluka: savaştığın birinin daha çok gemisi deniz yolunun öbür ucunda.
+  const b = S.newGame("rome", 7);
+  const fleet = S.formArmy(b, "carthage", 0, 0, 0, 0, 2);
+  fleet.at = "lilybaeum";
+  b.places.syracuse.owner = "rome";
+  b.places.syracuse.ships = 1;
+  const free = S.output(b, "syracuse");
+  check("savaş yokken abluka yok", !S.blockaded(b, "syracuse"));
+  b.relations[S.key("carthage", "rome")] = "war";
+  fleet.at = "lilybaeum";
+  b.places.lilybaeum.owner = "carthage";
+  // Lilybaion-Siraküza kara yolu; deniz komşusu Tarentum: filo Tarentum'un karşısında olmalı.
+  b.places.tarentum.owner = "rome";
+  b.places.syracuse.owner = "carthage";
+  fleet.at = "syracuse";
+  const t0 = S.output(b, "tarentum");
+  check("abluka: balık kesilir, vergi yarıya", S.blockaded(b, "tarentum") && t0.food === b.places.tarentum.farms * N.wheatPerFarm
+    && Math.abs(t0.money - (b.places.tarentum.pop / N.taxPer) * 0.5) < 1e-9, JSON.stringify(t0));
+  b.places.tarentum.ships = 3;
+  check("limanda daha çok gemi varsa abluka yok", !S.blockaded(b, "tarentum"));
+  check("savaşsız çıktı aynı kalır", free.food > 0);
+
+  // Filo (sadece gemi) ordudur: silinmez, ama karaya saldıramaz.
+  const f = S.newGame("rome", 7);
+  const onlyShips = S.formArmy(f, "tarentum", 0, 0, 0, 0, 1);
+  check("sadece gemiden filo kurulur", onlyShips && !S.empty(onlyShips));
+  f.civs.rome.food = -5;
+  T.economy(f, []);
+  check("kıtlık filoyu silmez", !!S.armyById(f, onlyShips.id));
+  check("filo karaya saldıramaz", !M.canAttack(f, onlyShips, "syracuse"));
+  const g = S.newGame("rome", 7);
+  const raid = S.formArmy(g, "ariminum", 10, 0); raid.inf = 300;
+  g.places.mediolanum.ships = 4;
+  M.attack(g, raid.id, "mediolanum", [1, 1]);
+  check("alınan limanın gemileri yanar", g.places.mediolanum.ships === 0);
+  check("gemi bakımı yarım yiyecek", (() => { const h = S.newGame("rome", 7); const u0 = S.budget(h, "rome").upkeep; h.places.tarentum.ships += 4; return S.budget(h, "rome").upkeep === u0 + 2; })());
+
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 3;
+  for (const p of Object.values(old.places)) delete p.ships;
+  check("3. sürüm kayıt yükseltiliyor", S.migrate(old).version === S.VERSION && old.places.tarentum.ships === 0);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Bot: oyun boyunca değişmezler");
 
 {
@@ -582,7 +668,7 @@ section("Bot: oyun boyunca değişmezler");
       if (!civ.alive && (S.placesOf(s, c).length || S.armiesOf(s, c).length)) bad.push(`t${s.turn} ölü ${c}'nin malı var`);
     }
     for (const [id, p] of Object.entries(s.places)) {
-      for (const k of ["pop", ...UNITS, "level", "farms", "industry", "barracks"]) {
+      for (const k of ["pop", ...UNITS, "ships", "level", "farms", "industry", "barracks"]) {
         if (!Number.isInteger(p[k]) || p[k] < 0) bad.push(`t${s.turn} ${id}.${k}=${p[k]}`);
       }
       for (const k of ["farms", "industry", "barracks"]) if (p[k] > p.level) bad.push(`t${s.turn} ${id}.${k} > seviye`);
@@ -591,7 +677,7 @@ section("Bot: oyun boyunca değişmezler");
       if (p.pop > S.popCap(p, byId[id].kind) + 1e-9) bad.push(`t${s.turn} ${id} nüfusu tavanı aşıyor`);
     }
     for (const a of s.armies) {
-      if (!(S.men(a) > 0) || !UNITS.every((k) => Number.isInteger(a[k]) && a[k] >= 0)) bad.push(`t${s.turn} ordu ${a.id} ${UNITS.map((k) => a[k]).join("/")}`);
+      if (S.empty(a) || !Number.isInteger(a.ships) || a.ships < 0 || !UNITS.every((k) => Number.isInteger(a[k]) && a[k] >= 0)) bad.push(`t${s.turn} ordu ${a.id} ${UNITS.map((k) => a[k]).join("/")}`);
       const k = M.access(s, a.owner, a.at);
       if (k !== "own" && k !== "ally") bad.push(`t${s.turn} ordu ${a.id} (${a.owner}) yabancı yerde: ${a.at} ${k}`);
       if (!s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);
@@ -617,7 +703,8 @@ section("Bot: oyun boyunca değişmezler");
   const free25 = games.map((g) => g.freeLeft[24] ?? 0);
   check("25. tura kadar bağımsızların çoğu alınıyor", free25.every((n) => n <= 8), free25.join(" "));
   // Bilgisayarlar arası savaş eşiği 1.8 (sadakat gelince 1.5 erken yok ediyordu): ilk savaş geç olabilir.
-  check("her oyunda savaş çıkıyor", games.every((g) => g.firstWar !== null && g.firstWar <= 60), games.map((g) => g.firstWar).join(" "));
+  // Donanmayla denizler engel oldu: ilk savaş daha geç gelebilir.
+  check("her oyunda savaş çıkıyor", games.every((g) => g.firstWar !== null && g.firstWar <= 80), games.map((g) => g.firstWar).join(" "));
   check("barış döneminde kimse savaş açmıyor", games.every((g) => g.firstWar >= N.aiPeace));
 
   // Zorluk: kolayda bilgisayar oyuncuya 20. turdan önce savaş açmaz. Bot oyunlarında buna hiç

@@ -9,13 +9,13 @@ import { canDeclare, canPropose, declareWar, proposeAlliance, proposePeace } fro
 import { offer } from "./events.js";
 import { appoint, appointInfo } from "./generals.js";
 import { rebels } from "./loyalty.js";
-import { neighbours, path } from "./graph.js";
-import { access, advance, attack, defenders, forecast, hostile, order, refresh } from "./moves.js";
+import { neighbours, path, roadBetween } from "./graph.js";
+import { access, advance, attack, canAttack, defenders, forecast, hostile, order, refresh } from "./moves.js";
 import { LEVELS, N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import {
-  armiesAt, armiesOf, budget, enemiesOf, formArmy, gamesInfo, holdGames, info, key, merge, men,
-  placesOf, popCap, recruit, recruitInfo, relation, station, strength, upgrade, upgradeInfo,
+  armiesAt, armiesOf, budget, buildShip, canSail, enemiesOf, formArmy, gamesInfo, holdGames, info, key, merge, men,
+  placesOf, popCap, recruit, recruitInfo, relation, shipInfo, station, strength, upgrade, upgradeInfo,
 } from "./state.js";
 
 // Ordunun hedeflenen bileşimi (payları; gerisi piyade). Güçlü okçusu olan daha çok okçu, zayıf
@@ -38,6 +38,7 @@ export function aiTurn(state, civ, events) {
   offers(state, civ);
   calm(state, civ);
   build(state, civ);
+  shipyard(state, civ);
   recruitAll(state, civ);
   military(state, civ, events);
 }
@@ -154,6 +155,30 @@ function build(state, civ) {
   }
 }
 
+// ---- donanma ----
+
+/**
+ * Limanlarda gemi: deniz yolu olan her liman savunma için en az bir gemi tutar, garnizonun
+ * fazlası denize açılabilsin diye de ona yetecek kadar (bir gemi 20 asker), en fazla 6.
+ */
+function shipyard(state, civ) {
+  for (const id of placesOf(state, civ)) {
+    const pl = state.places[id];
+    if (!info(id).port || !neighbours(id).some((n) => roadBetween(id, n).sea)) continue;
+    const spare = Math.max(0, men(pl) - need(state, civ, id));
+    const want = Math.min(6, Math.max(1, Math.ceil(spare / N.navy.carry)));
+    for (let guard = 0; guard < 3 && pl.ships < want; guard++) {
+      // Gemi de yer: yiyecek darsa tersane durur (yoksa bilgisayar kıtlığa giriyordu).
+      if (shipInfo(state, id).why || state.civs[civ].money < N.navy.cost.money + 10 || budget(state, civ).food < 2) break;
+      buildShip(state, id);
+    }
+  }
+}
+
+/** Limandan çıkan kuvvete gemi: taşıyabileceği kadar. (Limana savunma için bir gemi
+ * bırakınca başlangıçtaki tek gemiyle kimse denize açılamıyordu; dünya donuyordu.) */
+const shipsFor = (pl, force) => Math.max(0, Math.min(pl.ships, Math.ceil(men(force) / N.navy.carry)));
+
 // ---- asker ----
 
 function recruitAll(state, civ) {
@@ -225,10 +250,10 @@ function military(state, civ, events) {
     if (men(a) >= 80 && !appointInfo(state, a.id).why && state.civs[civ].money >= N.generals.cost + 25) appoint(state, a.id);
   }
 
-  // 2. Komşudaki kolay hedeflere ordularla saldır.
+  // 2. Komşudaki kolay hedeflere ordularla saldır (denizden ancak gemisi yetiyorsa).
   for (const a of armiesOf(state, civ)) {
     if (a.moves <= 0) continue;
-    const target = bestTarget(state, civ, a, neighbours(a.at));
+    const target = bestTarget(state, civ, a, neighbours(a.at).filter((n) => canAttack(state, a, n)));
     if (target) {
       const ev = attack(state, a.id, target);
       if (ev) events.push(ev);
@@ -242,9 +267,14 @@ function military(state, civ, events) {
     if (spare < 20) continue;
     const k = spare / men(pl);
     const force = Object.fromEntries(UNITS.map((t) => [t, Math.floor(pl[t] * k)]));
-    const target = bestTarget(state, civ, force, neighbours(id));
+    force.ships = shipsFor(pl, force);
+    force.at = id;
+    // Deniz aşırı komşu ancak gemiler kuvveti taşıyabiliyorsa.
+    const reach = neighbours(id).filter((n) => !roadBetween(id, n).sea || canSail(force));
+    const target = bestTarget(state, civ, force, reach);
     if (target) {
-      const a = formArmy(state, id, force.inf, force.arch, force.cav, force.siege);
+      const sea = roadBetween(id, target).sea;
+      const a = formArmy(state, id, force.inf, force.arch, force.cav, force.siege, sea ? force.ships : 0);
       const ev = a && attack(state, a.id, target);
       if (ev) events.push(ev);
     }
@@ -256,11 +286,19 @@ function military(state, civ, events) {
     const spare = men(pl) - need(state, civ, id);
     if (spare >= 50) {
       const k = spare / men(pl);
-      formArmy(state, id, ...UNITS.map((t) => Math.floor(pl[t] * k)));
+      const force = Object.fromEntries(UNITS.map((t) => [t, Math.floor(pl[t] * k)]));
+      formArmy(state, id, ...UNITS.map((t) => force[t]), shipsFor(pl, force));
     }
   }
   for (const a of armiesOf(state, civ)) {
     if (a.moves <= 0 || a.route.length) continue;
+    // Kendi limanındaysa gemiye bin: denizden de hedef seçebilsin.
+    const pl = state.places[a.at];
+    if (pl.owner === civ && pl.ships > 0 && !canSail(a)) {
+      const take = Math.min(pl.ships, Math.ceil(men(a) / N.navy.carry) - a.ships);
+      pl.ships -= take;
+      a.ships += take;
+    }
     const goal = farTarget(state, civ, a);
     if (goal) order(state, a.id, goal);
     else if (state.places[a.at].owner === civ) station(state, a.id);
@@ -284,6 +322,8 @@ function farTarget(state, civ, a) {
     const k = access(state, civ, id);
     return k === "own" || k === "ally";
   };
+  // Deniz yolu ancak gemiler orduyu taşıyabiliyorsa.
+  const usable = (r) => !r.sea || canSail(a);
   let best = null, dist = Infinity;
   for (const c of [...CIVS.map((x) => x.id), null]) {
     if (c === civ || (c && relation(state, civ, c) !== "war")) continue;
@@ -291,7 +331,8 @@ function farTarget(state, civ, a) {
       if (state.places[id].owner !== c || odds(state, a, civ, id).odds === "hopeless") continue;
       for (const n of neighbours(id)) {
         if (n !== a.at && !walkable(n)) continue;
-        const p = n === a.at ? [a.at] : path(a.at, n, walkable);
+        if (!usable(roadBetween(n, id))) continue;
+        const p = n === a.at ? [a.at] : path(a.at, n, walkable, usable);
         if (p && p.length < dist) { dist = p.length; best = id; }
       }
     }

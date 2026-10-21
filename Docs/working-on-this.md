@@ -26,7 +26,13 @@ raporundan sonra kapatılamayan karar penceresi olarak sorulur. Kayıt sürümü
 **Süvari ve kuşatma makinesi** (kurallar.md 5, 7). Asker türleri artık `UNITS` listesinde
 (numbers.js): her yer ve her ordu `inf, arch, cav, siege` taşıyor, kayıt sürümü 3.
 
-Sıradakiler (kullanıcının onayladığı derinlik listesi): donanma. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
+**Donanma** (kurallar.md 15): gemiler yerleşimlerde ve ordularda `ships` alanı (asker
+türlerinden ayrı, `UNITS`e girmiyor). Deniz yolu kullanımı tek yerden: `canSail` (state.js)
+ve `path`'in yol süzgeci (`canUse`). Kayıt sürümü 4. **Boş ordu** artık `empty()`: askeri ve
+gemisi olmayan; "askeri 0 olan ordu silinir" varsayımı dört yerdeydi ve gemi filolarını
+silerdi (kıtlıktaki eski hâli süvari/kuşatma ordularını da siliyordu).
+
+Kullanıcının onayladığı derinlik listesi bitti. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
 düşman ordularının nereye yürüdüğünü göstermek.
 
 ## Komutlar

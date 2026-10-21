@@ -22,16 +22,17 @@ export const roadBetween = (a, b) => links[a].find((l) => l.to === b)?.road ?? n
 /**
  * `from`dan `to`ya en az yollu güzergâh: [from, ..., to]. Gidilemiyorsa null.
  * `canEnter(id)` yolun üstündeki ve sondaki yerleşimlere girilip girilemeyeceğini söyler
- * (tarafsız toprak gibi); başlangıç her zaman serbest.
+ * (tarafsız toprak gibi); başlangıç her zaman serbest. `canUse(road)` bir yolun kullanılıp
+ * kullanılamayacağını (gemisi olmayan deniz yolunu kullanamaz).
  */
-export function path(from, to, canEnter = () => true) {
+export function path(from, to, canEnter = () => true, canUse = () => true) {
   if (from === to) return [from];
   const prev = { [from]: null };
   const queue = [from];
   while (queue.length) {
     const at = queue.shift();
     for (const next of neighbours(at)) {
-      if (next in prev || !canEnter(next)) continue;
+      if (next in prev || !canEnter(next) || !canUse(roadBetween(at, next))) continue;
       prev[next] = at;
       if (next === to) {
         const out = [to];

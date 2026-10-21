@@ -13,7 +13,7 @@ import { seat } from "./loyalty.js";
 import { defenders, wallsOf } from "./moves.js";
 import { N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
-import { armiesAt, budget, info, key, men, placesOf, relation, strength } from "./state.js";
+import { armiesAt, budget, empty, info, key, men, placesOf, relation, strength } from "./state.js";
 
 const pick = (state, list) => (list.length ? list[Math.floor(random(state) * list.length)] : null);
 const placeWhere = (state, civ, ok) => pick(state, placesOf(state, civ).filter(ok));
@@ -66,7 +66,7 @@ export const EVENTS = {
         const keep = def[k] ? r.def[k] / def[k] : 0;
         for (const u of [pl, ...own]) u[k] = Math.floor(u[k] * keep);
       }
-      s.armies = s.armies.filter((a) => men(a) > 0);
+      s.armies = s.armies.filter((a) => !empty(a));
       return { held: true, lost: men(def) - men(r.def) };
     },
     ai: (s, it) => (men(defenders(s, it.place)) >= it.raiders * 1.3 || s.civs[it.civ].money < it.bribe + 5 ? "fight" : "bribe"),
