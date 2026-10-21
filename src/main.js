@@ -19,7 +19,7 @@ import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
 import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.js";
 import * as anim from "./view/anim.js";
-import { drawMap, drawOverlay, placeAt, placeOnScreen } from "./view/draw.js";
+import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf } from "./view/kit.js";
 import { chipRise, drawUI, eventLines } from "./view/ui.js";
 import { trait } from "./rules/numbers.js";
@@ -531,12 +531,11 @@ function tapPlace(id) {
   redraw();
 }
 
-/** Basılan yere en yakın yerleşim, parmak ucunun kapladığı alan içindeyse. */
+/** Basılan yere en yakın yerleşim (maketi ya da sancağı), yeterince yakınsa. */
 function nearest(x, y) {
-  let best = null, bestD = 22;
+  let best = null, bestD = 24;
   for (const p of PLACES) {
-    const s = placeOnScreen(cam, p.id);
-    const d = Math.hypot(s.x - x, s.y - y);
+    const d = reach(cam, p.id, x, y);
     if (d < bestD) { best = p; bestD = d; }
   }
   return best;
@@ -657,6 +656,13 @@ window.addEventListener("resize", fit);
   }
 }
 fit();
+
+// Yazı tipleri (index.html, Google Fonts) gelince yeniden çiz: tuval bir yazı tipinin
+// yüklenmesini beklemez, o ana kadar yedeğiyle (Georgia) yazar.
+if (document.fonts) {
+  Promise.all(["600 12px Cinzel", "700 12px Cinzel", "13px 'EB Garamond'", "italic 13px 'EB Garamond'", "600 13px 'EB Garamond'"]
+    .map((f) => document.fonts.load(f).catch(() => null))).then(redraw);
+}
 
 // Araçlar (Tools/peek.mjs) için: oyunun içine bakma ve bir anı kurma kapısı.
 window.MareNostrum = {

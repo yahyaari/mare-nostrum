@@ -43,6 +43,27 @@ export function regions() {
       const b = pts[j];
       poly = cut(poly, b.x - a.x, b.y - a.y, (b.x * b.x + b.y * b.y - a.x * a.x - a.y * a.y) / 2);
     }
-    return { id: p.id, poly };
+    return { id: p.id, poly: wobble(poly) };
   });
+}
+
+// Sınırlar cetvelle çizilmiş gibi durmasın: kenarlar sık noktalara bölünüp yumuşak bir
+// gürültüyle kaydırılır. Kayma sadece noktanın YERİNE bağlı, iki komşu hücrenin ortak kenarı
+// aynı noktalara bölünüp aynı yere kayar - aralarında boşluk ya da üst üste binme olmaz.
+const STEP = 0.12, SWAY = 0.28;
+
+function wobble(poly) {
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / STEP));
+    for (let k = 0; k < n; k++) out.push(sway(a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n));
+  }
+  return out;
+}
+
+function sway(x, y) {
+  const dx = Math.sin(1.7 * x + 2.3 * y) * 0.5 + Math.sin(3.1 * y - 0.7 * x + 1.3) * 0.3 + Math.sin(6.3 * x + 4.1 * y) * 0.2;
+  const dy = Math.sin(2.1 * x - 1.6 * y + 0.4) * 0.5 + Math.sin(2.9 * x + 3.3 * y + 2.1) * 0.3 + Math.sin(5.7 * y - 4.4 * x) * 0.2;
+  return [x + dx * SWAY, y + dy * SWAY];
 }

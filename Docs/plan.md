@@ -68,7 +68,11 @@ yapabilir miyiz" diye sordu. Bkz. bölüm 2.0.
 **Ama önce:** kullanıcıdan 15-20 dakika gerçek oyun istendi (aşağıda, açık riskler 1). Geri
 bildirim gelirse sıra ona göre değişir.
 
-### 2.0 Görünüm: Total War tarzı arayüz (kullanıcıyla konuşuluyor)
+### 2.0 Görünüm: Total War tarzı arayüz (kullanıcı ONAYLADI, sırada ilk bu)
+
+**Kullanıcı (21.10): "tamam dediğin gibi yapalım, mobil için yapma, mobil yok".** Oyun artık
+yalnızca geniş ekran (masaüstü) için; telefon düzeni yapılmıyor, telefonla denenmiyor.
+Aşağıdaki dört aşama sırayla, her biri ayrı push.
 
 Kullanıcının görseli (21.10): Sakalar, Neapolis seçili, Karadeniz. Üstte koyu-altın bant
 (sancaklı arma, kaynaklar + değişim, "İlkbahar 12, MÖ 247", menü); solda parşömen şehir paneli
@@ -77,7 +81,14 @@ Kullanıcının görseli (21.10): Sakalar, Neapolis seçili, Karadeniz. Üstte k
 altta 5 yuvarlak düğmeli menü (Ordu, Şehirler, Diplomasi, Harita, Görevler); sağ altta mini
 harita ve "Turu bitir". Görseldeki şehirlerin hepsi bizde de var.
 
-**Deneme (yapıldı):** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
+**1. aşama YAPILDI (21.10):** arazi artık varsayılan (`?terrain` bayrağı kalktı); kesim 4 derece
+payla (kenar bandı yok), ton "sönük" (toprak kara, koyu camgöbeği deniz). Topraklar kıvrımlı
+sınırlı (`regions.js` wobble), göller delik. `src/view/pieces.js`: armalar (Roma kartal, Kartaca
+Tanit, Mısır ankh, Makedonya Vergina güneşi, Partlar yay-ok, Galya tekerlek, Saka geyik,
+bağımsız kule), direkli sancak, şehir/kale maketi, isim levhası (Cinzel), asker figürü, gemi.
+Yazı tipleri Google Fonts'tan (index.html). Basış sancağa da tutar (`reach`).
+
+**İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`
 (3355×1560, ~800 KB). Kıyılarımızla aynı veri olduğu için birebir oturuyor; en yakın zumda bile
 yeterince net. Eksik: kamera haritanın dışını gösterince arazi bitiyor (üst/alt bant) → kesimi

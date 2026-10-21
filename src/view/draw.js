@@ -13,6 +13,7 @@ import { BOUNDS } from "../data/bounds.js";
 import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
+import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, plaque, roundRect, ship, soldier } from "./pieces.js";
 import { regions } from "./regions.js";
 
 // ---- bir kere kurulan yollar ----
@@ -42,6 +43,11 @@ function layers() {
   for (const r of LAND) trace(land, pairs(r), true);
   for (const r of LAKES) trace(lakes, pairs(r), true);
   for (const r of RIVERS) trace(rivers, pairs(r), false);
+  // Kuru kara: kara, göller delik (çift-tek). Topraklar buna kırpılır; yoksa Azak Denizi ve
+  // Hazar boyanıyordu.
+  const dry = new Path2D();
+  dry.addPath(land);
+  dry.addPath(lakes);
   const roads = new Path2D(), lanes = new Path2D();
   for (const r of ROADS) trace(r.sea ? lanes : roads, roadLine(r), false);
   const cells = regions().map(({ id, poly }) => {
@@ -51,7 +57,7 @@ function layers() {
     return { id, path: p };
   });
   const at = POS;
-  return (cache = { land, lakes, rivers, roads, lanes, cells, at });
+  return (cache = { land, lakes, dry, rivers, roads, lanes, cells, at });
 }
 
 /** Bir yerleşimin harita birimindeki yeri. */
@@ -83,14 +89,20 @@ export function drawMap(ctx, cam, view, dpr) {
   ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (cam.w / 2 - cam.x * k), dpr * (cam.h / 2 - cam.y * k));
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  // Seçili yerleşimin yolları koyu.
+  // Seçili yerleşimin yolları: koyu bir alt çizginin üstünde altın.
   if (view.selected) {
-    for (const n of neighbours(view.selected)) strokeRoad(ctx, roadBetween(view.selected, n), px, 2.8);
+    for (const n of neighbours(view.selected)) {
+      const r = roadBetween(view.selected, n);
+      strokeRoad(ctx, r, px, 4.4, r.sea ? [px(6), px(4)] : [], "rgba(28,23,18,0.6)");
+      strokeRoad(ctx, r, px, 2.2, r.sea ? [px(6), px(4)] : [], GOLD_LIGHT);
+    }
   }
-  // Seçili ordunun güzergâhı: kalın kesik mürekkep.
+  // Seçili ordunun güzergâhı: kalın kesik, koyu kenarlı krem.
   if (view.route?.length > 1) {
     for (let i = 1; i < view.route.length; i++) {
-      strokeRoad(ctx, roadBetween(view.route[i - 1], view.route[i]), px, 3.6, [px(7), px(5)], INK.ink);
+      const r = roadBetween(view.route[i - 1], view.route[i]);
+      strokeRoad(ctx, r, px, 5.6, [px(8), px(5)], "rgba(28,23,18,0.75)");
+      strokeRoad(ctx, r, px, 3, [px(8), px(5)], CREAM);
     }
   }
   // Yürüyen orduların arkasındaki iz: geçtiği yollar ve şu anki yolun yürüdüğü kısmı, kendi
@@ -105,45 +117,74 @@ export function drawMap(ctx, cam, view, dpr) {
 
 let stillCanvas = null, stillKey = "";
 
-// DENEME: adrese ?terrain eklenirse Natural Earth II boyalı arazi (Tools/terrain.py),
-// ?terrain&natural ile tonlanmamışı. Varsayılan görünüm değişmez; kullanıcı Total War tarzı
-// bir arayüz görseli gönderip "böyle yapabilir miyiz" diye sordu (Docs/plan.md 2.0).
-const TERRAIN = typeof Image !== "undefined" && /terrain/.test(location.search) ? new Image() : null;
+// Boyalı arazi: Natural Earth II (Tools/terrain.py), görünen sınırların her yönde PAY derece
+// fazlası. Yüklenene kadar (açılışın ilk anı) eski çizgi harita çizilir.
+const PAY = 4; // Tools/terrain.py ile aynı
+const TERRAIN = typeof Image !== "undefined" ? new Image() : null;
 if (TERRAIN) {
   TERRAIN.onload = () => { stillKey = ""; window.MareNostrum?.redraw?.(); };
-  TERRAIN.src = /natural/.test(location.search) ? "assets/terrain-natural.jpg" : "assets/terrain.jpg";
+  TERRAIN.src = "assets/terrain.jpg";
 }
-function stillTerrain(ctx, view, L, px) {
-  const S = project(BOUNDS.e, BOUNDS.s);
-  ctx.drawImage(TERRAIN, 0, 0, S.x, S.y);
+
+function paintTerrain(ctx, view, L, px, W, H) {
+  const a = project(BOUNDS.w - PAY, BOUNDS.n + PAY), b = project(BOUNDS.e + PAY, BOUNDS.s - PAY);
+  ctx.drawImage(TERRAIN, a.x, a.y, b.x - a.x, b.y - a.y);
+
+  // Topraklar: sahibinin renginde ince bir boya, kenarlarında içe doğru aynı renkte bir parıltı
+  // (iki medeniyetin sınırı iki renkli görünür). Sadece karada.
   ctx.save();
-  ctx.clip(L.land, "evenodd");
+  ctx.clip(L.dry, "evenodd");
   for (const c of L.cells) {
     const owner = view.owners[c.id];
     if (!owner) continue;
-    ctx.globalAlpha = 0.3;
+    ctx.globalAlpha = 0.22;
     ctx.fillStyle = colorOf(owner);
     ctx.fill(c.path);
   }
+  for (const c of L.cells) {
+    const owner = view.owners[c.id];
+    if (!owner) continue;
+    ctx.save();
+    ctx.clip(c.path);
+    ctx.strokeStyle = colorOf(owner);
+    ctx.globalAlpha = 0.3;
+    ctx.lineWidth = px(10);
+    ctx.stroke(c.path);
+    ctx.globalAlpha = 0.8;
+    ctx.lineWidth = px(3);
+    ctx.stroke(c.path);
+    ctx.restore();
+  }
   ctx.globalAlpha = 1;
-  ctx.strokeStyle = "rgba(255,248,225,0.55)";
-  ctx.lineWidth = px(3);
-  for (const c of L.cells) if (view.owners[c.id]) ctx.stroke(c.path);
-  ctx.strokeStyle = "rgba(60,45,25,0.55)";
+  ctx.strokeStyle = "rgba(255,243,212,0.4)";
   ctx.lineWidth = px(1);
   for (const c of L.cells) ctx.stroke(c.path);
   ctx.restore();
-  ctx.strokeStyle = "rgba(40,50,55,0.6)";
-  ctx.lineWidth = px(1);
+
+  ctx.strokeStyle = "rgba(24,34,34,0.5)";
+  ctx.lineWidth = px(1.1);
   ctx.stroke(L.land);
-  ctx.strokeStyle = "rgba(110,80,45,0.85)";
-  ctx.lineWidth = px(1.6);
+
+  // Yollar: koyu bir alt çizginin üstünde açık toprak rengi patika. Deniz yolları kesik, açık.
+  ctx.strokeStyle = "rgba(52,36,20,0.5)";
+  ctx.lineWidth = px(2.8);
   ctx.stroke(L.roads);
-  ctx.strokeStyle = "rgba(40,70,90,0.7)";
-  ctx.lineWidth = px(1.4);
-  ctx.setLineDash([px(5), px(4)]);
+  ctx.strokeStyle = "rgba(231,208,160,0.92)";
+  ctx.lineWidth = px(1.2);
+  ctx.stroke(L.roads);
+  ctx.strokeStyle = "rgba(236,240,228,0.6)";
+  ctx.lineWidth = px(1.3);
+  ctx.setLineDash([px(5), px(5)]);
   ctx.stroke(L.lanes);
   ctx.setLineDash([]);
+
+  // Kenarlarda hafif bir karartma: göz ortaya toplanır.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.58);
+  g.addColorStop(0, "rgba(20,14,8,0)");
+  g.addColorStop(1, "rgba(20,14,8,0.42)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
   return stillCanvas;
 }
 
@@ -166,7 +207,7 @@ function still(cam, view, dpr, L) {
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  if (TERRAIN?.complete && TERRAIN.naturalWidth) return stillTerrain(ctx, view, L, px);
+  if (TERRAIN?.complete && TERRAIN.naturalWidth) return paintTerrain(ctx, view, L, px, W, H);
 
   // Kıyıya paralel iki ince dalga çizgisi: kıyıyı kalın boyayıp içini deniz rengiyle sil,
   // geriye iki kenar kalır. Karanın içine düşen yarısını birazdan kara örtüyor.
@@ -300,219 +341,181 @@ function strokeRoad(ctx, r, px, width, dash = null, color = null) {
 // ---- yerleşimler ve ordular ----
 
 function drawPlaces(ctx, cam, view, L) {
+  const z = sizeAt(cam);
   const shown = [];
   for (const p of PLACES) {
     const s = toScreen(cam, L.at[p.id].x, L.at[p.id].y);
-    if (s.x < -80 || s.y < -60 || s.x > cam.w + 80 || s.y > cam.h + 60) continue;
+    if (s.x < -90 || s.y < -40 || s.x > cam.w + 90 || s.y > cam.h + 90) continue;
     shown.push({ p, s });
   }
 
-  // Tehdit: yanında savaştığı birinin ordusu duran kendi yerin. Geniş, kırmızı, kesik halka.
-  for (const { p, s } of shown) {
-    if (!view.threats?.[p.id]) continue;
+  // Zemindeki halkalar (maketin altında, yere yatık): tehdit, seçim, yürünebilir ve
+  // saldırılabilir yerler.
+  const ring = (s, rx, color, width, dash = null, fill = null) => {
     ctx.beginPath();
-    ctx.arc(s.x, s.y, 19, 0, TAU);
-    ctx.strokeStyle = INK.bad;
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([5, 3]);
+    ctx.ellipse(s.x, s.y + 1, rx * z, rx * z * 0.42, 0, 0, TAU);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash ?? []);
     ctx.stroke();
     ctx.setLineDash([]);
-  }
-
-  // Huzursuz (sadakati düşük) kendi yerin: kırmızı bir ünlem rozeti.
+  };
   for (const { p, s } of shown) {
-    const lo = view.unrest?.[p.id];
-    if (lo === undefined) continue;
-    const x = s.x - 12, y = s.y - 13;
-    ctx.beginPath();
-    ctx.arc(x, y, 6.5, 0, TAU);
-    ctx.fillStyle = lo < 25 ? INK.bad : INK.warn;
-    ctx.fill();
-    ctx.strokeStyle = INK.card;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.fillStyle = INK.card;
-    ctx.font = `bold 10px ${SERIF}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("!", x, y + 0.5);
-  }
-
-  // Seçimin işaretleri: yürünebilir yerler ince halka, saldırılabilirler tahmin renginde.
-  for (const { p, s } of shown) {
+    if (view.threats?.[p.id]) ring(s, 30, INK.bad, 2.5, [6, 4]);
+    if (p.id === view.selected) ring(s, 24, GOLD_LIGHT, 2.2, null, "rgba(236,212,154,0.28)");
     const m = view.marks?.[p.id];
-    if (!m) continue;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, m === "walk" ? 12 : 14, 0, TAU);
-    ctx.strokeStyle = MARK[m];
-    ctx.lineWidth = m === "walk" ? 1.5 : 3;
-    ctx.setLineDash(m === "walk" ? [2, 3] : []);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (m === "walk") ring(s, 21, "rgba(243,231,201,0.95)", 1.8, [3, 4]);
+    else if (m) ring(s, 23, MARK[m], 3.2, null, "rgba(255,255,255,0.12)");
   }
 
-  for (const { p, s } of shown) {
-    const color = colorOf(view.owners[p.id]);
-    if (p.id === view.selected) {
+  // Sancaklar ve maketler: önce sancak (direğin dibi maketin arkasında kalır), sonra maket.
+  // Kuzeydekiler önce: güneydekinin sancağı onun üstüne düşer, tersi değil.
+  for (const { p, s } of [...shown].sort((a, b) => a.s.y - b.s.y)) {
+    const owner = view.owners[p.id];
+    const f = flagSize(p, owner, z);
+    banner(ctx, owner, s.x, s.y - 3 * z, f.w, f.h, f.pole, { gold: p.capital && !!owner });
+    if (p.kind === "castle") castleModel(ctx, s.x, s.y + 2 * z, z * 1.15);
+    else cityModel(ctx, s.x, s.y + 2 * z, z * 1.15, p.capital);
+    if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1, view.blockade?.[p.id]);
+    // Huzursuz (sadakati düşük) kendi yerin: sancağın yanında kırmızı bir ünlem rozeti.
+    const lo = view.unrest?.[p.id];
+    if (lo !== undefined) {
+      const x = s.x + f.w / 2 + 7, y = s.y - f.pole + 2;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, 15, 0, TAU);
-      ctx.fillStyle = "rgba(247,242,231,0.85)";
+      ctx.arc(x, y, 6.5, 0, TAU);
+      ctx.fillStyle = lo < 25 ? INK.bad : INK.warn;
       ctx.fill();
-      ctx.strokeStyle = INK.ink;
+      ctx.strokeStyle = CREAM;
       ctx.lineWidth = 1.5;
-      ctx.setLineDash([3, 3]);
       ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.fillStyle = CREAM;
+      ctx.font = `bold 10px ${SERIF}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("!", x, y + 0.5);
     }
-    if (p.kind === "castle") castle(ctx, s.x, s.y, color);
-    else city(ctx, s.x, s.y, color, p.capital);
-    if (p.port) anchor(ctx, s.x + 9, s.y + 6, view.blockade?.[p.id]);
   }
 
-  // Ordu işaretleri: yerleşimin sağ üstünde, yan yana küçük sancaklar.
+  // Ordular: yerleşimin sağında yan yana asker figürleri, her birinin yanında sayısı.
   const tokens = [];
   const at = {};
-  // Sadece gemiden filo: sancakta gemi sayısı.
+  // Sadece gemiden filo: etikette gemi sayısı.
   const label = (a) => (a.men <= 0 && a.ships ? "⛵" + a.ships : a.men >= 1000 ? (a.men / 1000).toFixed(1) + "k" : String(a.men));
-  ctx.font = `bold 10px ${SERIF}`;
+  ctx.font = `bold 11px ${SERIF}`;
+  const zt = Math.max(1, Math.min(1.4, z));
+  const width = (a) => (17 + Math.max(22, ctx.measureText(label(a)).width + 10)) * zt;
   for (const a of view.armies ?? []) {
-    // Yolda olan (animasyonla yürüyen) sancak bir yerleşime bağlı değil, yolun üstünde.
+    // Yolda olan (animasyonla yürüyen) ordu bir yerleşime bağlı değil, yolun üstünde.
     if (a.float) {
       const s = toScreen(cam, a.float.x, a.float.y);
-      const w = Math.max(24, ctx.measureText(label(a)).width + 10);
-      tokens.push({ x: s.x + 8, y: s.y - 30, w, h: 16, army: a, label: label(a), moving: true });
+      tokens.push({ x: s.x - 8 * zt, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), moving: true });
     } else (at[a.at] ??= []).push(a);
   }
   for (const { p, s } of shown) {
-    (at[p.id] ?? []).forEach((a, i) => {
-      const w = Math.max(24, ctx.measureText(label(a)).width + 10);
-      tokens.push({ x: s.x + 8 + i * (w + 4), y: s.y - 30, w, h: 16, army: a, label: label(a) });
+    (at[p.id] ?? []).forEach((a, i, all) => {
+      const before = all.slice(0, i).reduce((n, b) => n + width(b) + 3, 0);
+      tokens.push({ x: s.x + 20 * z + before, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a) });
     });
   }
 
-  // Adlar: önce seçili, sonra başkentler, şehirler, kaleler. Bir ad başka bir adın, bir
-  // işaretin ya da bir sancağın üstüne düşecekse yazılmaz - yakınlaşınca yer açılır.
-  const taken = [...shown.map(({ s }) => ({ x: s.x - 8, y: s.y - 8, w: 16, h: 16 })), ...tokens.filter((t) => !t.moving)];
+  // Adlar: önce seçili, sonra başkentler, şehirler, kaleler. Bir levha başka bir levhanın, bir
+  // maketin ya da bir ordunun üstüne düşecekse yazılmaz - yakınlaşınca yer açılır.
+  const taken = [...shown.map(({ s }) => ({ x: s.x - 16 * z, y: s.y - 14 * z, w: 32 * z, h: 18 * z })), ...tokens.filter((t) => !t.moving)];
   const rank = (p) => (p.id === view.selected ? 0 : p.capital ? 1 : p.kind === "city" ? 2 : 3);
   for (const { p, s } of [...shown].sort((a, b) => rank(a.p) - rank(b.p))) {
-    const name = p.name[view.lang];
-    const big = p.capital;
-    ctx.font = big ? `bold 12px ${SERIF}` : `12px ${SERIF}`;
-    const text = big ? name.toLocaleUpperCase(view.lang === "tr" ? "tr" : "en") : name;
-    const w = ctx.measureText(text).width;
-    const box = { x: s.x - w / 2 - 2, y: s.y + (big ? 13 : 10), w: w + 4, h: 14 };
+    const name = p.name[view.lang].toLocaleUpperCase(view.lang === "tr" ? "tr" : "en");
+    const size = p.capital ? Math.max(11, Math.min(15, 10.5 * z)) : Math.max(9.5, Math.min(13, 9 * z));
+    ctx.font = `${p.capital ? 700 : 600} ${size}px ${TITLE}`;
+    const w = ctx.measureText(name).width + (p.capital ? 30 : 14);
+    const box = { x: s.x - w / 2, y: s.y + 7 * z, w, h: size + 7 };
     if (p.id !== view.selected && taken.some((t) => overlap(t, box))) continue;
     taken.push(box);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = INK.paper;
-    ctx.lineWidth = 3.5;
-    ctx.strokeText(text, s.x, box.y + 1);
-    ctx.fillStyle = INK.ink;
-    ctx.fillText(text, s.x, box.y + 1);
+    plaque(ctx, name, s.x, box.y, { size, bold: p.capital, capital: p.capital, selected: p.id === view.selected });
   }
 
   const now = performance.now();
   for (const t of tokens) {
-    const { x, w, h, army } = t;
-    const y = army.walking ? t.y + (army.sea ? Math.sin(now / 260) * 2 : -Math.abs(Math.sin(now / 110)) * 2.5) : t.y;
-    ctx.globalAlpha = army.alpha ?? 1;
-    if (army.ships > 0 || army.sea) boat(ctx, x, y + h + 3, w);
-    // Gölge: sancak haritanın üstünde duruyor, kâğıda yapışık değil.
-    ctx.fillStyle = "rgba(43,42,39,0.22)";
-    ctx.fillRect(x + 2.5, y + 2.5, w, h);
-    ctx.beginPath();
-    ctx.ellipse(x + 1, y + h + 9, 4, 1.6, 0, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = INK.ink;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(x, y + h);
-    ctx.lineTo(x, y + h + 9);
-    ctx.stroke();
-    if (army.selected) {
-      ctx.fillStyle = INK.card;
-      ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
-      ctx.setLineDash([3, 2]);
-      ctx.strokeRect(x - 3.5, y - 3.5, w + 7, h + 7);
-      ctx.setLineDash([]);
-    }
-    // Hareketi bitmiş ordu soluk ve yazısı mürekkep: bu tur artık bir şey yapamaz.
+    const { army } = t;
+    const bob = army.walking ? (army.sea ? Math.sin(now / 260) * 2 : -Math.abs(Math.sin(now / 110)) * 2.5) : 0;
+    // Figür ve etiket 32 piksel boyunda bir kutuda çizilir, kutu zt kadar büyütülür.
+    ctx.save();
+    ctx.translate(t.x, t.y + bob);
+    ctx.scale(zt, zt);
+    const x = 0, y = 0, w = t.w / zt, h = 32;
     const base = army.alpha ?? 1;
-    ctx.fillStyle = INK.card;
-    ctx.fillRect(x, y, w, h);
-    ctx.globalAlpha = base * (army.spent ? 0.4 : 1);
-    ctx.fillStyle = colorOf(army.owner);
-    ctx.fillRect(x, y, w, h);
+    const afloat = army.ships > 0 || army.sea;
     ctx.globalAlpha = base;
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    ctx.fillStyle = army.spent ? INK.ink : "#fff";
-    ctx.font = `bold 10px ${SERIF}`;
+    const feet = { x: x + 8, y: y + h - 2 };
+    if (army.selected) {
+      ctx.beginPath();
+      ctx.ellipse(feet.x, feet.y, 11, 4, 0, 0, TAU);
+      ctx.fillStyle = "rgba(236,212,154,0.5)";
+      ctx.fill();
+      ctx.strokeStyle = GOLD_LIGHT;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+    if (afloat) ship(ctx, feet.x + 2, feet.y + 2, 0.8);
+    // Hareketi bitmiş ordu soluk: bu tur artık bir şey yapamaz.
+    ctx.globalAlpha = base * (army.spent ? 0.5 : 1);
+    if (army.men > 0 || !army.ships) soldier(ctx, army.owner, feet.x, feet.y - (afloat ? 3 : 0), 1, { gold: army.selected });
+    // Sayı etiketi
+    const tx = x + 17, tw = w - 17, ty = y + 8, th = 16;
+    ctx.globalAlpha = base;
+    roundRect(ctx, tx, ty, tw, th, 3);
+    ctx.fillStyle = army.spent ? "rgba(28,23,18,0.62)" : "rgba(28,23,18,0.88)";
+    ctx.fill();
+    ctx.strokeStyle = army.selected ? GOLD_LIGHT : colorOf(army.owner);
+    ctx.lineWidth = army.selected ? 1.6 : 1.4;
+    ctx.stroke();
+    ctx.fillStyle = army.spent ? "rgba(243,231,201,0.6)" : CREAM;
+    ctx.font = `bold 11px ${SERIF}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(t.label, x + w / 2, y + h / 2 + 1);
+    ctx.fillText(t.label, tx + tw / 2, ty + th / 2 + 0.5);
     if (army.gen) {
-      // Generalli ordu: sancağın sol üstünde altın bir yıldız.
+      // Generalli ordu: etiketin sağ üstünde altın bir yıldız.
       ctx.font = `bold 12px ${SERIF}`;
       ctx.lineWidth = 3;
-      ctx.strokeStyle = INK.ink;
-      ctx.strokeText("★", x - 1, y - 1);
+      ctx.strokeStyle = DARK;
+      ctx.strokeText("★", tx + tw, ty - 1);
       ctx.fillStyle = "#e3b23c";
-      ctx.fillText("★", x - 1, y - 1);
+      ctx.fillText("★", tx + tw, ty - 1);
     }
     ctx.globalAlpha = 1;
+    ctx.restore();
   }
-  // Parmak için kutuyu biraz büyüt. Yürüyen sancağa basılmaz: ordu zaten varacağı yerde.
-  return tokens.filter((t) => !t.moving).map((t) => ({ x: t.x - 6, y: t.y - 8, w: t.w + 12, h: t.h + 16, army: t.army.id }));
+  // Basılacak kutu biraz büyük. Yürüyen orduya basılmaz: ordu zaten varacağı yerde.
+  return tokens.filter((t) => !t.moving).map((t) => ({ x: t.x - 4, y: t.y - 4, w: t.w + 8, h: t.h + 8, army: t.army.id }));
 }
 
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
-function city(ctx, x, y, color, capital) {
-  const r = capital ? 7 : 5.5;
-  if (capital) {
-    ctx.beginPath();
-    ctx.arc(x, y, r + 3.5, 0, TAU);
-    ctx.fillStyle = INK.paper;
-    ctx.fill();
-    ctx.strokeStyle = INK.ink;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-  }
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, TAU);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.strokeStyle = INK.ink;
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
+/** Parçaların büyüklüğü: en uzakta 0.9, iki kat yakında 1.35, dört kat yakında 1.75. */
+export function sizeAt(cam) {
+  const r = Math.log2(Math.max(1, cam.scale / cam.min));
+  return Math.max(0.9, Math.min(1.75, 0.9 + 0.45 * r));
 }
 
-/** Üç mazgallı bir kule. */
-function castle(ctx, x, y, color) {
-  ctx.beginPath();
-  ctx.moveTo(x - 6, y + 6);
-  ctx.lineTo(x - 6, y - 7);
-  ctx.lineTo(x - 3.5, y - 7);
-  ctx.lineTo(x - 3.5, y - 4.5);
-  ctx.lineTo(x - 1.25, y - 4.5);
-  ctx.lineTo(x - 1.25, y - 7);
-  ctx.lineTo(x + 1.25, y - 7);
-  ctx.lineTo(x + 1.25, y - 4.5);
-  ctx.lineTo(x + 3.5, y - 4.5);
-  ctx.lineTo(x + 3.5, y - 7);
-  ctx.lineTo(x + 6, y - 7);
-  ctx.lineTo(x + 6, y + 6);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.strokeStyle = INK.ink;
-  ctx.lineWidth = 1.4;
-  ctx.lineJoin = "miter";
-  ctx.stroke();
-  ctx.lineJoin = "round";
+/** Sancağın kumaşı ve direği: başkentte büyük, kalede ve bağımsız yerde küçük. */
+function flagSize(p, owner, z) {
+  const [w, h, pole] = !owner ? [12, 16, 28] : p.capital ? [22, 30, 46] : p.kind === "castle" ? [15, 20, 32] : [18, 24, 38];
+  return { w: w * z, h: h * z, pole: pole * z };
 }
+
+/**
+ * Ekrandaki bir noktanın bir yerleşime uzaklığı: maketine ya da sancağına (sancak yukarıda,
+ * oyuncu ona da basıyor).
+ */
+export function reach(cam, id, x, y) {
+  const s = toScreen(cam, POS[id].x, POS[id].y);
+  const z = sizeAt(cam);
+  const f = flagSize(byIdPlace[id], true, z);
+  const flagY = s.y - 3 * z - f.pole + f.h / 2;
+  return Math.min(Math.hypot(s.x - x, s.y - y), Math.hypot(s.x - x, flagY - y) * 1.3);
+}
+const byIdPlace = Object.fromEntries(PLACES.map((p) => [p.id, p]));
 
 function anchor(ctx, x, y, blockaded = false) {
   const shape = () => {
@@ -526,28 +529,13 @@ function anchor(ctx, x, y, blockaded = false) {
     ctx.arc(x, y + 0.6, 3.4, Math.PI, 0, true);
   };
   shape();
-  ctx.strokeStyle = INK.paper;
-  ctx.lineWidth = 3.4;
+  ctx.strokeStyle = DARK;
+  ctx.lineWidth = 3.6;
   ctx.stroke();
   shape();
   // Ablukadaki liman: kırmızı çapa.
-  ctx.strokeStyle = blockaded ? INK.bad : INK.ink;
-  ctx.lineWidth = blockaded ? 1.8 : 1.2;
-  ctx.stroke();
-}
-
-/** Sancağın altında küçük bir tekne: ordunun gemisi var ya da şu an denizde. */
-function boat(ctx, x, y, w) {
-  ctx.beginPath();
-  ctx.moveTo(x - 3, y);
-  ctx.lineTo(x + w + 3, y);
-  ctx.quadraticCurveTo(x + w, y + 6, x + w / 2, y + 6);
-  ctx.quadraticCurveTo(x, y + 6, x - 3, y);
-  ctx.closePath();
-  ctx.fillStyle = "#7a5a3a";
-  ctx.fill();
-  ctx.strokeStyle = INK.ink;
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = blockaded ? "#ff6a55" : CREAM;
+  ctx.lineWidth = blockaded ? 1.8 : 1.3;
   ctx.stroke();
 }
 
