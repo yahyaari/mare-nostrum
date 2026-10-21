@@ -9,6 +9,7 @@
 import { LAND, LAKES, RIVERS } from "../data/geo.js";
 import { PLACES, ROADS } from "../data/world.js";
 import { project } from "../geo.js";
+import { BOUNDS } from "../data/bounds.js";
 import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
@@ -104,6 +105,48 @@ export function drawMap(ctx, cam, view, dpr) {
 
 let stillCanvas = null, stillKey = "";
 
+// DENEME: adrese ?terrain eklenirse Natural Earth II boyalı arazi (Tools/terrain.py),
+// ?terrain&natural ile tonlanmamışı. Varsayılan görünüm değişmez; kullanıcı Total War tarzı
+// bir arayüz görseli gönderip "böyle yapabilir miyiz" diye sordu (Docs/plan.md 2.0).
+const TERRAIN = typeof Image !== "undefined" && /terrain/.test(location.search) ? new Image() : null;
+if (TERRAIN) {
+  TERRAIN.onload = () => { stillKey = ""; window.MareNostrum?.redraw?.(); };
+  TERRAIN.src = /natural/.test(location.search) ? "assets/terrain-natural.jpg" : "assets/terrain.jpg";
+}
+function stillTerrain(ctx, view, L, px) {
+  const S = project(BOUNDS.e, BOUNDS.s);
+  ctx.drawImage(TERRAIN, 0, 0, S.x, S.y);
+  ctx.save();
+  ctx.clip(L.land, "evenodd");
+  for (const c of L.cells) {
+    const owner = view.owners[c.id];
+    if (!owner) continue;
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = colorOf(owner);
+    ctx.fill(c.path);
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "rgba(255,248,225,0.55)";
+  ctx.lineWidth = px(3);
+  for (const c of L.cells) if (view.owners[c.id]) ctx.stroke(c.path);
+  ctx.strokeStyle = "rgba(60,45,25,0.55)";
+  ctx.lineWidth = px(1);
+  for (const c of L.cells) ctx.stroke(c.path);
+  ctx.restore();
+  ctx.strokeStyle = "rgba(40,50,55,0.6)";
+  ctx.lineWidth = px(1);
+  ctx.stroke(L.land);
+  ctx.strokeStyle = "rgba(110,80,45,0.85)";
+  ctx.lineWidth = px(1.6);
+  ctx.stroke(L.roads);
+  ctx.strokeStyle = "rgba(40,70,90,0.7)";
+  ctx.lineWidth = px(1.4);
+  ctx.setLineDash([px(5), px(4)]);
+  ctx.stroke(L.lanes);
+  ctx.setLineDash([]);
+  return stillCanvas;
+}
+
 function still(cam, view, dpr, L) {
   const W = Math.round(cam.w * dpr), H = Math.round(cam.h * dpr);
   const key = [cam.x, cam.y, cam.scale, W, H, PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
@@ -122,6 +165,8 @@ function still(cam, view, dpr, L) {
   ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (cam.w / 2 - cam.x * k), dpr * (cam.h / 2 - cam.y * k));
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
+
+  if (TERRAIN?.complete && TERRAIN.naturalWidth) return stillTerrain(ctx, view, L, px);
 
   // Kıyıya paralel iki ince dalga çizgisi: kıyıyı kalın boyayıp içini deniz rengiyle sil,
   // geriye iki kenar kalır. Karanın içine düşen yarısını birazdan kara örtüyor.

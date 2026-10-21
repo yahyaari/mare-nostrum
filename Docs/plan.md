@@ -50,19 +50,52 @@
 
 ## 2. Yapılacaklar (kullanıcı "hepsi güzel" dedi)
 
-Kullanıcı 21.10'da 12 önerinin hepsini beğendi ve sıra seçmedi. **Önerilen sıra:**
+Kullanıcı 21.10'da 12 önerinin hepsini beğendi. **Öğretici EN SONA** (kullanıcı, 21.10:
+"öğreticiyi sona bırakalım, her şey bitsin onların üstüne kuralım"): oyun değiştikçe öğretici
+de değişeceği için en son yazılır. **Sıra:**
 
-1. **Öğretici** — oyun artık bir kural listesiyle anlatılamayacak kadar büyük; ilk dakika zor.
-2. **Görevler** — oyuncuya yön verir ("şimdi ne yapsam" sorusu).
-3. **Dünya harikaları** — haritada ele geçirilmeye değer yerler.
-4. **Ses ve müzik** — ucuz, hissi çok değiştirir.
-5. Sonra: kuşatma, büyüyen şehirler, kronik, savaş sahnesi, sis, arazi/mevsim, telefona kurma,
+1. **Görevler** — oyuncuya yön verir ("şimdi ne yapsam" sorusu).
+2. **Dünya harikaları** — haritada ele geçirilmeye değer yerler.
+3. **Ses ve müzik** — ucuz, hissi çok değiştirir.
+4. Sonra: kuşatma, büyüyen şehirler, kronik, savaş sahnesi, sis, arazi/mevsim, telefona kurma,
    aynı cihazda iki kişi.
+5. **Öğretici** — en son, her şey bittikten sonra.
+
+**Görünüm (21.10, konuşuluyor):** kullanıcı Total War tarzı boyalı bir arayüz görseli gönderdi
+(parşömen panel, boyalı arazi, direkli sancaklar, alt menü, mini harita) ve "böyle bir arayüz
+yapabilir miyiz" diye sordu. Bkz. bölüm 2.0.
 
 **Ama önce:** kullanıcıdan 15-20 dakika gerçek oyun istendi (aşağıda, açık riskler 1). Geri
 bildirim gelirse sıra ona göre değişir.
 
-### 2.1 Öğretici
+### 2.0 Görünüm: Total War tarzı arayüz (kullanıcıyla konuşuluyor)
+
+Kullanıcının görseli (21.10): Sakalar, Neapolis seçili, Karadeniz. Üstte koyu-altın bant
+(sancaklı arma, kaynaklar + değişim, "İlkbahar 12, MÖ 247", menü); solda parşömen şehir paneli
+(üstünde liman tablosu, sekmeler, sadakat çubuğu, maliyet düğmeleri); boyalı arazi (dağ, orman,
+çöl), yarı saydam ülke renkleri; şehirler direkli sancak + küçük şehir maketi + isim levhası;
+altta 5 yuvarlak düğmeli menü (Ordu, Şehirler, Diplomasi, Harita, Görevler); sağ altta mini
+harita ve "Turu bitir". Görseldeki şehirlerin hepsi bizde de var.
+
+**Deneme (yapıldı):** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
+(kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`
+(3355×1560, ~800 KB). Kıyılarımızla aynı veri olduğu için birebir oturuyor; en yakın zumda bile
+yeterince net. Eksik: kamera haritanın dışını gösterince arazi bitiyor (üst/alt bant) → kesimi
+birkaç derece payla yap ya da dışını çerçeveyle kapat.
+
+**Değerlendirme:**
+- Kodla yapılır: üst bant, alt menü, mini harita, Turu bitir, parşömen dokusu, altın çerçeve,
+  direkli sancak, isim levhası, yazı tipi (Cinzel/EB Garamond gibi, Türkçe harfleri olan),
+  şehir/kale/liman için çizgi maket, asker figürü, dağ/ağaç simgeleri.
+- Ressam işi (kodla aynısı olmaz): elle boyanmış 3B şehir maketleri, paneldeki liman tablosu.
+  Yol: ya çizgi/vektör sade hâli, ya kullanıcı yapay zekâ ile resim üretir ben yerleştiririm
+  (şeffaf arka plan, aynı açı ve ışık).
+- Telefon: sol panel + alt menü + mini harita dikey ekrana sığmaz; telefonda panel alttan
+  açılan sayfa olur.
+- Önerilen aşamalar: (1) arazi + ülke renkleri + sancaklar, (2) çerçeve: üst bant, alt menü,
+  mini harita, yazı tipi, (3) panel: parşömen + sekmeler, (4) süs: ağaçlar, maketler, resimler.
+
+### 2.1 Öğretici (EN SONA alındı)
 
 - İlk oyunda (ya da menüden "Öğretici") ilk ~6 turda adım adım balonlar: şehrine bas → tarla
   yükselt → asker bas → ordu çıkar → orduya bas, yanındaki gri şehre bas → saldır → turu bitir.
