@@ -22,6 +22,7 @@ import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.j
 import * as anim from "./view/anim.js";
 import * as sound from "./view/sound.js";
 import { relation } from "./rules/state.js";
+import { sight } from "./rules/sight.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
 import { drawUI, eventLines, missionText } from "./view/ui.js";
@@ -35,13 +36,14 @@ const ctx = canvas.getContext("2d");
 const cam = makeCamera();
 
 let game = null;
-const ui = { screen: "start", lang: pickLang(), level: pickLevel(), pick: null, saved: null, sel: null, modal: null, toast: null };
+const ui = { screen: "start", lang: pickLang(), level: pickLevel(), pick: null, saved: null, sel: null, modal: null, toast: null, fog: pickFog() };
 const startOwners = Object.fromEntries(PLACES.map((p) => [p.id, p.owner]));
 
 let dpr = 1;
 let boxes = [];
 let tokens = [];
 let queued = false;
+let ambient = null; // canlı haritanın bir sonraki karesi
 
 // ---- kayıt ----
 //
@@ -76,6 +78,11 @@ function pickLevel() {
   return "normal";
 }
 
+/** Savaş sisi açık mı (menüden; tarayıcıda saklanır). Varsayılan açık. */
+function pickFog() {
+  try { return localStorage.getItem("mn.fog") !== "0"; } catch { return true; }
+}
+
 function pickLang() {
   const asked = new URLSearchParams(location.search).get("lang");
   if (asked === "en" || asked === "tr") return asked;
@@ -106,6 +113,8 @@ function redraw() {
     drawUI(ctx, cam, game, ui, boxes, view);
     drawOverlay(ctx, cam, view.fx);
     if (anim.busy() || gliding) redraw();
+    // Canlı harita: bulutlar süzülür, sancaklar dalgalanır - saniyede 20 kare, sekme arkadayken hiç.
+    else if (!ambient && !document.hidden) ambient = setTimeout(() => { ambient = null; redraw(); }, 50);
     if (!anim.busy()) settle();
   });
 }
@@ -185,6 +194,11 @@ function mapView() {
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
   view.hover = ui.hover ?? null;
+  // Savaş sisi: oyuncunun gördüğü yerler ve dost topraklar.
+  view.me = game.player;
+  view.fog = ui.fog;
+  view.seen = sight(game, game.player);
+  view.friends = new Set(PLACES.filter((p) => { const o = game.places[p.id].owner; return o === game.player || (o && relation(game, game.player, o) === "ally"); }).map((p) => p.id));
   view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place).map((x) => [x.place, true]));
   view.docked = Object.fromEntries(PLACES.filter((p) => p.port && game.places[p.id].ships > 0).map((p) => [p.id, game.places[p.id].ships]));
   view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));
@@ -304,6 +318,10 @@ function dispatch(act) {
     case "music":
       sound.setMusic(act.on);
       break;
+    case "fog":
+      ui.fog = act.on;
+      try { localStorage.setItem("mn.fog", act.on ? "1" : "0"); } catch { /* tercih saklanamadı */ }
+      break;
     case "lang":
       ui.lang = act.lang;
       try { localStorage.setItem("mn.lang", act.lang); } catch { /* varsayılan */ }
@@ -413,13 +431,16 @@ function dispatch(act) {
     case "endTurn": {
       ui.modal = null;
       const before = { ...game.civs[me] };
+      const sawBefore = sight(game, me);
       const [, trace] = traced(() => endTurn(game));
+      const sawAfter = sight(game, me);
       if (ui.sel?.kind === "army" && !armyById(game, ui.sel.id)) ui.sel = null;
       // Gösteri: önce tur şeridi, sonra rakiplerin hamleleri sırayla, en son kendi
       // ordularının güzergâh adımları. Kaynakların artışı üst banttan yükselir.
       const t = anim.clock();
       anim.banner(fill(T().turn, game.turn), fill(T().year, Math.max(1, 271 - game.turn)));
-      anim.timeline(trace, t + 900, visible, me);
+      // Sisin içindeki hamleler gösterilmez (oyuncu onları göremez): beklemeden geçer.
+      anim.timeline(trace, t + 900, (id) => visible(id) && (!ui.fog || sawBefore.has(id) || sawAfter.has(id)), me);
       ["money", "weapons", "food"].forEach((k, i) => {
         const d = Math.round((game.civs[me][k] - before[k]) * 10) / 10;
         if (d) anim.riseAt(chipRise(cam, k), (d > 0 ? "+" : "−") + Math.abs(d), d > 0 ? INK.good : INK.bad, 500 + i * 120);

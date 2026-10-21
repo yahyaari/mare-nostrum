@@ -190,6 +190,7 @@ export const TEXT = {
       "Port cities have a Harbour tab: fishery for food, shipyard for ships, trade for money, and a harbour fort against fleets.",
       "Every few turns your council gives you a task (Tasks, at the bottom): do it in time for a reward.",
       "Six cities hold wonders of the ancient world (gold temple on the map). Whoever holds the city gets the wonder's gift in their whole realm.",
+      "Fog of war: you see one road beyond your own and your allies' places and armies. Armies in the fog are hidden (it can be switched off in the menu).",
       "Defeat every other civilisation to win.",
     ],
     letters: {
@@ -207,6 +208,8 @@ export const TEXT = {
     year: "{0} BC",
     hudMissions: "Tasks",
     soundLabel: "Sound",
+    fogLabel: "Fog of war",
+    fogUnknown: "unknown (fog of war)",
     musicLabel: "Music",
     sndOn: "On",
     sndOff: "Off",
@@ -455,6 +458,7 @@ export const TEXT = {
       "Liman şehirlerinin bir Liman sekmesi var: yiyecek için balıkçılık, gemi için tersane, para için ticaret, filolara karşı liman kalesi.",
       "Birkaç turda bir meclisin sana bir görev verir (alttaki Görevler): süresinde yaparsan ödülünü alırsın.",
       "Altı şehirde antik dünyanın harikaları var (haritada altın tapınak). Şehri tutan, harikanın armağanını bütün ülkesinde alır.",
+      "Savaş sisi: kendi ve müttefiklerinin yerlerinin ve ordularının bir yol ötesini görürsün. Sisin içindeki ordular gizlidir (menüden kapatılabilir).",
       "Kazanmak için bütün öteki medeniyetleri yen.",
     ],
     letters: {
@@ -472,6 +476,8 @@ export const TEXT = {
     year: "MÖ {0}",
     hudMissions: "Görevler",
     soundLabel: "Ses",
+    fogLabel: "Savaş sisi",
+    fogUnknown: "bilinmiyor (sis)",
     musicLabel: "Müzik",
     sndOn: "Açık",
     sndOff: "Kapalı",

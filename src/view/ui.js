@@ -27,6 +27,7 @@ import { BOTTOM_H, TOP, drawBottomBar, drawRightColumn, drawTopBar } from "./hud
 import { CREAM, DARK, GOLD, GOLD_DARK, roundRect, shield, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
+import { sight } from "../rules/sight.js";
 import { drawVignette } from "./draw.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
@@ -145,10 +146,10 @@ function cardRect(cam, h) {
   return { x: 12, y: Math.max(TOP + 40, cam.h - 12 - h), w: 360, h };
 }
 
-function kindLine(id, game, T) {
+function kindLine(id, game, T, hid = false) {
   const p = byId[id], pl = game.places[id];
   return [p.capital ? T.capital : null, p.kind === "castle" ? T.castle : T.city, p.port ? T.port : null]
-    .filter(Boolean).join(" · ") + " · " + fill(T.lvl, pl.level) + (pl.ships ? ` · ${pl.ships} ${T.ships}` : "");
+    .filter(Boolean).join(" · ") + " · " + fill(T.lvl, pl.level) + (pl.ships && !hid ? ` · ${pl.ships} ${T.ships}` : "");
 }
 
 /** "120 piyade · 40 okçu · 20 süvari": piyade ve okçu hep, ötekiler varsa. */
@@ -415,7 +416,7 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
     const [label, color] = rel === "war" ? [T.war, INK.bad] : rel === "ally" ? [T.ally, INK.good] : [T.neutral, INK.soft];
     text(ctx, "· " + label, x + 26 + w, y + 54, { size: 13, italic: true, color });
   }
-  text(ctx, kindLine(id, game, T), x, y + 76, { italic: true, size: 13, color: INK.soft });
+  text(ctx, kindLine(id, game, T, ui.fog && !sight(game, me).has(id)), x, y + 76, { italic: true, size: 13, color: INK.soft });
   if (wh) {
     wonderLine(ctx, id, T, x, y + 98);
     y += wh;
@@ -423,7 +424,9 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
 
   const d = defenders(game, id);
   const walls = wallsOf(game, id);
-  text(ctx, `${T.defenders}: ${men(d) ? troops(T, d) : T.undefended}`, x, y + 100, { size: 13 });
+  // Sisin içindeki yerin garnizonu bilinmez.
+  const hid = ui.fog && !sight(game, me).has(id);
+  text(ctx, `${T.defenders}: ${hid ? T.fogUnknown : men(d) ? troops(T, d) : T.undefended}`, x, y + 100, { size: 13, italic: hid, color: hid ? INK.soft : INK.ink });
   text(ctx, `${T.walls}: ${walls === "castle" ? T.wallsCastle : walls === "city" ? T.wallsCity : T.wallsNone}`, x, y + 118, { size: 13, color: INK.soft });
 
   text(ctx, T.roads.toLocaleUpperCase(ui.lang), x, y + 142, { bold: true, size: 11 });
@@ -724,7 +727,7 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
 }
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
-  const r = modalFrame(ctx, cam, boxes, 404, 360);
+  const r = modalFrame(ctx, cam, boxes, 448, 360);
   text(ctx, T.menu, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   const x = r.x + 20, w = r.w - 40;
   button(ctx, boxes, { x, y: r.y + 62, w, h: 42, label: T.resume, main: true, size: 15, act: { do: "close" } });
@@ -735,7 +738,7 @@ function menuModal(ctx, cam, game, ui, boxes, T) {
     button(ctx, boxes, { x: x + w - 2 * 56 + i * 56, y: r.y + 226, w: 50, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
   });
   // Ses ve müzik: ayrı ayrı aç-kapa.
-  [["sound", T.soundLabel, soundEnabled()], ["music", T.musicLabel, musicEnabled()]].forEach(([k, label, on], j) => {
+  [["sound", T.soundLabel, soundEnabled()], ["music", T.musicLabel, musicEnabled()], ["fog", T.fogLabel, ui.fog]].forEach(([k, label, on], j) => {
     const yy = r.y + 270 + j * 44;
     text(ctx, label, x, yy + 22, { bold: true, size: 14 });
     [[true, T.sndOn], [false, T.sndOff]].forEach(([v, l], i) => {

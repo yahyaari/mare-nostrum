@@ -458,3 +458,21 @@ Parthenon; Zeus heykeli ve Mozole haritadaki bir yerleşimde değil.)
 > Denge (70 oyun, harikadan önceki sürümle aynı anda ölçüldü): ilk düşüş ortancası 52 → 61, en
 > erken 25 → 29. Mısır 150 turda ayakta 52/70 → 56/70, "en büyük" dağılımı hemen hemen aynı.
 > Dünya biraz yavaşladı, düzeni bozulmadı.
+
+---
+
+## 19. Savaş sisi ve haritanın süsleri
+
+- **Ne görünür:** kendi ve müttefiklerinin yerleri ve orduları, artı bunların bir yol ötesi
+  (`src/rules/sight.js`). Ötesi boyalı bir sisle örtülür: yerleşimler ve sahipleri görünür
+  (haritalar herkesin elinde) ama soluk; ordular, filolar, limandaki gemiler ve garnizon
+  sayıları görünmez. Yabancı kartta garnizon "bilinmiyor (sis)".
+- **Tur gösterisi:** sisin içindeki hamleler gösterilmez, beklemeden geçer; yürüyen ordu sisten
+  çıkınca görünür.
+- **Sadece ekran:** bilgisayar her şeyi görür (plan.md 2.7). Menüden kapatılabilir (tercih
+  tarayıcıda saklanır).
+- **Süsler** (`src/view/atlas.js`): denizlerde Latince adlar (Mare Nostrum, Pontus Euxinus,
+  Mare Aegaeum…), karalarda bölge adları (Hispania, Gallia, Scythia, Aegyptus…), sol altta
+  pusula gülü, haritanın üstünde ağır ağır süzülen bulut gölgeleri (uzaktan bakınca beyaz
+  bulutlar da), rüzgârda dalgalanan sancaklar. Harita saniyede 20 kare canlı çizilir, sekme
+  arkadayken durur.

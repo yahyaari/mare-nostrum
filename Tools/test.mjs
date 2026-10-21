@@ -957,6 +957,34 @@ const WO = await import("../src/rules/wonders.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Savaş sisi (bölüm 19)");
+
+const SI = await import("../src/rules/sight.js");
+{
+  const s = S.newGame("saka", 7);
+  const seen = SI.sight(s, "saka");
+  check("kendi yerlerini görür", ["neapolis", "olbia", "tanais"].every((id) => seen.has(id)));
+  check("komşularını görür", neighbours("olbia").every((n) => seen.has(n)));
+  check("uzaktakini görmez", !seen.has("rome") && !seen.has("carthage") && !seen.has("babylon"));
+  const far = PLACES.find((p) => !seen.has(p.id) && p.owner !== "saka");
+  check("görülmeyen bir yer var (sis bir şey saklıyor)", !!far);
+
+  // Ordu gözdür: bir ordu nereye giderse oranın komşuları da görünür.
+  const a = S.formArmy(s, "neapolis", 10, 0);
+  a.at = "byzantium";
+  const seen2 = SI.sight(s, "saka");
+  check("ordu gittiği yerin çevresini açar", seen2.has("byzantium") && neighbours("byzantium").every((n) => seen2.has(n)));
+
+  // Müttefik gözü paylaşılır.
+  check("tarafsız medeniyetin yerini görmez", !SI.sight(s, "saka").has("rome"));
+  s.relations[S.key("saka", "rome")] = "ally";
+  const seen3 = SI.sight(s, "saka");
+  check("müttefikin yerlerini ve komşularını görür", seen3.has("rome") && neighbours("rome").every((n) => seen3.has(n)));
+  s.relations[S.key("saka", "rome")] = "war";
+  check("savaştığının yerini (komşu değilse) görmez", !SI.sight(s, "saka").has("rome"));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
 
 {

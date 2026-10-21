@@ -250,15 +250,17 @@ export function banner(ctx, owner, x, y, w, h, pole, o = {}) {
   ctx.strokeStyle = GOLD_DARK;
   ctx.lineWidth = 0.8;
   ctx.stroke();
-  // Kumaş: hafif dalgalı, altı sivri.
+  // Kumaş: altı sivri; rüzgârda (o.wave verilirse) alt ucu hafifçe sallanır.
   const l = x - w / 2, r = x + w / 2, b = top + h;
+  const sw = o.wave === undefined ? 0 : Math.sin(o.wave) * w * 0.1;
   const cloth = () => {
     ctx.beginPath();
     ctx.moveTo(l, top + 1);
     ctx.lineTo(r, top + 1);
-    ctx.lineTo(r, b - h * 0.2);
-    ctx.lineTo(x, b);
-    ctx.lineTo(l, b - h * 0.2);
+    ctx.quadraticCurveTo(r + sw * 0.3, top + h * 0.45, r + sw * 0.6, b - h * 0.2);
+    ctx.lineTo(x + sw, b);
+    ctx.lineTo(l + sw * 0.6, b - h * 0.2);
+    ctx.quadraticCurveTo(l + sw * 0.3, top + h * 0.45, l, top + 1);
     ctx.closePath();
   };
   ctx.save();
@@ -283,15 +285,15 @@ export function banner(ctx, owner, x, y, w, h, pole, o = {}) {
     ctx.beginPath();
     ctx.moveTo(l + 2.5, top + 3.5);
     ctx.lineTo(r - 2.5, top + 3.5);
-    ctx.lineTo(r - 2.5, b - h * 0.2 - 1);
-    ctx.lineTo(x, b - 3);
-    ctx.lineTo(l + 2.5, b - h * 0.2 - 1);
+    ctx.lineTo(r - 2.5 + sw * 0.6, b - h * 0.2 - 1);
+    ctx.lineTo(x + sw, b - 3);
+    ctx.lineTo(l + 2.5 + sw * 0.6, b - h * 0.2 - 1);
     ctx.closePath();
     ctx.strokeStyle = "rgba(236,212,154,0.7)";
     ctx.lineWidth = 0.8;
     ctx.stroke();
   }
-  emblem(ctx, owner, x, top + h * 0.43, w * 0.32);
+  emblem(ctx, owner, x + sw * 0.3, top + h * 0.43, w * 0.32);
 }
 
 /**

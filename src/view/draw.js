@@ -15,6 +15,7 @@ import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
 import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, ship, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
+import { clear, drawClouds, paintCompass, paintFog, paintLabels } from "./atlas.js";
 import { regions } from "./regions.js";
 import { TREES } from "../data/trees.js";
 
@@ -88,6 +89,8 @@ export function drawMap(ctx, cam, view, dpr) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const S = still(cam, view, dpr, L);
   ctx.drawImage(S.canvas, Math.round(-S.mx - (cam.x - S.cx) * k * dpr), Math.round(-S.my - (cam.y - S.cy) * k * dpr));
+  if (TERRAIN?.complete) drawClouds(ctx, cam, dpr, SIZE.x, performance.now() / 1000);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(vignette(Math.round(cam.w * dpr), Math.round(cam.h * dpr)), 0, 0);
 
   ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (cam.w / 2 - cam.x * k), dpr * (cam.h / 2 - cam.y * k));
@@ -386,7 +389,10 @@ function still(cam, view, dpr, L) {
   const W = Math.round(cam.w * dpr), H = Math.round(cam.h * dpr);
   const k = cam.scale;
   const ready = !!(TERRAIN?.complete && TERRAIN.naturalWidth);
-  const key = [k, W, H, ready, PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
+  // Sis görülen yerlere bağlı; adlar yazı tiplerine (yüklenince yeniden çizilsin).
+  const fog = view.fog ? [...view.seen].sort().join(",") + "/" + [...view.friends].sort().join(",") : "-";
+  const fonts = typeof document !== "undefined" ? document.fonts?.status : "";
+  const key = [k, W, H, ready, fog, fonts, PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
   if (layer && layer.key === key && Math.abs(cam.x - layer.cx) * k * dpr <= layer.mx && Math.abs(cam.y - layer.cy) * k * dpr <= layer.my) return layer;
   const mx = Math.round(W * 0.3), my = Math.round(H * 0.3);
   const canvas = layer?.canvas ?? document.createElement("canvas");
@@ -403,9 +409,14 @@ function still(cam, view, dpr, L) {
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  // Ağaçlar için görünen alan: katmanın tamamı.
+  // Ağaçlar için görünen alan: katmanın tamamı. Sonra sis, en üstte adlar ve pusula (sisin
+  // içinde de okunur: haritalar herkesin elinde).
   if (ready) {
     paintTerrain(ctx, view, L, px, { ...cam, w: cam.w * 1.6, h: cam.h * 1.6 });
+    const ox = mx + dpr * (cam.w / 2 - cam.x * k), oy = my + dpr * (cam.h / 2 - cam.y * k);
+    if (view.fog) paintFog(ctx, canvas, L.cells, POS, view.seen, view.friends, ox, oy, k, dpr);
+    paintLabels(ctx, ox, oy, k, dpr);
+    paintCompass(ctx, ox, oy, k, dpr);
     return layer;
   }
 
@@ -573,13 +584,18 @@ function drawPlaces(ctx, cam, view, L) {
 
   // Sancaklar ve maketler: önce sancak (direğin dibi maketin arkasında kalır), sonra maket.
   // Kuzeydekiler önce: güneydekinin sancağı onun üstüne düşer, tersi değil.
+  const now0 = performance.now();
   for (const { p, s } of [...shown].sort((a, b) => a.s.y - b.s.y)) {
     const owner = view.owners[p.id];
     const f = flagSize(p, owner, z);
-    banner(ctx, owner, s.x, s.y - 3 * z, f.w, f.h, f.pole, { gold: p.capital && !!owner });
+    // Sisin içindeki yer soluk: sahibi bilinir, içi görünmez.
+    ctx.globalAlpha = view.fog && !view.seen.has(p.id) ? 0.62 : 1;
+    const wave = now0 / 650 + (p.id.charCodeAt(0) + p.id.length * 7) * 0.9;
+    banner(ctx, owner, s.x, s.y - 3 * z, f.w, f.h, f.pole, { gold: p.capital && !!owner, wave });
     if (p.kind === "castle") castleModel(ctx, s.x, s.y + 2 * z, z * 1.15);
     else cityModel(ctx, s.x, s.y + 2 * z, z * 1.15, p.capital);
     if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1, view.blockade?.[p.id]);
+    ctx.globalAlpha = 1;
     // Dünya harikası: sancağın sağında altın tapınaklı madalyon.
     if (wonderAt(p.id)) wonderMark(ctx, s.x + f.w / 2 + 10, s.y - f.pole + 22, 8.5 * Math.max(1, Math.min(1.3, z)));
     // Bir görevin hedefi: sancağın solunda altın bir madalyon.
@@ -621,6 +637,8 @@ function drawPlaces(ctx, cam, view, L) {
     x: sx - FLEET.ax * zt, y: sy - FLEET.ay * zt, w: (FLEET.tag + tagW(a)) * zt, h: FLEET.h * zt, army: a, label: label(a), fleet: true, ...extra,
   });
   for (const a of view.armies ?? []) {
+    // Sisin içindeki yabancı ordu görünmez (yürürken de: bulunduğu nokta açık mı).
+    if (view.fog && a.owner !== view.me && !(a.float ? clear(a.float, view.seen, POS) : view.seen.has(a.at))) continue;
     // Yolda olan (animasyonla yürüyen) ordu bir yerleşime bağlı değil, yolun üstünde.
     if (a.float) {
       const s = toScreen(cam, a.float.x, a.float.y);
@@ -660,7 +678,9 @@ function drawPlaces(ctx, cam, view, L) {
     const lit = p.id === view.selected || p.id === view.hover;
     if (!lit && taken.some((t) => overlap(t, box))) continue;
     taken.push(box);
+    ctx.globalAlpha = view.fog && !view.seen.has(p.id) && !lit ? 0.78 : 1;
     plaque(ctx, name, s.x, box.y, { size, bold: p.capital, capital: p.capital, selected: lit });
+    ctx.globalAlpha = 1;
   }
 
   const now = performance.now();
@@ -771,7 +791,7 @@ function seaDir(id) {
 function docked(ctx, cam, view, shown, z) {
   for (const { p, s } of shown) {
     const n = view.docked?.[p.id];
-    if (!n) continue;
+    if (!n || (view.fog && !view.seen.has(p.id))) continue;
     const d = seaDir(p.id);
     const k = 0.66 * Math.max(1, Math.min(1.4, z));
     const r = Math.max(22, Math.min(30 * z, 0.4 * cam.scale));
