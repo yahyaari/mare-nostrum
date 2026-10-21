@@ -20,6 +20,8 @@ import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
 import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.js";
 import * as anim from "./view/anim.js";
+import * as sound from "./view/sound.js";
+import { relation } from "./rules/state.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
 import { drawUI, eventLines, missionText } from "./view/ui.js";
@@ -98,6 +100,7 @@ function redraw() {
     queued = false;
     const gliding = stepGlide();
     const view = anim.shape(mapView());
+    for (const c of anim.cues()) cue(c);
     tokens = drawMap(ctx, cam, view, dpr);
     boxes = [];
     drawUI(ctx, cam, game, ui, boxes, view);
@@ -117,10 +120,38 @@ function next() {
   return null;
 }
 
+// ---- ses ----
+
+let lastMarch = 0;
+/** Animasyonun yeni başlayan bir parçası: sesi. Görünmeyen (süresi 1 ms) parça sessiz. */
+function cue(c) {
+  if (c.dur <= 2) return;
+  if (c.kind === "march") {
+    // Bir medeniyetin bütün orduları birlikte yürür: üst üste davul olmasın.
+    const now = performance.now();
+    if (now - lastMarch < 700) return;
+    lastMarch = now;
+    const walk = Math.min(2.6, c.legs.reduce((a, b) => a + b, 0) / 1000);
+    if (roadBetween(c.path[0], c.path[1])?.sea) sound.row(walk);
+    else sound.march(walk);
+  } else if (c.kind === "clash") sound.clash();
+  else if (c.kind === "repaint" && c.from !== undefined) sound.horn(c.to === game?.player);
+  else if (c.kind === "banner") sound.turnCall();
+}
+
+/** Müzik: oyuncu biriyle savaştaysa gergin. */
+function updateMood() {
+  if (!game) return sound.setMood("peace");
+  sound.setMood(CIVS.some((c) => c.id !== game.player && relation(game, game.player, c.id) === "war") ? "war" : "peace");
+}
+
 /** Animasyon bitti ya da atlandı: bekleyen pencereyi aç. */
 function settle() {
   blocking = false;
   if (pending) {
+    if (pending.kind === "battle") (pending.ev.won ? sound.victory : sound.defeat)();
+    else if (pending.kind === "over") (game?.over?.result === "won" ? sound.victory : sound.defeat)();
+    else if (pending.kind === "decide" || pending.kind === "mission") sound.scroll();
     ui.modal = pending;
     pending = null;
     redraw();
@@ -266,6 +297,13 @@ function dispatch(act) {
   const me = game?.player;
   const m = ui.modal;
   switch (act.do) {
+    case "sound":
+      sound.setSound(act.on);
+      if (act.on) sound.click();
+      break;
+    case "music":
+      sound.setMusic(act.on);
+      break;
     case "lang":
       ui.lang = act.lang;
       try { localStorage.setItem("mn.lang", act.lang); } catch { /* varsayılan */ }
@@ -319,6 +357,7 @@ function dispatch(act) {
       ui.cardTab = act.tab;
       break;
     case "missionAccept":
+      sound.scroll();
       acceptMission(game, act.id);
       ui.modal = next();
       save();
@@ -394,6 +433,7 @@ function dispatch(act) {
     case "appoint": {
       const g = appoint(game, act.army);
       if (g) {
+        sound.horn(true);
         const a = armyById(game, act.army);
         anim.rise(a.at, fill(T().general, g.name), INK.warn);
         anim.pulse(a.at, INK.warn);
@@ -403,6 +443,7 @@ function dispatch(act) {
     }
     case "buildShip":
       if (buildShip(game, act.id)) {
+        sound.launch();
         anim.rise(act.id, T().addShip, INK.lane);
         anim.pulse(act.id, INK.lane);
       }
@@ -410,6 +451,7 @@ function dispatch(act) {
       break;
     case "games":
       if (holdGames(game, act.id)) {
+        sound.cheer();
         anim.rise(act.id, `${T().loyalty} +${N.loyalty.gamesGain}`, INK.good);
         anim.pulse(act.id, INK.good);
       }
@@ -430,13 +472,17 @@ function dispatch(act) {
     }
     case "upgrade":
       if (upgrade(game, act.id, act.what)) {
+        sound.build();
         anim.rise(act.id, T()[act.what] + " " + game.places[act.id][act.what], INK.good);
         anim.pulse(act.id, INK.good);
       }
       save();
       break;
     case "recruit":
-      if (recruit(game, act.id, act.type)) anim.rise(act.id, T()["add" + act.type[0].toUpperCase() + act.type.slice(1)], INK.ink);
+      if (recruit(game, act.id, act.type)) {
+        sound.recruit();
+        anim.rise(act.id, T()["add" + act.type[0].toUpperCase() + act.type.slice(1)], INK.ink);
+      }
       save();
       break;
     case "formOpen": {
@@ -453,6 +499,7 @@ function dispatch(act) {
       const a = formArmy(game, m.id, m.inf, m.arch, m.cav ?? 0, m.siege ?? 0, m.ships ?? 0);
       ui.modal = null;
       if (a) {
+        sound.muster();
         ui.sel = { kind: "army", id: a.id };
         anim.pulse(a.at, colorOf(a.owner));
       }
@@ -506,6 +553,7 @@ function dispatch(act) {
       ui.modal = { kind: "confirm", text: fill(T().declareQ, civName(act.civ, ui.lang)), yes: { do: "war", civ: act.civ } };
       break;
     case "war":
+      sound.war();
       declareWar(game, me, act.civ);
       ui.modal = { kind: "diplo" };
       save();
@@ -534,6 +582,7 @@ function dispatch(act) {
   // Görev yapıldığı anda tamamlanır: ödül ambara, haber ekrana.
   if (game && !game.over && ui.screen === "game" && act.do !== "endTurn") {
     const r = checkMissions(game);
+    if (r.done.length) sound.chime();
     r.done.forEach((mi, i) => {
       toast(fill(T().missionDone, missionText(game, mi, ui.lang).title));
       ["money", "weapons", "food"].forEach((k, j) => {
@@ -543,6 +592,7 @@ function dispatch(act) {
     });
     if (r.done.length || r.failed.length) save();
   }
+  updateMood();
   redraw();
 }
 
@@ -640,6 +690,7 @@ function tap(x, y) {
   for (let i = boxes.length - 1; i >= 0; i--) {
     const b = boxes[i];
     if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+      if (b.act) sound.click();
       // Mini harita: eylemi basılan noktayı da bilmeli.
       if (b.act?.do === "minimap") dispatch({ ...b.act, fx: (x - b.x) / b.w, fy: (y - b.y) / b.h });
       else if (b.act) dispatch(b.act);
@@ -663,6 +714,8 @@ const at = (e) => {
 };
 
 window.addEventListener("pointerdown", (e) => {
+  // Ses bağlamı ancak bir basıştan sonra açılabilir (tarayıcı kuralı).
+  sound.wake();
   pointers.set(e.pointerId, at(e));
   glideTo = null;
   if (pointers.size === 1) {
@@ -746,6 +799,7 @@ window.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 window.addEventListener("keydown", (e) => {
+  sound.wake();
   const step = 80;
   const keys = {
     "+": () => zoomAt(cam, 1.25, cam.w / 2, cam.h / 2),

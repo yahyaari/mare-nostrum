@@ -26,6 +26,7 @@ import {
 import { BOTTOM_H, TOP, drawBottomBar, drawRightColumn, drawTopBar } from "./hud.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, roundRect, shield, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
+import { musicEnabled, soundEnabled } from "./sound.js";
 import { drawVignette } from "./draw.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
@@ -723,7 +724,7 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
 }
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
-  const r = modalFrame(ctx, cam, boxes, 316, 360);
+  const r = modalFrame(ctx, cam, boxes, 404, 360);
   text(ctx, T.menu, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   const x = r.x + 20, w = r.w - 40;
   button(ctx, boxes, { x, y: r.y + 62, w, h: 42, label: T.resume, main: true, size: 15, act: { do: "close" } });
@@ -732,6 +733,14 @@ function menuModal(ctx, cam, game, ui, boxes, T) {
   text(ctx, T.language, x, r.y + 248, { bold: true, size: 14 });
   ["en", "tr"].forEach((l, i) => {
     button(ctx, boxes, { x: x + w - 2 * 56 + i * 56, y: r.y + 226, w: 50, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
+  });
+  // Ses ve müzik: ayrı ayrı aç-kapa.
+  [["sound", T.soundLabel, soundEnabled()], ["music", T.musicLabel, musicEnabled()]].forEach(([k, label, on], j) => {
+    const yy = r.y + 270 + j * 44;
+    text(ctx, label, x, yy + 22, { bold: true, size: 14 });
+    [[true, T.sndOn], [false, T.sndOff]].forEach(([v, l], i) => {
+      button(ctx, boxes, { x: x + w - 2 * 74 + i * 74, y: yy, w: 68, h: 34, label: l, main: on === v, size: 13, act: { do: k, on: v } });
+    });
   });
   text(ctx, "Natural Earth · github.com/yahyaari/mare-nostrum", r.x + r.w / 2, r.y + r.h - 22, { size: 10, color: INK.faint, align: "center" });
 }

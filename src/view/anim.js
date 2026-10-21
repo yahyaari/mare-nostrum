@@ -40,6 +40,17 @@ export function busy() {
 export const endsAt = () => items.reduce((m, i) => Math.max(m, i.t0 + i.dur), clock());
 
 /**
+ * Yeni başlayan animasyon parçaları (sesler için): her biri bir kere döner. Ses, animasyonun
+ * kendi saatine bağlı: hızlandırılınca ses de erken gelir, atlanan parça sessiz geçer.
+ */
+export function cues() {
+  const t = clock();
+  const out = [];
+  for (const i of items) if (!i.cued && t >= i.t0) { i.cued = true; out.push(i); }
+  return out;
+}
+
+/**
  * Kalan her şeyi `k` kat hızlandır: başlamamışlar öne çekilir, süren animasyon kaldığı
  * yerden hızlanır (atlamaz).
  */

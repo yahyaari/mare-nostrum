@@ -206,6 +206,10 @@ export const TEXT = {
     },
     year: "{0} BC",
     hudMissions: "Tasks",
+    soundLabel: "Sound",
+    musicLabel: "Music",
+    sndOn: "On",
+    sndOff: "Off",
     wonders: {
       pharos: ["Pharos of Alexandria", "harbour forts +1 in all your ports"],
       pyramids: ["The Pyramids", "+2 loyalty a turn in all your places"],
@@ -467,6 +471,10 @@ export const TEXT = {
     },
     year: "MÖ {0}",
     hudMissions: "Görevler",
+    soundLabel: "Ses",
+    musicLabel: "Müzik",
+    sndOn: "Açık",
+    sndOff: "Kapalı",
     wonders: {
       pharos: ["İskenderiye Feneri", "bütün limanlarında liman kalesi +1"],
       pyramids: ["Piramitler", "bütün yerlerinde sadakat turda +2"],

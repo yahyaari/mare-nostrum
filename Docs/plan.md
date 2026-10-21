@@ -102,7 +102,11 @@ kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sa
 
 **Görevler YAPILDI (21.10, kullanıcı "devam et"):** `src/rules/missions.js`, kurallar.md 17. Sekiz tür (sefer, donanma, dostluk, bayındırlık, büyük ordu, komutan, huzur, savunma), meclis adları medeniyete göre (Sakalarda Kurultay), kabul/ret penceresi, alt menüde Görevler listesi, haritada hedef madalyonu, yapılınca anında ödül. Görev zarı ayrı (`state.mrng`): dünya aynı yürür. 41 yeni kontrol.
 
-**Dünya harikaları YAPILDI (21.10):** `src/rules/wonders.js`, kurallar.md 18. Altı harika (Fener ve Piramitler Mısır'ın, Asma Bahçeler/Babil, Artemis/Efes, Rodos Heykeli, Parthenon/Atina bağımsız); şehri tutanın bütün ülkesine armağan. Haritada altın tapınak madalyonu, kartta satır, raporda haber. 15 yeni kontrol (1836). Denge: ilk düşüş 52 → 61. **Sırada: Ses ve müzik** (2.4).
+**Dünya harikaları YAPILDI (21.10):** `src/rules/wonders.js`, kurallar.md 18. Altı harika (Fener ve Piramitler Mısır'ın, Asma Bahçeler/Babil, Artemis/Efes, Rodos Heykeli, Parthenon/Atina bağımsız); şehri tutanın bütün ülkesine armağan. Haritada altın tapınak madalyonu, kartta satır, raporda haber. 15 yeni kontrol (1836). Denge: ilk düşüş 52 → 61.
+
+**Ses ve müzik YAPILDI (21.10):** `src/view/sound.js`, dosyasız (WebAudio, kodla). Efektler: düğme tıkı, yükseltmede çekiç+çan, asker basmada ayak, ordu çıkınca davul, gemi suya iner, yürüyüşte davul / denizde kürek, çarpışmada kılıç, yer el değiştirince boru, tur geçişinde boru çağrısı, zafer/yenilgi ezgisi, görevde zil, mektupta kâğıt, savaş ilanında ağır davul, oyunlarda kalabalık. Animasyon sesleri `anim.cues()` ile animasyonun kendi saatinden (hızlanınca erken, atlanınca sessiz). Müzik: D-A dem sesi + D Dor dizisinde seyrek lir notaları, yankılı; oyuncu savaştaysa altta yavaş davul. Menüde Ses / Müzik aç-kapa (tarayıcıda saklanır). Ölçüm: `node Tools/soundcheck.mjs` çevrimdışı ses bağlamına çaldırıp dalga ölçüldü (sessiz/kapalı 0, efektler tepe 0.19 patlamasız, müzik notalı, savaşta davul).
+
+**Sırada (plan sırası): kuşatma, büyüyen şehirler, kronik, savaş sahnesi, sis, arazi/mevsim, iki kişi; en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`
