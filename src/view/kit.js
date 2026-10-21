@@ -29,6 +29,10 @@ export const TITLE_FONT = '"Cinzel", Georgia, serif';
 const FONT_K = 1.12;
 export const TAU = Math.PI * 2;
 
+/** Farenin ekrandaki yeri (main.js günceller): üstüne gelinen düğme parlar. */
+export const pointer = { x: -1, y: -1 };
+export const over = (x, y, w, h) => pointer.x >= x && pointer.x <= x + w && pointer.y >= y && pointer.y <= y + h;
+
 const civ = Object.fromEntries(CIVS.map((c) => [c.id, c]));
 export const colorOf = (owner) => (owner ? civ[owner].color : FREE_COLOR);
 export const civName = (owner, lang, freeText) => (owner ? civ[owner].name[lang] : freeText);
@@ -172,14 +176,15 @@ function rounded(ctx, x, y, w, h, r) {
  */
 export function button(ctx, boxes, b) {
   const { x, y, w, h } = b;
+  const hot = !b.off && over(x, y, w, h);
   const g = ctx.createLinearGradient(0, y, 0, y + h);
   if (b.off) { g.addColorStop(0, "rgba(226,212,178,0.75)"); g.addColorStop(1, "rgba(214,198,160,0.75)"); }
-  else if (b.main) { g.addColorStop(0, "#3a2e22"); g.addColorStop(1, "#17120d"); }
-  else { g.addColorStop(0, "#fbf3df"); g.addColorStop(1, "#e4d3ab"); }
+  else if (b.main) { g.addColorStop(0, hot ? "#54432f" : "#3a2e22"); g.addColorStop(1, hot ? "#241c14" : "#17120d"); }
+  else { g.addColorStop(0, hot ? "#fffbf0" : "#fbf3df"); g.addColorStop(1, hot ? "#efe0bb" : "#e4d3ab"); }
   rounded(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 3);
   ctx.fillStyle = g;
   ctx.fill();
-  ctx.strokeStyle = b.off ? "rgba(140,120,90,0.55)" : b.main ? "#c9a45a" : "#5a4630";
+  ctx.strokeStyle = b.off ? "rgba(140,120,90,0.55)" : b.main ? (hot ? "#ecd49a" : "#c9a45a") : hot ? "#a87f3a" : "#5a4630";
   ctx.lineWidth = b.main ? 1.6 : 1.2;
   ctx.stroke();
   if (!b.off) {

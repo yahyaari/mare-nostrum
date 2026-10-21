@@ -20,7 +20,7 @@ import { TEXT, fill } from "./text.js";
 import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.js";
 import * as anim from "./view/anim.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
-import { INK, civName, colorOf } from "./view/kit.js";
+import { INK, civName, colorOf, pointer } from "./view/kit.js";
 import { drawUI, eventLines } from "./view/ui.js";
 import { chipRise } from "./view/hud.js";
 import { SIZE } from "./geo.js";
@@ -150,6 +150,7 @@ function mapView() {
   if (!game) return view;
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
+  view.hover = ui.hover ?? null;
   view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));
   view.unrest = Object.fromEntries(placesOf(game, game.player)
     .filter((id) => game.places[id].loyalty < N.loyalty.unrest).map((id) => [id, game.places[id].loyalty]));
@@ -622,7 +623,38 @@ window.addEventListener("pointerdown", (e) => {
   }
 });
 
+// Fare: üstüne gelinen düğme ve yerleşim parlar, imleç el olur. Sadece üstüne gelinen şey
+// değişince yeniden çizilir.
+let hoverKey = "";
+function hoverAt(p) {
+  pointer.x = p.x;
+  pointer.y = p.y;
+  let key = "", hot = false, place = null;
+  for (let i = boxes.length - 1; i >= 0; i--) {
+    const b = boxes[i];
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) {
+      key = b.act ? "b" + JSON.stringify(b.act) : "x" + i;
+      hot = !!b.act;
+      break;
+    }
+  }
+  if (!key && game && ui.screen === "game" && !blocking) {
+    const t = [...tokens].reverse().find((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h);
+    const pl = t ? null : nearest(p.x, p.y);
+    if (t) { key = "a" + t.army; hot = true; }
+    else if (pl) { key = "p" + pl.id; hot = true; place = pl.id; }
+  }
+  canvas.style.cursor = hot ? "pointer" : "";
+  if (key !== hoverKey) {
+    hoverKey = key;
+    ui.hover = place;
+    redraw();
+  }
+}
+canvas.addEventListener("pointerleave", () => { pointer.x = pointer.y = -1; hoverAt({ x: -1, y: -1 }); });
+
 window.addEventListener("pointermove", (e) => {
+  if (e.pointerType === "mouse" && !pointers.size) hoverAt(at(e));
   if (!pointers.has(e.pointerId)) return;
   const prev = pointers.get(e.pointerId);
   const now = at(e);

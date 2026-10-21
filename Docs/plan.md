@@ -57,8 +57,8 @@ de değişeceği için en son yazılır. **Sıra:**
 1. **Görevler** — oyuncuya yön verir ("şimdi ne yapsam" sorusu).
 2. **Dünya harikaları** — haritada ele geçirilmeye değer yerler.
 3. **Ses ve müzik** — ucuz, hissi çok değiştirir.
-4. Sonra: kuşatma, büyüyen şehirler, kronik, savaş sahnesi, sis, arazi/mevsim, telefona kurma,
-   aynı cihazda iki kişi.
+4. Sonra: kuşatma, büyüyen şehirler, kronik, savaş sahnesi, sis, arazi/mevsim, aynı cihazda
+   iki kişi. (Telefona kurma çıktı: kullanıcı "mobil yok" dedi.)
 5. **Öğretici** — en son, her şey bittikten sonra.
 
 **Görünüm (21.10, konuşuluyor):** kullanıcı Total War tarzı boyalı bir arayüz görseli gönderdi
@@ -89,6 +89,14 @@ bağımsız kule), direkli sancak, şehir/kale maketi, isim levhası (Cinzel), a
 Yazı tipleri Google Fonts'tan (index.html). Basış sancağa da tutar (`reach`).
 
 **2. ve 3. aşama YAPILDI (21.10):** `src/view/hud.js`: üst bant (asılı sancak, para/buğday/silah/nüfus, MÖ yıl + tur, rapor ve menü madalyonları), alt menü (Ordu ve Şehirler listeleri - yeni pencereler `armies`/`cities`, Diplomasi, Harita = uzaklaş/başkente dön), sağ altta sıradaki ordu, mini harita (basınca oraya kayar), Turu bitir. `kit.js`: parşömen panel (dokulu kâğıt, koyu çerçeve, altın iç çizgi, köşe baklavaları), kabarık kâğıt düğmeler, asıl eylem koyu-altın; yazı EB Garamond (boy x1.12), başlıklar Cinzel. Kartın başında şehrin çevresinin arazisi ve büyük maketi (`drawVignette`, ekranda yer varsa). Renkli kareler yerine armalı kalkan (`shield`). Tur şeridi koyu-altın. 1 tur = 1 yıl (MÖ 270'ten geri).
+
+**4. aşama YAPILDI (21.10):** ormanlık yerlere ağaç kümeleri (`Tools/terrain.py` ham renkten
+orman bulur, `src/data/trees.js` 5367 ağaç; uzakta seyrekleşir, yerleşim dibinde yok). Fare
+üstüne gelince düğme/madalyon/levha parlar, imleç el olur (`kit.pointer`, `main.js hoverAt`).
+Durağan katman ekrandan %30 büyük çiziliyor, kaydırırken sadece yeri değişiyor (başsız Edge'de
+kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sabit.
+
+**Görünüm bitti. Sırada: Görevler** (alt menüye "Görevler" düğmesi onunla gelecek).
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`

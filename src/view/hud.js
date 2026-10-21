@@ -10,7 +10,7 @@ import { N } from "../rules/numbers.js";
 import { budget, placesOf } from "../rules/state.js";
 import { fill } from "../text.js";
 import { drawMinimap } from "./draw.js";
-import { INK, SERIF, TAU, colorOf, delta, fmt, icon } from "./kit.js";
+import { INK, SERIF, TAU, colorOf, delta, fmt, icon, over } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, TITLE, emblem, roundRect, shade } from "./pieces.js";
 
 export const TOP = 50;
@@ -207,9 +207,10 @@ export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
   items.forEach(([kind, label, act, badge, badgeColor], i) => {
     const cx = x + 24 + i * bw + bw / 2, cy = y + 32;
     if (i) vline(ctx, x + 24 + i * bw, y + 14, cam.h - 10, "rgba(201,164,90,0.25)");
-    medal(ctx, null, cx, cy, 22, kind, null);
+    const hot = over(cx - bw / 2, y, bw, H);
+    medal(ctx, null, cx, cy, 22, kind, null, hot);
     ctx.font = `600 12px ${TITLE}`;
-    ctx.fillStyle = CREAM;
+    ctx.fillStyle = hot ? GOLD_LIGHT : CREAM;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, cx, y + H - 13);
@@ -237,7 +238,7 @@ export function drawRightColumn(ctx, cam, game, ui, boxes, T, view) {
   const { end, mini, next } = rightColumn(cam);
   const ready = game.armies.filter((a) => a.owner === game.player && a.moves > 0).length;
   if (ready) {
-    darkBox(ctx, next, 4);
+    darkBox(ctx, next, 4, over(next.x, next.y, next.w, next.h));
     // Cinzel'in 1'i Roma rakamı I gibi duruyor: sayı olan yazılar Garamond.
     ctx.font = `600 15px ${SERIF}`;
     ctx.fillStyle = CREAM;
@@ -257,14 +258,15 @@ export function drawRightColumn(ctx, cam, game, ui, boxes, T, view) {
   ctx.shadowColor = "rgba(0,0,0,0.5)";
   ctx.shadowBlur = 8;
   roundRect(ctx, end.x, end.y, end.w, end.h, 5);
+  const hotEnd = over(end.x, end.y, end.w, end.h);
   const g = ctx.createLinearGradient(0, end.y, 0, end.y + end.h);
-  g.addColorStop(0, "#3a2e22");
-  g.addColorStop(1, "#15110d");
+  g.addColorStop(0, hotEnd ? "#5a4732" : "#3a2e22");
+  g.addColorStop(1, hotEnd ? "#241c14" : "#15110d");
   ctx.fillStyle = g;
   ctx.fill();
   ctx.restore();
   roundRect(ctx, end.x + 0.5, end.y + 0.5, end.w - 1, end.h - 1, 5);
-  ctx.strokeStyle = GOLD;
+  ctx.strokeStyle = hotEnd ? GOLD_LIGHT : GOLD;
   ctx.lineWidth = 1.6;
   ctx.stroke();
   roundRect(ctx, end.x + 4.5, end.y + 4.5, end.w - 9, end.h - 9, 3);
@@ -282,7 +284,7 @@ export function drawRightColumn(ctx, cam, game, ui, boxes, T, view) {
   boxes.push({ ...end, act: { do: "endTurn" } });
 }
 
-function darkBox(ctx, r, rad) {
+function darkBox(ctx, r, rad, hot = false) {
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.45)";
   ctx.shadowBlur = 8;
@@ -291,7 +293,7 @@ function darkBox(ctx, r, rad) {
   ctx.fill();
   ctx.restore();
   roundRect(ctx, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, rad);
-  ctx.strokeStyle = GOLD_DARK;
+  ctx.strokeStyle = hot ? GOLD_LIGHT : GOLD_DARK;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 }
@@ -300,15 +302,15 @@ function darkBox(ctx, r, rad) {
 // Yuvarlak, altın halkalı düğme ve simgeleri
 
 /** Koyu bir madalyon, ortasında altın bir simge. `boxes` verilirse basılır. */
-export function medal(ctx, boxes, cx, cy, r, kind, act) {
+export function medal(ctx, boxes, cx, cy, r, kind, act, hot = boxes ? over(cx - r, cy - r, 2 * r, 2 * r) : false) {
   const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.4, r * 0.1, cx, cy, r);
-  g.addColorStop(0, "#3d3125");
+  g.addColorStop(0, hot ? "#5e4b36" : "#3d3125");
   g.addColorStop(1, "#110e0a");
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, TAU);
   ctx.fillStyle = g;
   ctx.fill();
-  ctx.strokeStyle = GOLD;
+  ctx.strokeStyle = hot ? GOLD_LIGHT : GOLD;
   ctx.lineWidth = 1.6;
   ctx.stroke();
   ctx.beginPath();

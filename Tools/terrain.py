@@ -39,3 +39,25 @@ out = np.clip(np.where(land, L, S), 0, 1)
 os.makedirs(os.path.join(root, "assets"), exist_ok=True)
 Image.fromarray((out * 255).astype(np.uint8)).save(os.path.join(root, "assets", "terrain.jpg"), quality=84)
 print("assets/terrain.jpg", crop.size, "pay", PAY)
+
+# Ağaçlar: ham rengi orman olan yerlere (yeşil baskın ve koyu) serpiştirilmiş noktalar,
+# src/data/trees.js. Ham renkler (derece başına 8 piksel, tonlanmamış) yerinde ölçüldü:
+# Kara Orman (162,187,161), Karpatlar (154,182,154), Balkanlar (171,194,160); Fransa'nın
+# açık tarlaları (183,207,166) ve Anadolu bozkırı (228,216,188) orman sayılmıyor.
+G = 8
+raw = img.crop((round((w + 180) * ppd), round((90 - n) * ppd), round((e + 180) * ppd), round((90 - s) * ppd)))
+raw = np.asarray(raw.resize(((e - w) * G, (n - s) * G), Image.BOX)).astype(int)
+r_, g_, b_ = raw[..., 0], raw[..., 1], raw[..., 2]
+forest = (g_ > r_ + 12) & (g_ > b_ + 12) & ((r_ + g_ + b_) / 3 < 182)
+rng = np.random.default_rng(270)
+pts = []
+for y, x in zip(*np.nonzero(forest)):
+    if rng.random() > 0.3:
+        continue
+    lon = w + (x + rng.random()) / G
+    lat = n - (y + rng.random()) / G
+    pts += [round(lon * 100), round(lat * 100)]
+with open(os.path.join(root, "src", "data", "trees.js"), "w", encoding="utf8") as f:
+    f.write("// Tools/terrain.py yazar, elle değiştirme. Ormanlık yerlerdeki ağaçlar: boylam*100, enlem*100.\n")
+    f.write("export const TREES = [" + ",".join(map(str, pts)) + "];\n")
+print("src/data/trees.js", len(pts) // 2, "ağaç")

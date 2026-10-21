@@ -15,6 +15,7 @@ import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
 import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, plaque, roundRect, ship, soldier } from "./pieces.js";
 import { regions } from "./regions.js";
+import { TREES } from "../data/trees.js";
 
 // ---- bir kere kurulan yollar ----
 
@@ -84,7 +85,9 @@ export function drawMap(ctx, cam, view, dpr) {
   // aynı: önbellekten tek bir resim olarak basılıyor. Animasyon her karede çizdiği için bu
   // olmadan telefon kare başına bütün kıyıları beş kez boyuyordu.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(still(cam, view, dpr, L), 0, 0);
+  const S = still(cam, view, dpr, L);
+  ctx.drawImage(S.canvas, Math.round(-S.mx - (cam.x - S.cx) * k * dpr), Math.round(-S.my - (cam.y - S.cy) * k * dpr));
+  ctx.drawImage(vignette(Math.round(cam.w * dpr), Math.round(cam.h * dpr)), 0, 0);
 
   ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (cam.w / 2 - cam.x * k), dpr * (cam.h / 2 - cam.y * k));
   ctx.lineJoin = "round";
@@ -115,14 +118,17 @@ export function drawMap(ctx, cam, view, dpr) {
   return tokens;
 }
 
-let stillCanvas = null, stillKey = "";
+// Durağan katman ekrandan her yönde %30 büyük çizilir: kaydırırken sadece yeri değişir, ancak
+// kenara gelince, yakınlık ya da bir yerin sahibi değişince yeniden çizilir. (Her kaydırma
+// karesinde araziyi, ağaçları ve toprakları baştan boyamak kareyi 25-45 ms'ye çıkarıyordu.)
+let layer = null; // { canvas, key, cx, cy, mx, my }
 
 // Boyalı arazi: Natural Earth II (Tools/terrain.py), görünen sınırların her yönde PAY derece
 // fazlası. Yüklenene kadar (açılışın ilk anı) eski çizgi harita çizilir.
 const PAY = 4; // Tools/terrain.py ile aynı
 const TERRAIN = typeof Image !== "undefined" ? new Image() : null;
 if (TERRAIN) {
-  TERRAIN.onload = () => { stillKey = ""; window.MareNostrum?.redraw?.(); };
+  TERRAIN.onload = () => { layer = null; window.MareNostrum?.redraw?.(); };
   TERRAIN.src = "assets/terrain.jpg";
 }
 
@@ -236,9 +242,78 @@ export function drawMinimap(ctx, r, cam, owners) {
   ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
 }
 
-function paintTerrain(ctx, view, L, px, W, H) {
+// ---- ağaçlar ----
+//
+// Ormanlık yerlere (Tools/terrain.py, src/data/trees.js) serpiştirilmiş küçük ağaç kümeleri,
+// kullanıcının görselindeki gibi. Haritayla birlikte büyürler; uzaktayken seyrekleşirler,
+// çok uzakta hiç çizilmezler. Yerleşimlerin dibinde ağaç yok: maket ve sancak temiz dursun.
+
+const TREE = 0.14; // bir kümenin eni, harita birimi
+let treeAt = null, treeSprites = null;
+
+function trees() {
+  if (treeAt) return treeAt;
+  const near = (x, y) => PLACES.some((p) => Math.hypot(POS[p.id].x - x, POS[p.id].y - y) < 0.45);
+  treeAt = [];
+  for (let i = 0; i < TREES.length; i += 2) {
+    const m = project(TREES[i] / 100, TREES[i + 1] / 100);
+    if (!near(m.x, m.y)) treeAt.push(m);
+  }
+  return treeAt;
+}
+
+function sprites() {
+  if (treeSprites) return treeSprites;
+  // Üç çeşit küme, 64 piksellik tuvallere bir kere çizilir.
+  treeSprites = [[[-0.18, 0.05, 0.26], [0.17, 0.1, 0.24], [0, -0.12, 0.27]], [[-0.12, 0, 0.3], [0.2, 0.08, 0.22]], [[0, -0.04, 0.32], [-0.24, 0.12, 0.2], [0.24, 0.14, 0.18]]]
+    .map((blobs) => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const g = c.getContext("2d");
+      g.translate(32, 36);
+      g.scale(64, 64);
+      g.fillStyle = "rgba(20,25,10,0.3)";
+      g.beginPath();
+      g.ellipse(0.04, 0.3, 0.42, 0.1, 0, 0, TAU);
+      g.fill();
+      for (const [x, y, r] of [...blobs].sort((p, q) => p[1] - q[1])) {
+        g.fillStyle = "#4a3523";
+        g.fillRect(x - 0.025, y + r * 0.5, 0.05, 0.16);
+        const rg = g.createRadialGradient(x - r * 0.35, y - r * 0.45, r * 0.1, x, y, r);
+        rg.addColorStop(0, "#7d9450");
+        rg.addColorStop(0.55, "#4d6a32");
+        rg.addColorStop(1, "#2f4521");
+        g.fillStyle = rg;
+        g.beginPath();
+        g.arc(x, y, r, 0, TAU);
+        g.fill();
+        g.strokeStyle = "rgba(25,32,15,0.7)";
+        g.lineWidth = 0.025;
+        g.stroke();
+      }
+      return c;
+    });
+  return treeSprites;
+}
+
+function paintTrees(ctx, cam) {
+  const r = cam.scale / cam.min;
+  if (TREE * cam.scale < 3.2) return;
+  const step = r < 1.4 ? 3 : r < 2.2 ? 2 : 1;
+  const hw = cam.w / 2 / cam.scale + TREE, hh = cam.h / 2 / cam.scale + TREE;
+  const S = sprites();
+  const list = trees();
+  for (let i = 0; i < list.length; i += step) {
+    const m = list[i];
+    if (Math.abs(m.x - cam.x) > hw || Math.abs(m.y - cam.y) > hh) continue;
+    ctx.drawImage(S[i % 3], m.x - TREE / 2, m.y - TREE * 0.56, TREE, TREE);
+  }
+}
+
+function paintTerrain(ctx, view, L, px, cam) {
   const a = project(BOUNDS.w - PAY, BOUNDS.n + PAY), b = project(BOUNDS.e + PAY, BOUNDS.s - PAY);
   ctx.drawImage(TERRAIN, a.x, a.y, b.x - a.x, b.y - a.y);
+  paintTrees(ctx, cam);
 
   // Topraklar: sahibinin renginde ince bir boya, kenarlarında içe doğru aynı renkte bir parıltı
   // (iki medeniyetin sınırı iki renkli görünür). Sadece karada.
@@ -288,36 +363,50 @@ function paintTerrain(ctx, view, L, px, W, H) {
   ctx.stroke(L.lanes);
   ctx.setLineDash([]);
 
-  // Kenarlarda hafif bir karartma: göz ortaya toplanır.
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.58);
+}
+
+/** Kenarlarda hafif bir karartma (göz ortaya toplanır); ekran boyu değişmedikçe aynı resim. */
+let veil = null;
+function vignette(W, H) {
+  if (veil && veil.width === W && veil.height === H) return veil;
+  veil = document.createElement("canvas");
+  veil.width = W;
+  veil.height = H;
+  const c = veil.getContext("2d");
+  const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.58);
   g.addColorStop(0, "rgba(20,14,8,0)");
   g.addColorStop(1, "rgba(20,14,8,0.42)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-  return stillCanvas;
+  c.fillStyle = g;
+  c.fillRect(0, 0, W, H);
+  return veil;
 }
 
 function still(cam, view, dpr, L) {
   const W = Math.round(cam.w * dpr), H = Math.round(cam.h * dpr);
-  const key = [cam.x, cam.y, cam.scale, W, H, PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
-  if (stillCanvas && key === stillKey) return stillCanvas;
-  stillCanvas ??= document.createElement("canvas");
-  if (stillCanvas.width !== W || stillCanvas.height !== H) { stillCanvas.width = W; stillCanvas.height = H; }
-  stillKey = key;
-  const ctx = stillCanvas.getContext("2d");
   const k = cam.scale;
+  const ready = !!(TERRAIN?.complete && TERRAIN.naturalWidth);
+  const key = [k, W, H, ready, PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
+  if (layer && layer.key === key && Math.abs(cam.x - layer.cx) * k * dpr <= layer.mx && Math.abs(cam.y - layer.cy) * k * dpr <= layer.my) return layer;
+  const mx = Math.round(W * 0.3), my = Math.round(H * 0.3);
+  const canvas = layer?.canvas ?? document.createElement("canvas");
+  if (canvas.width !== W + 2 * mx || canvas.height !== H + 2 * my) { canvas.width = W + 2 * mx; canvas.height = H + 2 * my; }
+  layer = { canvas, key, cx: cam.x, cy: cam.y, mx, my };
+  const ctx = canvas.getContext("2d");
   const px = (n) => n / k;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = INK.sea;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (cam.w / 2 - cam.x * k), dpr * (cam.h / 2 - cam.y * k));
+  ctx.setTransform(dpr * k, 0, 0, dpr * k, mx + dpr * (cam.w / 2 - cam.x * k), my + dpr * (cam.h / 2 - cam.y * k));
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  if (TERRAIN?.complete && TERRAIN.naturalWidth) return paintTerrain(ctx, view, L, px, W, H);
+  // Ağaçlar için görünen alan: katmanın tamamı.
+  if (ready) {
+    paintTerrain(ctx, view, L, px, { ...cam, w: cam.w * 1.6, h: cam.h * 1.6 });
+    return layer;
+  }
 
   // Kıyıya paralel iki ince dalga çizgisi: kıyıyı kalın boyayıp içini deniz rengiyle sil,
   // geriye iki kenar kalır. Karanın içine düşen yarısını birazdan kara örtüyor.
@@ -369,7 +458,7 @@ function still(cam, view, dpr, L) {
   ctx.setLineDash([px(5), px(4)]);
   ctx.stroke(L.lanes);
   ctx.setLineDash([]);
-  return stillCanvas;
+  return layer;
 }
 
 const lengths = {};
@@ -532,16 +621,17 @@ function drawPlaces(ctx, cam, view, L) {
   // Adlar: önce seçili, sonra başkentler, şehirler, kaleler. Bir levha başka bir levhanın, bir
   // maketin ya da bir ordunun üstüne düşecekse yazılmaz - yakınlaşınca yer açılır.
   const taken = [...shown.map(({ s }) => ({ x: s.x - 16 * z, y: s.y - 14 * z, w: 32 * z, h: 18 * z })), ...tokens.filter((t) => !t.moving)];
-  const rank = (p) => (p.id === view.selected ? 0 : p.capital ? 1 : p.kind === "city" ? 2 : 3);
+  const rank = (p) => (p.id === view.selected || p.id === view.hover ? 0 : p.capital ? 1 : p.kind === "city" ? 2 : 3);
   for (const { p, s } of [...shown].sort((a, b) => rank(a.p) - rank(b.p))) {
     const name = p.name[view.lang].toLocaleUpperCase(view.lang === "tr" ? "tr" : "en");
     const size = p.capital ? Math.max(11, Math.min(15, 10.5 * z)) : Math.max(9.5, Math.min(13, 9 * z));
     ctx.font = `${p.capital ? 700 : 600} ${size}px ${TITLE}`;
     const w = ctx.measureText(name).width + (p.capital ? 30 : 14);
     const box = { x: s.x - w / 2, y: s.y + 7 * z, w, h: size + 7 };
-    if (p.id !== view.selected && taken.some((t) => overlap(t, box))) continue;
+    const lit = p.id === view.selected || p.id === view.hover;
+    if (!lit && taken.some((t) => overlap(t, box))) continue;
     taken.push(box);
-    plaque(ctx, name, s.x, box.y, { size, bold: p.capital, capital: p.capital, selected: p.id === view.selected });
+    plaque(ctx, name, s.x, box.y, { size, bold: p.capital, capital: p.capital, selected: lit });
   }
 
   const now = performance.now();
