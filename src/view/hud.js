@@ -163,6 +163,7 @@ export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
     ["temple", T.hudCities, { do: "open", modal: "cities" }, trouble, INK.bad],
     ["hands", T.hudDiplo, { do: "open", modal: "diplo" }, 0],
     ["compass", T.hudMap, { do: "overview" }, 0],
+    ["scroll", T.hudMissions, { do: "open", modal: "missions" }, game.missions?.length ?? 0, GOLD],
   ];
   const bw = 96, H = BOTTOM_H;
   const W = items.length * bw + 48;

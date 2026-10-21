@@ -20,7 +20,7 @@
   Pages `master`'dan, push'tan ~1 dakika sonra yayında.
 - **Dil:** Arayüz İngilizce asıl, Türkçe ikinci (sağ üst / menü). Belgeler ve kod yorumları
   Türkçe.
-- **Push'tan önce:** `node Tools/test.mjs` (1775 kontrol, hepsi geçmeli). Kurala dokunduysan
+- **Push'tan önce:** `node Tools/test.mjs` (1821 kontrol, hepsi geçmeli). Kurala dokunduysan
   `node Tools/balance.mjs 70`. Arayüze dokunduysan `node Tools/peek.mjs ...` ve
   `node Tools/playtest.mjs ...` (komutlar `working-on-this.md`'de).
 
@@ -42,7 +42,7 @@
 | 21.10 | Liman | Balıkçılık, tersane, ticaret, liman kalesi; liman kartı iki sekmeli; Roma liman oldu (Ostia). |
 | 21.10 | Yürüyüş | Ordular yol uzunluğuna göre yürüyor, iz bırakıyor; dokunuş önce hızlandırır, sonra bitirir. |
 
-**Şu anki durum:** kayıt sürümü 5 (eskiler kendiliğinden yükseltiliyor), 1775 kontrol geçiyor,
+**Şu anki durum (21.10 akşam):** kayıt sürümü 6 (eskiler kendiliğinden yükseltiliyor), 1821 kontrol geçiyor,
 70 bot oyununda ilk medeniyetin düşüşü ortalama 51. tur (en erken 25), her oyunda savaş çıkıyor,
 "en büyük" çıkan medeniyet oyundan oyuna değişiyor.
 
@@ -98,7 +98,9 @@ kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sa
 
 **Donanma görünüşü (21.10, kullanıcı: "gemiler denizlerde donanma olarak gözüksün, kara ordusu gibi değil, denizden yürüsün"):** gemili ordu limanda denizde filo (1-3 kadırga, `pieces.galley/fleet`), deniz yolunda kadırga olarak yüzer (yönüne bakar, köpük izi), karada asker; limanda bekleyen gemiler demirli, yelkeni sarılı. Limanın denize bakan yönü kıyı verisinden (`draw.js seaDir`). Kural düzeltmesi: askersiz filo artık denize açılır, karadan yürümez (`canSail`, `moves.canUse`; kurallar.md 15).
 
-**Görünüm bitti. Sırada: Görevler** (alt menüye "Görevler" düğmesi onunla gelecek).
+**Görünüm bitti.**
+
+**Görevler YAPILDI (21.10, kullanıcı "devam et"):** `src/rules/missions.js`, kurallar.md 17. Sekiz tür (sefer, donanma, dostluk, bayındırlık, büyük ordu, komutan, huzur, savunma), meclis adları medeniyete göre (Sakalarda Kurultay), kabul/ret penceresi, alt menüde Görevler listesi, haritada hedef madalyonu, yapılınca anında ödül. Görev zarı ayrı (`state.mrng`): dünya aynı yürür. 41 yeni kontrol. **Sırada: Dünya harikaları** (2.3).
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`

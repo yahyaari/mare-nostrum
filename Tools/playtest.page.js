@@ -88,6 +88,13 @@ window.PT = (() => {
         await frame();
         continue;
       }
+      // Görev: çoğunu kabul et, arada bir reddet.
+      if (M.ui.modal.kind === "mission") {
+        stats.missions = (stats.missions ?? 0) + 1;
+        const ok = stats.missions % 4 !== 0;
+        if (!(await press((a) => a.do === (ok ? "missionAccept" : "missionDecline"), "görev düğmesi"))) break;
+        continue;
+      }
       if (!(await press((a) => a.do === "close"))) break;
     }
   }

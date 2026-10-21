@@ -13,7 +13,7 @@ import { BOUNDS, LON_SCALE } from "../data/bounds.js";
 import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
-import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, plaque, roundRect, ship, soldier } from "./pieces.js";
+import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, ship, soldier } from "./pieces.js";
 import { regions } from "./regions.js";
 import { TREES } from "../data/trees.js";
 
@@ -579,6 +579,8 @@ function drawPlaces(ctx, cam, view, L) {
     if (p.kind === "castle") castleModel(ctx, s.x, s.y + 2 * z, z * 1.15);
     else cityModel(ctx, s.x, s.y + 2 * z, z * 1.15, p.capital);
     if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1, view.blockade?.[p.id]);
+    // Bir görevin hedefi: sancağın solunda altın bir madalyon.
+    if (view.goals?.[p.id]) goalMark(ctx, s.x - f.w / 2 - 10, s.y - f.pole + 2);
     // Huzursuz (sadakati düşük) kendi yerin: sancağın yanında kırmızı bir ünlem rozeti.
     const lo = view.unrest?.[p.id];
     if (lo !== undefined) {

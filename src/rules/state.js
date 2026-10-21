@@ -8,7 +8,7 @@ import { CIVS, PLACES, ROADS } from "../data/world.js";
 import { byId } from "./graph.js";
 import { LEVELS, N, UNITS, trait } from "./numbers.js";
 
-export const VERSION = 5;
+export const VERSION = 6;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -34,6 +34,11 @@ export function migrate(s) {
       p.shipyard ??= byId[id].port ? 1 : 0;
     }
     s.version = 5;
+  }
+  if (s.version === 5) {
+    s.missions ??= [];
+    s.lastMission ??= 0;
+    s.version = 6;
   }
   return s;
 }
@@ -71,6 +76,8 @@ export function newGame(player, seed = 1, level = "normal") {
     truce: {}, // "a|b" -> bu tura kadar bilgisayar savaş açmaz (haraç ödendi)
     offered: {}, // "a|b" -> bilgisayarın oyuncuya son teklif ettiği tur
     inbox: [], // oyuncunun karar vermesi gereken olaylar ve teklifler
+    missions: [], lastMission: 0, // oyuncunun görevleri (missions.js); kendi zarı mrng
+    mrng: Math.imul(seed | 0 || 1, 0x9e3779b1) | 0 || 7,
     events: [], over: null,
   };
 }

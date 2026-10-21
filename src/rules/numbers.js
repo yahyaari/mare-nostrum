@@ -119,6 +119,9 @@ export const N = {
 
   // Bilgisayarın oyuncuya teklifleri (bölüm 8)
   offers: { spacing: 6, truce: 8, tributeRatio: 1.8 },
+  // Görevler (bölüm 17): 3. turdan sonra, aynı anda en fazla 2, arası en az 5 tur, gelme
+  // ihtimali o tur için yarı yarıya. Süresi geçen görev başkentin sadakatini 5 düşürür.
+  missions: { from: 3, spacing: 5, chance: 0.5, max: 2, failLoyalty: 5 },
 };
 
 // Zorluk: bilgisayarın OYUNCUYA ne zaman savaş açtığı ve bilgisayarın üretimi. Bilgisayarlar

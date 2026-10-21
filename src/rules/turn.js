@@ -8,6 +8,7 @@
 import { CIVS } from "../data/world.js";
 import { aiTurn } from "./ai.js";
 import { roll, settleInbox } from "./events.js";
+import { check as checkMissions, issue } from "./missions.js";
 import { tick } from "./loyalty.js";
 import { advance, refresh } from "./moves.js";
 import { N, UNITS, trait } from "./numbers.js";
@@ -69,6 +70,9 @@ export function endTurn(state) {
   for (const c of CIVS) if (state.civs[c.id].alive) roll(state, c.id);
   refresh(state, state.player);
   for (const a of armiesOf(state, state.player)) advance(state, a);
+  // Görevler: tamamlanan ödülünü alır, süresi geçen düşer, belki yenisi gelir.
+  checkMissions(state, events);
+  issue(state, events);
   checkOver(state);
   state.events = events;
   return events;

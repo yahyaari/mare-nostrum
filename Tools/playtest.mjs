@@ -54,7 +54,7 @@ try {
   if (!(cont && after === before)) process.exitCode = 1;
   await page.shot(dir, "99_son");
   console.log(`\nson: tur ${last?.turn} yer ${last?.places} asker ${last?.men} | en yavaş tur ${slow}ms`);
-  console.log(`basış ${s.pressed} yükseltme ${s.upgrades} bölük ${s.recruits} ordu ${s.armies} yürüyüş ${s.marches} saldırı ${s.attacks} (zafer ${s.won}) savaş ilanı ${s.wars} ittifak ${s.allies} karar ${s.decided} liman yapısı ${s.port} gemi ${s.ships}`);
+  console.log(`basış ${s.pressed} yükseltme ${s.upgrades} bölük ${s.recruits} ordu ${s.armies} yürüyüş ${s.marches} saldırı ${s.attacks} (zafer ${s.won}) savaş ilanı ${s.wars} ittifak ${s.allies} karar ${s.decided} liman yapısı ${s.port} gemi ${s.ships} görev ${s.missions ?? 0}`);
   if (s.over) console.log("oyun bitti: " + JSON.stringify(s.over));
   const missed = [...new Set(s.missed)];
   if (missed.length) console.log("bulunamayan düğmeler: " + missed.slice(0, 10).join(" | "));

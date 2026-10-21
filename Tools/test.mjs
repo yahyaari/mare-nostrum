@@ -740,6 +740,161 @@ section("Liman yapıları (bölüm 16)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Görevler (bölüm 17)");
+
+const MI = await import("../src/rules/missions.js");
+{
+  const ships = (g, c) => S.placesOf(g, c).reduce((n, id) => n + g.places[id].ships, 0) + S.armiesOf(g, c).reduce((n, a) => n + a.ships, 0);
+  const s = S.newGame("rome", 7);
+  s.turn = 5;
+
+  // Al: komşu, kimsenin değil ya da savaştığın birinin.
+  const t = MI.make(s, "take");
+  check("al: hedef komşu ve Roma'nın değil", t && s.places[t.place].owner !== "rome" && neighbours(t.place).some((n) => s.places[n].owner === "rome"));
+  check("al: tarafsız medeniyetin yeri hedef olmaz", t && (s.places[t.place].owner === null || S.relation(s, "rome", s.places[t.place].owner) === "war"));
+  s.missions.push(t);
+  check("al: alınmadan tamamlanmaz", !MI.check(s).done.length && s.missions.length === 1);
+  const money = s.civs.rome.money;
+  s.places[t.place].owner = "rome";
+  const r1 = MI.check(s);
+  check("al: alınınca ödül ambara, görev düşer", r1.done.length === 1 && s.civs.rome.money === money + t.reward.money && !s.missions.length);
+
+  // Filo: toplam gemi üç fazla.
+  const f = MI.make(s, "fleet");
+  check("filo: hedef bugünkü gemi + 3", f && f.need === ships(s, "rome") + 3 && MI.progress(s, f)[1] === f.need);
+  s.missions.push(f);
+  s.places.rome.ships += 2;
+  check("filo: iki gemi yetmez", !MI.check(s).done.length);
+  s.places.rome.ships += 1;
+  check("filo: üçüncü gemiyle tamam", MI.check(s).done[0] === f);
+
+  // İttifak
+  const al = MI.make(s, "ally");
+  check("ittifak: tarafsız bir medeniyet", al && al.other !== "rome" && S.relation(s, "rome", al.other) === "neutral");
+  s.missions.push(al);
+  s.relations[S.key("rome", al.other)] = "ally";
+  check("ittifak: kurulunca tamam", MI.check(s).done[0] === al);
+
+  // Bayındırlık: yükselebilecek bir yapı bir seviye.
+  const gr = MI.make(s, "grow");
+  check("bayındırlık: kendi yeri, yükselebilir yapı", gr && s.places[gr.place].owner === "rome" && S.upgradeInfo(s, gr.place, gr.what).why !== "max" && gr.need === s.places[gr.place][gr.what] + 1);
+  s.missions.push(gr);
+  check("bayındırlık: yükselmeden tamamlanmaz", !MI.check(s).done.length);
+  s.places[gr.place][gr.what] = gr.need;
+  check("bayındırlık: yükselince tamam", MI.check(s).done[0] === gr);
+
+  // Büyük ordu
+  const ar = MI.make(s, "army");
+  check("ordu: en az 150 asker", ar && ar.need >= 150);
+  s.missions.push(ar);
+  const a = S.formArmy(s, "rome", 30, 0);
+  check("ordu: küçük ordu yetmez", !MI.check(s).done.length);
+  a.inf = ar.need;
+  check("ordu: yeter büyüklükte ordu", MI.check(s).done[0] === ar);
+
+  // General: yoksa ata, varsa rütbe atlat.
+  const ge = MI.make(s, "general");
+  check("general: generali yoksa 'bir general ata'", ge && ge.need === 1);
+  s.missions.push(ge);
+  s.civs.rome.money = 500;
+  GN.appoint(s, a.id);
+  check("general: atanınca tamam", MI.check(s).done[0] === ge);
+  const ge2 = MI.make(s, "general");
+  check("general: varsa bir rütbe üstü", ge2 && ge2.need === a.general.level + 1);
+
+  // Huzur: sadakati düşük yer yoksa verilmez.
+  check("huzur: sadakat yüksekken görev yok", MI.make(s, "loyal") === null);
+  s.places.tarentum.loyalty = 40;
+  const lo = MI.make(s, "loyal");
+  check("huzur: düşük sadakatli yer", lo && lo.place === "tarentum" && lo.need === 80);
+  s.missions.push(lo);
+  s.places.tarentum.loyalty = 85;
+  check("huzur: sadakat yükselince tamam", MI.check(s).done[0] === lo);
+
+  // Savunma: kapısında düşman yoksa verilmez; varsa süre dolunca tamam, kaybedilirse düşer.
+  check("savunma: tehdit yokken görev yok", MI.make(s, "hold") === null);
+  s.relations[S.key("rome", "gaul")] = "war";
+  const enemy = S.formArmy(s, "bibracte", 10, 0);
+  enemy.at = neighbours("ariminum").find((n) => s.places[n].owner !== "rome") ?? "mediolanum";
+  const ho = MI.make(s, "hold");
+  check("savunma: tehdit altındaki yer", ho && M.menace(s, ho.place) > 0);
+  s.missions.push(ho);
+  check("savunma: süre dolmadan tamamlanmaz", !MI.check(s).done.length && s.missions.includes(ho));
+  s.turn = ho.until;
+  check("savunma: süre dolunca, yer hâlâ elindeyse tamam", MI.check(s).done[0] === ho);
+  s.turn = 5;
+  const ho2 = MI.make(s, "hold");
+  s.missions.push(ho2);
+  const capLoyalty = s.places.rome.loyalty = 90;
+  s.places[ho2.place].owner = "gaul";
+  const r2 = MI.check(s);
+  check("savunma: yer düşerse görev başarısız, başkentin sadakati −5", r2.failed[0] === ho2 && s.places.rome.loyalty === capLoyalty - N.missions.failLoyalty);
+  s.places[ho2.place].owner = "rome";
+
+  // Süre: geçen görev düşer.
+  const late = MI.make(s, "fleet");
+  s.missions.push(late);
+  s.turn = late.until;
+  check("son turda hâlâ açık", !MI.check(s).failed.length && s.missions.includes(late) && MI.turnsLeft(s, late) === 1);
+  s.turn = late.until + 1;
+  check("süresi geçince düşer", MI.check(s).failed[0] === late && !s.missions.length);
+
+  // Kabul ve ret
+  const x = MI.make(s, "army");
+  s.missions.push(x);
+  check("kabul: görüldü işareti", MI.accept(s, x.id) && x.seen);
+  check("ret: görev düşer, ceza yok", MI.decline(s, x.id) && !s.missions.length);
+}
+
+{
+  // Görev gelişi: başta yok, aynı anda en fazla iki, arası en az beş tur, aynı türden iki yok;
+  // ve dünyanın zarına dokunmaz.
+  const s = S.newGame("macedon", 3);
+  const chance = N.missions.chance;
+  N.missions.chance = 1;
+  s.turn = N.missions.from - 1;
+  check("ilk turlarda görev gelmez", MI.issue(s) === null);
+  s.turn = N.missions.from;
+  const rng = s.rng;
+  const a = MI.issue(s);
+  check("görev gelir", !!a && s.missions.length === 1);
+  check("görev dünyanın zarını kullanmaz", s.rng === rng);
+  s.turn += 1;
+  check("arası en az beş tur", MI.issue(s) === null);
+  s.turn += N.missions.spacing;
+  const b = MI.issue(s);
+  check("ikinci görev, farklı türden", !!b && b.key !== a.key);
+  s.turn += N.missions.spacing;
+  check("aynı anda en fazla iki", MI.issue(s) === null && s.missions.length === N.missions.max);
+  N.missions.chance = chance;
+
+  // Tur sonu: görevler sadece oyuncuya; görev olsa da olmasa da dünya aynı yürür.
+  const run = (max) => {
+    const keep = N.missions.max;
+    N.missions.max = max;
+    const g = S.newGame("egypt", 11);
+    for (let i = 0; i < 12; i++) T.endTurn(g);
+    N.missions.max = keep;
+    return g;
+  };
+  const withM = run(2), without = run(0);
+  check("görevler sadece oyuncunun", withM.missions.length > 0 && withM.missions.every((m) => m.civ === "egypt"));
+  check("görevlerle dünyanın zarı aynı", withM.rng === without.rng);
+  check("rapora yeni görev yazılır", T.endTurn(S.newGame("gaul", 5)) && true);
+
+  // Kayıt
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 5;
+  delete old.missions; delete old.lastMission; delete old.mrng;
+  S.migrate(old);
+  check("5. sürüm kayıt yükseltiliyor", old.version === S.VERSION && Array.isArray(old.missions) && old.lastMission === 0);
+  old.turn = 9;
+  N.missions.chance = 1;
+  check("eski kayıtta görev zarı kendiliğinden kurulur", !!MI.issue(old) && Number.isInteger(old.mrng));
+  N.missions.chance = chance;
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
 
 {

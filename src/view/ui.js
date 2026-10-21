@@ -19,6 +19,7 @@ import { TEXT, fill } from "../text.js";
 import { drift } from "../rules/loyalty.js";
 import { appointInfo } from "../rules/generals.js";
 import { options as letterOptions } from "../rules/events.js";
+import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
 import {
   INK, SERIF, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, panel, text, wrap,
 } from "./kit.js";
@@ -515,7 +516,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, form: formModal, diplo: diploModal, report: reportModal, battle: battleModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal,
+    armies: armiesModal, cities: citiesModal, mission: missionModal, missions: missionsModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -644,6 +645,8 @@ export function eventLines(game, lang) {
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
+    if (e.type === "missionNew") out.push([fill(T.evMissionNew, missionText(game, e.mission, lang).title), null]);
+    if (e.type === "mission") out.push([fill(e.ok ? T.evMissionOk : T.evMissionFail, missionText(game, e.mission, lang).title), e.ok ? "good" : "bad"]);
     if (e.type === "battle" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
     if (e.type === "battle" && e.drowned && e.defender === me) out.push([fill(T.evDrowned, name(e.attacker), placeName(e.place, lang)), "good"]);
     if (e.type === "riot" && e.civ === me) out.push([fill(T.evRiot, placeName(e.place, lang)), null]);
@@ -834,6 +837,61 @@ function citiesModal(ctx, cam, game, ui, boxes, T, m) {
     else if (blockaded(game, id)) text(ctx, T.blockadeNote, right, y + 20, { bold: true, italic: true, size: 12, color: INK.bad, align: "right" });
   });
   pager(ctx, boxes, r, r.y + 62 + pg.rows.length * rowH + 6, pg);
+  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+}
+
+/** Bir görevin yazıları: başlık ve açıklama. */
+export function missionText(game, m, lang) {
+  const T = TEXT[lang];
+  const L = T.missions[m.key];
+  const a = m.place ? placeName(m.place, lang) : m.other ? civName(m.other, lang) : "";
+  const b = m.need ?? "", c = m.what ? T[m.what] : "";
+  return { title: fill(L.title, a, b, c), body: fill(L.body, a, b, c) };
+}
+
+const leftText = (game, m, T) => {
+  const n = turnsLeft(game, m);
+  return n <= 1 ? T.mLast : fill(T.mLeft, n);
+};
+
+/** Yeni görev: meclisin kalkanı, başlık, açıklama, süre, ödül; kabul ya da ret. */
+function missionModal(ctx, cam, game, ui, boxes, T, mm) {
+  const m = game.missions?.find((x) => x.id === mm.id);
+  if (!m) return;
+  const L = missionText(game, m, ui.lang);
+  const body = wrap(ctx, L.body, 400, { size: 15, italic: true });
+  const r = modalFrame(ctx, cam, boxes, 236 + body.length * 22, 460);
+  const cx = r.x + r.w / 2;
+  shield(ctx, game.player, cx - 13, r.y + 18, 26);
+  text(ctx, fill(T.mFrom, T.councils[game.player]), cx, r.y + 70, { italic: true, size: 13, color: INK.soft, align: "center" });
+  text(ctx, L.title, cx, r.y + 98, { title: true, bold: true, size: 20, align: "center" });
+  ornament(ctx, cx, r.y + 110, 170);
+  body.forEach((l, i) => text(ctx, l, cx, r.y + 138 + i * 22, { size: 15, italic: true, align: "center" }));
+  const y = r.y + 138 + body.length * 22 + 6;
+  text(ctx, leftText(game, m, T), r.x + 28, y + 4, { bold: true, size: 13, color: INK.warn });
+  const rw = text(ctx, T.mReward + ":", r.x + r.w - 150, y + 4, { bold: true, size: 13 });
+  costLine(ctx, m.reward, r.x + r.w - 150 + rw + 52, y + 4, INK.ink, 13);
+  twoButtons(ctx, boxes, r, { label: T.mAccept, act: { do: "missionAccept", id: m.id } }, { label: T.mDecline, act: { do: "missionDecline", id: m.id } });
+}
+
+/** Alt menüden: açık görevler. Yeri olan göreve basınca harita oraya kayar. */
+function missionsModal(ctx, cam, game, ui, boxes, T) {
+  const list = game.missions ?? [];
+  const rowH = 70;
+  const r = modalFrame(ctx, cam, boxes, 84 + Math.max(1, list.length) * rowH + 74, 560);
+  text(ctx, T.missionsTitle, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  if (!list.length) text(ctx, T.noMissions, r.x + r.w / 2, r.y + 100, { italic: true, size: 14, color: INK.soft, align: "center" });
+  const x = r.x + 26, right = r.x + r.w - 26;
+  list.forEach((m, i) => {
+    const y = r.y + 62 + i * rowH;
+    listRow(ctx, boxes, r, y, rowH - 4, i, { do: "pickMission", id: m.id });
+    const L = missionText(game, m, ui.lang);
+    text(ctx, L.title, x, y + 22, { title: true, bold: true, size: 15 });
+    const pr = missionProgress(game, m);
+    text(ctx, L.body + (pr ? `  (${pr[0]} / ${pr[1]})` : ""), x, y + 42, { italic: true, size: 13, color: INK.soft });
+    text(ctx, leftText(game, m, T), right, y + 22, { bold: true, size: 13, color: INK.warn, align: "right" });
+    costLine(ctx, m.reward, right - 50, y + 56, INK.ink, 12);
+  });
   oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
 }
 

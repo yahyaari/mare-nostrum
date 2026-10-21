@@ -401,3 +401,34 @@ oyundan çıkar.
 
 İzlenen savaş, gemiler ve deniz savaşı, ticaret, atlı birlikler, haritada sis, olaylar (salgın,
 isyan).
+
+---
+
+## 17. Görevler
+
+Oyuncunun meclisi (Roma'da Senato, Kartaca'da Yüzler Meclisi, Mısır'da Firavunun sarayı,
+Makedonya'da Kralın yoldaşları, Partlarda Şahlar Şahı, Galya'da Druidler, Sakalarda Kurultay)
+birkaç turda bir görev verir. Bilgisayarlar görev almaz.
+
+- **Ne zaman:** 3. turdan sonra, her tur sonunda yarı yarıya ihtimalle; iki görevin arası en az
+  5 tur; aynı anda en fazla 2; aynı türden iki görev olmaz.
+- **Kabul ya da ret:** gelen görev bir pencerede sorulur. Ret cezasız.
+- **Tamamlanınca** ödül hemen ambara girer (görev yapıldığı anda, tur sonunu beklemez).
+  **Süresi geçerse** görev düşer ve başkentin sadakati 5 azalır.
+- **Türler:**
+
+| Görev | Ne istenir | Süre | Ödül |
+|---|---|---|---|
+| Sefer | Komşu bir yeri al (bağımsız ya da savaştığın birinin) | 8 tur | 30 + 10 × seviye para, 5 silah |
+| Güçlü bir donanma | Toplam gemi bugünkünden 3 fazla | 7 tur | 25 para, 10 silah |
+| Dostluk | Tarafsız bir medeniyetle ittifak | 10 tur | 40 para |
+| Bayındırlık | Bir yerleşimin bir yapısını bir seviye yükselt | 6 tur | 30 para 15 yiyecek (şehir seviyesi), 15 para 10 yiyecek (öteki) |
+| Büyük ordu | En büyük ordunun 1.5 katı, en az 150 asker tek ordu | 6 tur | 15 silah, 15 yiyecek |
+| Komutan | Generalin yoksa ata; varsa birini bir rütbe yükselt | 10 tur | 20 / 50 para |
+| Huzur | Sadakati 60'ın altındaki bir yerin sadakati 80 olsun | 6 tur | 25 para |
+| Savunma | Kapısında düşman olan yeri 4 tur elde tut (kaybedersen hemen düşer) | 4 tur | 30 para, 10 silah |
+
+- **Ekranda:** alt menüde *Görevler* (açık görev sayısı), haritada hedef yerin sancağının
+  yanında altın bir madalyon, tur raporunda yeni / tamamlanan / düşen görevler.
+- **Zar:** görevlerin zarı ayrı (`state.mrng`): görev gelse de gelmese de savaşlar, olaylar ve
+  bilgisayarın kararları aynı zarla yürür. Kayıt sürümü 6.

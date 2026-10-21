@@ -13,6 +13,7 @@ import {
 } from "./rules/state.js";
 import { resolve as answer } from "./rules/events.js";
 import { appoint } from "./rules/generals.js";
+import { accept as acceptMission, check as checkMissions, decline as declineMission } from "./rules/missions.js";
 import { blockaded } from "./rules/state.js";
 import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
@@ -21,7 +22,7 @@ import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.j
 import * as anim from "./view/anim.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { drawUI, eventLines } from "./view/ui.js";
+import { drawUI, eventLines, missionText } from "./view/ui.js";
 import { chipRise } from "./view/hud.js";
 import { SIZE } from "./geo.js";
 import { trait } from "./rules/numbers.js";
@@ -111,6 +112,8 @@ function next() {
   if (!game) return null;
   if (game.over) return { kind: "over" };
   if (game.inbox?.length) return { kind: "decide" };
+  const fresh = game.missions?.find((x) => !x.seen);
+  if (fresh) return { kind: "mission", id: fresh.id };
   return null;
 }
 
@@ -151,6 +154,7 @@ function mapView() {
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
   view.hover = ui.hover ?? null;
+  view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place).map((x) => [x.place, true]));
   view.docked = Object.fromEntries(PLACES.filter((p) => p.port && game.places[p.id].ships > 0).map((p) => [p.id, game.places[p.id].ships]));
   view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));
   view.unrest = Object.fromEntries(placesOf(game, game.player)
@@ -314,6 +318,27 @@ function dispatch(act) {
     case "cardTab":
       ui.cardTab = act.tab;
       break;
+    case "missionAccept":
+      acceptMission(game, act.id);
+      ui.modal = next();
+      save();
+      break;
+    case "missionDecline":
+      declineMission(game, act.id);
+      ui.modal = next();
+      save();
+      break;
+    case "pickMission": {
+      // Görev listesinden: yeri olan görevde harita oraya kayar, ittifak görevinde diplomasi.
+      const mi = game.missions?.find((x) => x.id === act.id);
+      ui.modal = null;
+      if (mi?.place) {
+        ui.sel = { kind: "place", id: mi.place };
+        const mm = placeAt(mi.place);
+        glide(mm.x, mm.y, Math.max(cam.scale, cam.min * 2.4));
+      } else if (mi?.other) ui.modal = { kind: "diplo" };
+      break;
+    }
     case "modalPage":
       if (m) m.page = act.page;
       break;
@@ -506,6 +531,18 @@ function dispatch(act) {
       break;
     }
   }
+  // Görev yapıldığı anda tamamlanır: ödül ambara, haber ekrana.
+  if (game && !game.over && ui.screen === "game" && act.do !== "endTurn") {
+    const r = checkMissions(game);
+    r.done.forEach((mi, i) => {
+      toast(fill(T().missionDone, missionText(game, mi, ui.lang).title));
+      ["money", "weapons", "food"].forEach((k, j) => {
+        if (mi.reward[k]) anim.riseAt(chipRise(cam, k), "+" + mi.reward[k], INK.good, 300 + (i * 3 + j) * 120);
+      });
+      if (mi.place) anim.pulse(mi.place, "#e3b23c", 200);
+    });
+    if (r.done.length || r.failed.length) save();
+  }
   redraw();
 }
 
@@ -565,12 +602,16 @@ function tapPlace(id) {
   redraw();
 }
 
-/** Basılan yerdeki ordu; filo, bir şehrin tam üstündeyse sayılmaz (şehir kazanır). */
+/**
+ * Basılan yerdeki ordu. Uzaktan bakınca bir ordu (ya da limandaki filo) komşu bir şehrin
+ * üstüne düşebiliyor: bir şehrin tam üstüne basıldıysa şehir kazanır. Ordu kendi şehrinin
+ * sağında durduğu için kendi şehri onu örtmez.
+ */
 function tokenAt(x, y) {
   const t = [...tokens].reverse().find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
-  if (!t?.fleet) return t;
+  if (!t) return t;
   const pl = nearest(x, y);
-  return pl && reach(cam, pl.id, x, y) < 16 ? null : t;
+  return pl && reach(cam, pl.id, x, y) < (t.fleet ? 16 : 11) ? null : t;
 }
 
 /** Basılan yere en yakın yerleşim (maketi ya da sancağı), yeterince yakınsa. */

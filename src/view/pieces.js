@@ -322,6 +322,29 @@ export function shield(ctx, owner, x, y, s) {
   emblem(ctx, owner, x + s / 2, y + h * 0.45, s * 0.3);
 }
 
+/** Görev hedefi: koyu madalyon, altın halka, içinde küçük bir tomar. */
+export function goalMark(ctx, x, y) {
+  ctx.beginPath();
+  ctx.arc(x, y, 8.5, 0, TAU);
+  ctx.fillStyle = DARK;
+  ctx.fill();
+  ctx.strokeStyle = GOLD_LIGHT;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.fillStyle = GOLD_LIGHT;
+  ctx.fillRect(x - 3.2, y - 4, 6.4, 8);
+  for (const [cx, cy] of [[x - 3.2, y - 4], [x + 3.2, y - 4], [x - 3.2, y + 4], [x + 3.2, y + 4]]) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 1.2, 0.8, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.strokeStyle = DARK;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  for (const yy of [-1.8, 0.2, 2.2]) { ctx.moveTo(x - 2, y + yy); ctx.lineTo(x + 2, y + yy); }
+  ctx.stroke();
+}
+
 // ---- maketler ----
 
 function gable(ctx, x, y, w, h, roof) {
