@@ -7,6 +7,7 @@
 import { N } from "./numbers.js";
 import { random } from "./rng.js";
 import { armyById } from "./state.js";
+import { holds } from "./wonders.js";
 
 // Tarihî adlar, medeniyete göre. Aynı medeniyette aynı ad iki kez kullanılmaz; liste biterse
 // "II" eklenir.
@@ -67,9 +68,10 @@ export const has = (gen, t) => !!gen && gen.traits.includes(t);
  * Savaştan sonra tecrübe. Seviye atlarsa ve 2. ya da 4. seviyeye geldiyse yeni bir özellik.
  * Dönen: { up: yeni seviye | null, trait: kazanılan özellik | null }.
  */
-export function learn(state, gen, won) {
+export function learn(state, gen, won, owner = null) {
   if (!gen) return { up: null, trait: null };
-  gen.xp += won ? G().xpWin : G().xpLoss;
+  // Parthenon'u tutanın generalleri iki kat öğrenir.
+  gen.xp += (won ? G().xpWin : G().xpLoss) * (holds(state, owner, "parthenon") ? N.wonders.parthenonXp : 1);
   let up = null, trait = null;
   while (gen.level < XP.length && gen.xp >= XP[gen.level]) {
     gen.level += 1;

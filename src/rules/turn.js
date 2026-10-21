@@ -13,6 +13,7 @@ import { tick } from "./loyalty.js";
 import { advance, refresh } from "./moves.js";
 import { N, UNITS, trait } from "./numbers.js";
 import { armiesOf, budget, empty, info, placesOf, popCap } from "./state.js";
+import { holds } from "./wonders.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -43,7 +44,8 @@ export function economy(state, events) {
     for (const id of placesOf(state, c.id)) {
       const pl = state.places[id];
       const cap = popCap(pl, info(id).kind);
-      const grow = starving ? 0 : cap * N.growth * trait(c.id, "growth");
+      const gardens = holds(state, c.id, "gardens") ? N.wonders.gardensGrowth : 1;
+      const grow = starving ? 0 : cap * N.growth * trait(c.id, "growth") * gardens;
       pl.pop = Math.min(cap, Math.round(pl.pop + grow));
     }
     tick(state, c.id, starving, events);

@@ -122,6 +122,8 @@ export const N = {
   // Görevler (bölüm 17): 3. turdan sonra, aynı anda en fazla 2, arası en az 5 tur, gelme
   // ihtimali o tur için yarı yarıya. Süresi geçen görev başkentin sadakatini 5 düşürür.
   missions: { from: 3, spacing: 5, chance: 0.5, max: 2, failLoyalty: 5 },
+  // Dünya harikaları (bölüm 18): şehri tutanın bütün ülkesine.
+  wonders: { pharosFort: 1, pyramidsLoyalty: 2, gardensGrowth: 1.25, artemisMoney: 1.1, colossusTrade: 1.5, parthenonXp: 2 },
 };
 
 // Zorluk: bilgisayarın OYUNCUYA ne zaman savaş açtığı ve bilgisayarın üretimi. Bilgisayarlar

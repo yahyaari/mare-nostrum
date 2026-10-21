@@ -7,6 +7,7 @@
 import { CIVS, PLACES, ROADS } from "../data/world.js";
 import { byId } from "./graph.js";
 import { LEVELS, N, UNITS, trait } from "./numbers.js";
+import { holds } from "./wonders.js";
 
 export const VERSION = 6;
 
@@ -139,9 +140,12 @@ export function output(state, id) {
   const shut = blockaded(state, id);
   // Liman: kendi 1 balığı + balıkçılık, ve ticaret parası. Ablukada balık yok, para yarı.
   const fish = p.port && !shut ? (N.fish + pl.fishery * N.port.fishPerLevel) * castle * trait(c, "fish") : 0;
-  const trade = p.port ? pl.trade * N.port.tradePerLevel * castle : 0;
+  // Harikalar: Rodos Heykeli ticareti, Artemis Tapınağı bütün parayı artırır.
+  const W = N.wonders;
+  const trade = p.port ? pl.trade * N.port.tradePerLevel * castle * (holds(state, c, "colossus") ? W.colossusTrade : 1) : 0;
+  const pilgrims = holds(state, c, "artemis") ? W.artemisMoney : 1;
   return {
-    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * ai * (shut ? N.navy.blockadeMoney : 1),
+    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * ai * pilgrims * (shut ? N.navy.blockadeMoney : 1),
     weapons: pl.industry * castle * trait(c, "weapons") * ai,
     food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") + fish) * ai,
   };

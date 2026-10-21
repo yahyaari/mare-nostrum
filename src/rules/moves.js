@@ -11,6 +11,7 @@ import { bestAt, bury, has, learn } from "./generals.js";
 import { N, UNITS, trait } from "./numbers.js";
 import { between } from "./rng.js";
 import { armiesAt, armyById, canSail, empty, info, men, placesOf, relation } from "./state.js";
+import { holds } from "./wonders.js";
 
 /**
  * `civ` buraya girebilir mi, girerse ne olur:
@@ -158,7 +159,12 @@ export function canAttack(state, army, id) {
 }
 
 /** Liman kalesinin savunan filoya çarpanı. */
-export const fortOf = (state, id) => 1 + (state.places[id].fort ?? 0) * N.port.fortPerLevel;
+export const fortOf = (state, id) => {
+  const pl = state.places[id];
+  // İskenderiye Feneri'ni tutanın bütün limanlarında liman kalesi bir seviye fazla sayılır.
+  const pharos = holds(state, pl.owner, "pharos") ? N.wonders.pharosFort : 0;
+  return 1 + ((pl.fort ?? 0) + pharos) * N.port.fortPerLevel;
+};
 
 /** Bir yerin gemileri: limandakiler ve sahibinin orada duran ordularınınkiler. */
 export function shipsAt(state, id) {
@@ -214,7 +220,7 @@ export function attack(state, armyId, id, luck = null) {
     capture(state, id, army.owner);
     army.at = id;
     ev.fallen = loser && !state.civs[loser].alive ? loser : null;
-    if (army.general) ev.gen = { name: army.general.name, ...learn(state, army.general, true) };
+    if (army.general) ev.gen = { name: army.general.name, ...learn(state, army.general, true, army.owner) };
   } else {
     // Savunanların sağ kalanları: her birim aynı oranda. (Bölüğe yuvarlanıyordu: 7 kişi 10
     // oluyordu, savaşı kazanan savunma asker kazanabiliyordu.)
@@ -226,7 +232,7 @@ export function attack(state, armyId, id, luck = null) {
     // Saldıranın generali ordusuyla öldü; savunmayı tutan general tecrübe kazandı.
     bury(state, army.owner, army.general);
     if (army.general) ev.genFell = army.general.name;
-    if (defGen) learn(state, defGen, true);
+    if (defGen) learn(state, defGen, true, pl.owner);
     for (const a of state.armies) if (a.at === id && a.owner === pl.owner && empty(a)) bury(state, a.owner, a.general);
     state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && empty(a)));
   }

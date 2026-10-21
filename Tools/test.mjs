@@ -895,6 +895,68 @@ const MI = await import("../src/rules/missions.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Dünya harikaları (bölüm 18)");
+
+const WO = await import("../src/rules/wonders.js");
+{
+  check("altı harika, her biri gerçek bir yerleşimde", WO.WONDERS.length === 6 && WO.WONDERS.every((w) => byId[w.place]));
+  const s = S.newGame("rome", 7);
+  check("Mısır başta iki harika tutuyor (Fener, Piramitler)", WO.wondersOf(s, "egypt").map((w) => w.id).sort().join() === "pharos,pyramids");
+  check("Roma başta harika tutmuyor", WO.wondersOf(s, "rome").length === 0 && !WO.holds(s, "rome", "parthenon"));
+  check("bağımsız şehirdeki harika kimsenin değil", !WO.holds(s, null, "gardens") && WO.wonderAt("babylon").id === "gardens");
+
+  // Rodos Heykeli: limanlarda ticaret x1.5. Artemis: bütün para x1.1.
+  s.places.tarentum.trade = 2;
+  const t0 = S.output(s, "tarentum").money;
+  s.places.rhodes.owner = "rome";
+  const t1 = S.output(s, "tarentum").money;
+  const tradeMoney = 2 * N.port.tradePerLevel;
+  check("Rodos Heykeli: Roma'nın limanında ticaret x1.5", Math.abs(t1 - t0 - tradeMoney * (N.wonders.colossusTrade - 1)) < 1e-9);
+  const r0 = S.output(s, "rome").money;
+  s.places.ephesus.owner = "rome";
+  check("Artemis Tapınağı: para x1.1", Math.abs(S.output(s, "rome").money / r0 - N.wonders.artemisMoney) < 1e-9);
+  check("Artemis başkasının parasına dokunmaz", Math.abs(S.output(s, "carthage").money - S.output(S.newGame("rome", 7), "carthage").money) < 1e-9);
+
+  // Piramitler: sadakat +2.
+  check("Piramitler: Mısır'ın yerlerinde sadakat +2", LY.drift(s, "jerusalem").parts.wonder === N.wonders.pyramidsLoyalty);
+  check("Piramitler: Roma'da yok", LY.drift(s, "tarentum").parts.wonder === 0);
+  s.places.memphis.owner = "rome";
+  check("Memphis alınınca Piramitler Roma'nın", LY.drift(s, "tarentum").parts.wonder === N.wonders.pyramidsLoyalty && LY.drift(s, "jerusalem").parts.wonder === 0);
+
+  // Fener: liman kalesi bir seviye fazla.
+  check("Fener: İskenderiye'nin deniz savunması bir seviye fazla", M.fortOf(s, "alexandria") === 1 + N.port.fortPerLevel && M.fortOf(s, "carthage") === 1);
+
+  // Asma Bahçeler: nüfus artışı x1.25.
+  const grow = (owner) => {
+    const g = S.newGame("rome", 7);
+    g.places.babylon.owner = owner;
+    g.places.tarentum.pop = 20;
+    T.economy(g, []);
+    return g.places.tarentum.pop - 20;
+  };
+  check("Asma Bahçeler: Roma'nın nüfus artışı x1.25", grow("rome") > grow(null));
+
+  // Parthenon: generaller iki kat öğrenir.
+  const gen = () => ({ name: "x", level: 1, xp: 0, traits: [] });
+  const g1 = gen(), g2 = gen();
+  GN.learn(s, g1, true, "rome");
+  s.places.athens.owner = "rome";
+  GN.learn(s, g2, true, "rome");
+  check("Parthenon: Roma'nın generali iki kat tecrübe", g2.xp === g1.xp * N.wonders.parthenonXp && g1.xp > 0);
+
+  // Harika şehirle el değiştirir: savaşta alınan şehir.
+  const w = S.newGame("rome", 7);
+  w.relations[S.key("rome", "macedon")] = "war";
+  const a = S.formArmy(w, "tarentum", 10, 0);
+  a.inf = 900; a.at = "corinth"; a.moves = 1;
+  w.places.corinth.owner = "rome";
+  w.places.athens.owner = "macedon";
+  check("Atina Makedonya'nınken Parthenon onun", WO.holds(w, "macedon", "parthenon"));
+  const ev = M.attack(w, a.id, "athens", [1, 1]);
+  check("Atina alınınca Parthenon Roma'nın", ev?.won && WO.holds(w, "rome", "parthenon") && !WO.holds(w, "macedon", "parthenon"));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
 
 {

@@ -14,6 +14,7 @@ import { capture, defenders } from "./moves.js";
 import { N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import { men, placesOf } from "./state.js";
+import { holds } from "./wonders.js";
 
 const L = N.loyalty;
 
@@ -50,8 +51,10 @@ export function drift(state, id, starving = false, dist = null) {
     famine: starving ? -L.famine : 0,
     // Sert bir generalin ordusu oradaysa halk hizaya gelir.
     general: state.armies.some((a) => a.at === id && a.owner === pl.owner && a.general?.traits.includes("stern")) ? 4 : 0,
+    // Piramitleri tutan medeniyetin halkı huşu içinde.
+    wonder: holds(state, pl.owner, "pyramids") ? N.wonders.pyramidsLoyalty : 0,
   };
-  return { total: parts.settle + parts.garrison + parts.far + parts.famine + parts.general, parts };
+  return { total: parts.settle + parts.garrison + parts.far + parts.famine + parts.general + parts.wonder, parts };
 }
 
 /** İsyancıların gücü: nüfusun dörtte biri. */

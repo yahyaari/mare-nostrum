@@ -432,3 +432,29 @@ birkaç turda bir görev verir. Bilgisayarlar görev almaz.
   yanında altın bir madalyon, tur raporunda yeni / tamamlanan / düşen görevler.
 - **Zar:** görevlerin zarı ayrı (`state.mrng`): görev gelse de gelmese de savaşlar, olaylar ve
   bilgisayarın kararları aynı zarla yürür. Kayıt sürümü 6.
+
+---
+
+## 18. Dünya harikaları
+
+Altı şehirde antik dünyanın harikaları var. Harika ayrıca saklanmaz: **şehri kim tutuyorsa
+harika onundur** ve armağanı onun bütün ülkesine gelir. Şehir savaşta ya da isyanla el
+değiştirince harika da değiştirir. (Antik dünyanın yedi harikasından haritaya düşen beşi ve
+Parthenon; Zeus heykeli ve Mozole haritadaki bir yerleşimde değil.)
+
+| Harika | Şehir | Başta kimin | Armağan |
+|---|---|---|---|
+| İskenderiye Feneri | İskenderiye | Mısır | Bütün limanlarında liman kalesi bir seviye fazla sayılır |
+| Piramitler | Memphis | Mısır | Bütün yerlerinde sadakat turda +2 |
+| Asma Bahçeler | Babil | bağımsız | Bütün yerlerinde nüfus artışı × 1.25 |
+| Artemis Tapınağı | Efes | bağımsız | Bütün yerlerinde para × 1.1 |
+| Rodos Heykeli | Rodos | bağımsız | Bütün limanlarında ticaret × 1.5 |
+| Parthenon | Atina | bağımsız | Generallerin iki kat tecrübe kazanır |
+
+- **Ekranda:** haritada harika şehrin sancağının sağında altın tapınaklı bir madalyon; şehir
+  kartında harikanın adı ve armağanı; Şehirler listesinde madalyon; bir harika el değiştirince
+  tur raporunda herkese haber.
+
+> Denge (70 oyun, harikadan önceki sürümle aynı anda ölçüldü): ilk düşüş ortancası 52 → 61, en
+> erken 25 → 29. Mısır 150 turda ayakta 52/70 → 56/70, "en büyük" dağılımı hemen hemen aynı.
+> Dünya biraz yavaşladı, düzeni bozulmadı.

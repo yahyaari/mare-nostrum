@@ -24,7 +24,8 @@ import {
   INK, SERIF, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, panel, text, wrap,
 } from "./kit.js";
 import { BOTTOM_H, TOP, drawBottomBar, drawRightColumn, drawTopBar } from "./hud.js";
-import { CREAM, DARK, GOLD, GOLD_DARK, roundRect, shield, soldier } from "./pieces.js";
+import { CREAM, DARK, GOLD, GOLD_DARK, roundRect, shield, soldier, wonderMark } from "./pieces.js";
+import { wonderAt } from "../rules/wonders.js";
 import { drawVignette } from "./draw.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
@@ -160,8 +161,9 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   // yapıları, gemi, filo). Sekme çubuğu başlığın altında, kart iki sekmede de aynı boyda.
   const tabs = p.port ? 42 : 0;
   const tab = p.port && ui.cardTab === "port" ? "port" : "city";
-  const vh = vignetteHeight(cam, 538 + tabs);
-  const r = cardRect(cam, 538 + tabs + vh);
+  const wh = wonderAt(id) ? 22 : 0;
+  const vh = vignetteHeight(cam, 538 + tabs + wh);
+  const r = cardRect(cam, 538 + tabs + wh + vh);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   if (vh) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: vh - 4 });
   closeX(ctx, boxes, r);
@@ -170,6 +172,10 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
 
   text(ctx, p.name[ui.lang], x, y + 32, { title: true, bold: true, size: 20 });
   text(ctx, kindLine(id, game, T), x, y + 52, { italic: true, size: 13, color: INK.soft });
+  if (wh) {
+    wonderLine(ctx, id, T, x, y + 74);
+    y += wh;
+  }
 
   const cap = popCap(pl, p.kind);
   amount(ctx, "pop", `${pl.pop} / ${Math.round(cap)}`, x, y + 80, { size: 14 });
@@ -337,6 +343,20 @@ function rule(ctx, x1, x2, y) {
   ctx.stroke();
 }
 
+/** Kartta harika satırı: madalyon, adı ve armağanı. */
+function wonderLine(ctx, id, T, x, y) {
+  const w = wonderAt(id);
+  const [name, gift] = T.wonders[w.id];
+  wonderMark(ctx, x + 8, y - 5, 8);
+  const nw = text(ctx, name, x + 22, y, { title: true, bold: true, size: 12, color: "#7a5418" });
+  // Kartın enine sığmazsa armağan küçülür, yine sığmazsa kısalır.
+  const room = 324 - 28 - nw;
+  let g = "· " + gift, size = 12;
+  if (measure(ctx, g, { italic: true, size }) > room) size = 11;
+  while (g.length > 4 && measure(ctx, g, { italic: true, size }) > room) g = g.slice(0, -2) + "…";
+  text(ctx, g, x + 28 + nw, y, { italic: true, size, color: INK.soft });
+}
+
 /** Başlığın altında: iki yana uzanan çizgi, ortada baklava. */
 function ornament(ctx, cx, y, w) {
   ctx.strokeStyle = GOLD_DARK;
@@ -376,14 +396,15 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
   const roads = neighbours(id).map((n) => placeName(n, ui.lang) + (roadBetween(id, n).sea ? ` (${T.bySea})` : "")).join(", ");
   const W = cardRect(cam, 0).w;
   const lines = wrap(ctx, roads, W - 36, { size: 13 });
-  const h = 150 + lines.length * 18 + (can ? 52 : 0);
+  const wh = wonderAt(id) ? 22 : 0;
+  const h = 150 + lines.length * 18 + (can ? 52 : 0) + wh;
   const vh = vignetteHeight(cam, h);
   const r = cardRect(cam, h + vh);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   if (vh) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: vh - 4 });
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
-  const y = r.y + vh;
+  let y = r.y + vh;
 
   text(ctx, p.name[ui.lang], x, y + 32, { title: true, bold: true, size: 20 });
   shield(ctx, pl.owner, x, y + 40, 13);
@@ -394,6 +415,10 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
     text(ctx, "· " + label, x + 26 + w, y + 54, { size: 13, italic: true, color });
   }
   text(ctx, kindLine(id, game, T), x, y + 76, { italic: true, size: 13, color: INK.soft });
+  if (wh) {
+    wonderLine(ctx, id, T, x, y + 98);
+    y += wh;
+  }
 
   const d = defenders(game, id);
   const walls = wallsOf(game, id);
@@ -405,7 +430,7 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
 
   if (can) {
     const e = forecast(game, army, me, id);
-    const by = y + h - 50;
+    const by = y + h - wh - 50;
     const [label, color] = oddsLabel(e.odds, T);
     text(ctx, `${T.odds}: `, x, by + 24, { size: 14 });
     text(ctx, label, x + measure(ctx, `${T.odds}: `, { size: 14 }), by + 24, { size: 14, bold: true, color });
@@ -645,6 +670,9 @@ export function eventLines(game, lang) {
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
+    if (e.type === "battle" && e.won && wonderAt(e.place)) {
+      out.push([fill(T.evWonder, name(e.attacker), T.wonders[wonderAt(e.place).id][0]), e.attacker === me ? "good" : e.defender === me ? "bad" : null]);
+    }
     if (e.type === "missionNew") out.push([fill(T.evMissionNew, missionText(game, e.mission, lang).title), null]);
     if (e.type === "mission") out.push([fill(e.ok ? T.evMissionOk : T.evMissionFail, missionText(game, e.mission, lang).title), e.ok ? "good" : "bad"]);
     if (e.type === "battle" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
@@ -825,7 +853,8 @@ function citiesModal(ctx, cam, game, ui, boxes, T, m) {
   pg.rows.forEach((id, i) => {
     const y = r.y + 62 + i * rowH, pl = game.places[id], p = byId[id];
     listRow(ctx, boxes, r, y, rowH - 2, i, { do: "pickPlace", id });
-    const nw = text(ctx, p.name[ui.lang], x, y + 20, { bold: true, size: 15 });
+    let nw = text(ctx, p.name[ui.lang], x, y + 20, { bold: true, size: 15 });
+    if (wonderAt(id)) { wonderMark(ctx, x + nw + 14, y + 15, 7.5); nw += 22; }
     text(ctx, kindLine(id, game, T), x + nw + 10, y + 20, { italic: true, size: 12, color: INK.soft });
     const lo = pl.loyalty;
     const lc = lo < N.loyalty.revolt ? INK.bad : lo < N.loyalty.unrest ? INK.warn : INK.good;

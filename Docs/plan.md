@@ -20,7 +20,7 @@
   Pages `master`'dan, push'tan ~1 dakika sonra yayında.
 - **Dil:** Arayüz İngilizce asıl, Türkçe ikinci (sağ üst / menü). Belgeler ve kod yorumları
   Türkçe.
-- **Push'tan önce:** `node Tools/test.mjs` (1821 kontrol, hepsi geçmeli). Kurala dokunduysan
+- **Push'tan önce:** `node Tools/test.mjs` (1836 kontrol, hepsi geçmeli). Kurala dokunduysan
   `node Tools/balance.mjs 70`. Arayüze dokunduysan `node Tools/peek.mjs ...` ve
   `node Tools/playtest.mjs ...` (komutlar `working-on-this.md`'de).
 
@@ -42,7 +42,7 @@
 | 21.10 | Liman | Balıkçılık, tersane, ticaret, liman kalesi; liman kartı iki sekmeli; Roma liman oldu (Ostia). |
 | 21.10 | Yürüyüş | Ordular yol uzunluğuna göre yürüyor, iz bırakıyor; dokunuş önce hızlandırır, sonra bitirir. |
 
-**Şu anki durum (21.10 akşam):** kayıt sürümü 6 (eskiler kendiliğinden yükseltiliyor), 1821 kontrol geçiyor,
+**Şu anki durum (21.10 akşam):** kayıt sürümü 6 (eskiler kendiliğinden yükseltiliyor), 1836 kontrol geçiyor,
 70 bot oyununda ilk medeniyetin düşüşü ortalama 51. tur (en erken 25), her oyunda savaş çıkıyor,
 "en büyük" çıkan medeniyet oyundan oyuna değişiyor.
 
@@ -100,7 +100,9 @@ kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sa
 
 **Görünüm bitti.**
 
-**Görevler YAPILDI (21.10, kullanıcı "devam et"):** `src/rules/missions.js`, kurallar.md 17. Sekiz tür (sefer, donanma, dostluk, bayındırlık, büyük ordu, komutan, huzur, savunma), meclis adları medeniyete göre (Sakalarda Kurultay), kabul/ret penceresi, alt menüde Görevler listesi, haritada hedef madalyonu, yapılınca anında ödül. Görev zarı ayrı (`state.mrng`): dünya aynı yürür. 41 yeni kontrol. **Sırada: Dünya harikaları** (2.3).
+**Görevler YAPILDI (21.10, kullanıcı "devam et"):** `src/rules/missions.js`, kurallar.md 17. Sekiz tür (sefer, donanma, dostluk, bayındırlık, büyük ordu, komutan, huzur, savunma), meclis adları medeniyete göre (Sakalarda Kurultay), kabul/ret penceresi, alt menüde Görevler listesi, haritada hedef madalyonu, yapılınca anında ödül. Görev zarı ayrı (`state.mrng`): dünya aynı yürür. 41 yeni kontrol.
+
+**Dünya harikaları YAPILDI (21.10):** `src/rules/wonders.js`, kurallar.md 18. Altı harika (Fener ve Piramitler Mısır'ın, Asma Bahçeler/Babil, Artemis/Efes, Rodos Heykeli, Parthenon/Atina bağımsız); şehri tutanın bütün ülkesine armağan. Haritada altın tapınak madalyonu, kartta satır, raporda haber. 15 yeni kontrol (1836). Denge: ilk düşüş 52 → 61. **Sırada: Ses ve müzik** (2.4).
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`

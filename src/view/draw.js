@@ -13,7 +13,8 @@ import { BOUNDS, LON_SCALE } from "../data/bounds.js";
 import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
-import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, ship, soldier } from "./pieces.js";
+import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, ship, soldier, wonderMark } from "./pieces.js";
+import { wonderAt } from "../rules/wonders.js";
 import { regions } from "./regions.js";
 import { TREES } from "../data/trees.js";
 
@@ -579,6 +580,8 @@ function drawPlaces(ctx, cam, view, L) {
     if (p.kind === "castle") castleModel(ctx, s.x, s.y + 2 * z, z * 1.15);
     else cityModel(ctx, s.x, s.y + 2 * z, z * 1.15, p.capital);
     if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1, view.blockade?.[p.id]);
+    // Dünya harikası: sancağın sağında altın tapınaklı madalyon.
+    if (wonderAt(p.id)) wonderMark(ctx, s.x + f.w / 2 + 10, s.y - f.pole + 22, 8.5 * Math.max(1, Math.min(1.3, z)));
     // Bir görevin hedefi: sancağın solunda altın bir madalyon.
     if (view.goals?.[p.id]) goalMark(ctx, s.x - f.w / 2 - 10, s.y - f.pole + 2);
     // Huzursuz (sadakati düşük) kendi yerin: sancağın yanında kırmızı bir ünlem rozeti.

@@ -322,6 +322,30 @@ export function shield(ctx, owner, x, y, s) {
   emblem(ctx, owner, x + s / 2, y + h * 0.45, s * 0.3);
 }
 
+/** Dünya harikası: koyu madalyon, altın halka, içinde küçük bir tapınak. */
+export function wonderMark(ctx, x, y, r = 8.5) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 1, x, y, r);
+  g.addColorStop(0, "#4a3a26");
+  g.addColorStop(1, DARK);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  const k = r / 8.5;
+  ctx.fillStyle = GOLD_LIGHT;
+  ctx.beginPath();
+  ctx.moveTo(x - 5 * k, y - 2 * k);
+  ctx.lineTo(x, y - 5.2 * k);
+  ctx.lineTo(x + 5 * k, y - 2 * k);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillRect(x - 5 * k, y + 3.4 * k, 10 * k, 1.4 * k);
+  for (const cx of [-3.6, -1.2, 1.2, 3.6]) ctx.fillRect(x + (cx - 0.55) * k, y - 1.4 * k, 1.1 * k, 4.8 * k);
+}
+
 /** Görev hedefi: koyu madalyon, altın halka, içinde küçük bir tomar. */
 export function goalMark(ctx, x, y) {
   ctx.beginPath();

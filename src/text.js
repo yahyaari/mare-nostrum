@@ -189,6 +189,7 @@ export const TEXT = {
       "Dashed lines are sea crossings: an army needs ships to use them (one ship carries 25). Build ships in a port.",
       "Port cities have a Harbour tab: fishery for food, shipyard for ships, trade for money, and a harbour fort against fleets.",
       "Every few turns your council gives you a task (Tasks, at the bottom): do it in time for a reward.",
+      "Six cities hold wonders of the ancient world (gold temple on the map). Whoever holds the city gets the wonder's gift in their whole realm.",
       "Defeat every other civilisation to win.",
     ],
     letters: {
@@ -205,6 +206,15 @@ export const TEXT = {
     },
     year: "{0} BC",
     hudMissions: "Tasks",
+    wonders: {
+      pharos: ["Pharos of Alexandria", "harbour forts +1 in all your ports"],
+      pyramids: ["The Pyramids", "+2 loyalty a turn in all your places"],
+      gardens: ["Hanging Gardens", "growth ×1.25 in all your places"],
+      artemis: ["Temple of Artemis", "money ×1.1 in all your places"],
+      colossus: ["Colossus of Rhodes", "trade ×1.5 in all your ports"],
+      parthenon: ["Parthenon", "your generals learn twice as fast"],
+    },
+    evWonder: "{0} took a wonder: {1}",
     councils: {
       rome: "The Senate", carthage: "The Council of the Hundred", egypt: "Pharaoh's court", macedon: "The king's companions",
       parthia: "The King of Kings", gaul: "The druids", saka: "The kurultai",
@@ -440,6 +450,7 @@ export const TEXT = {
       "Kesik çizgiler deniz yollarıdır: ordunun onları kullanması için gemi gerekir (bir gemi 25 asker taşır). Gemi limanda yapılır.",
       "Liman şehirlerinin bir Liman sekmesi var: yiyecek için balıkçılık, gemi için tersane, para için ticaret, filolara karşı liman kalesi.",
       "Birkaç turda bir meclisin sana bir görev verir (alttaki Görevler): süresinde yaparsan ödülünü alırsın.",
+      "Altı şehirde antik dünyanın harikaları var (haritada altın tapınak). Şehri tutan, harikanın armağanını bütün ülkesinde alır.",
       "Kazanmak için bütün öteki medeniyetleri yen.",
     ],
     letters: {
@@ -456,6 +467,15 @@ export const TEXT = {
     },
     year: "MÖ {0}",
     hudMissions: "Görevler",
+    wonders: {
+      pharos: ["İskenderiye Feneri", "bütün limanlarında liman kalesi +1"],
+      pyramids: ["Piramitler", "bütün yerlerinde sadakat turda +2"],
+      gardens: ["Asma Bahçeler", "bütün yerlerinde nüfus artışı ×1.25"],
+      artemis: ["Artemis Tapınağı", "bütün yerlerinde para ×1.1"],
+      colossus: ["Rodos Heykeli", "bütün limanlarında ticaret ×1.5"],
+      parthenon: ["Parthenon", "generallerin iki kat hızlı öğrenir"],
+    },
+    evWonder: "{0} bir harika ele geçirdi: {1}",
     councils: {
       rome: "Senato", carthage: "Yüzler Meclisi", egypt: "Firavunun sarayı", macedon: "Kralın yoldaşları",
       parthia: "Şahlar Şahı", gaul: "Druidler", saka: "Kurultay",
