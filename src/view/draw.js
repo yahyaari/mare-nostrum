@@ -30,6 +30,10 @@ const pairs = (flat) => {
   return out;
 };
 
+// Yerleşimlerin harita birimindeki yerleri: çizim katmanından ayrı (Path2D istemez), animasyon
+// ve testler de kullanıyor.
+const POS = Object.fromEntries(PLACES.map((p) => [p.id, project(p.lon, p.lat)]));
+
 let cache = null;
 function layers() {
   if (cache) return cache;
@@ -45,15 +49,15 @@ function layers() {
     p.closePath();
     return { id, path: p };
   });
-  const at = Object.fromEntries(PLACES.map((p) => [p.id, project(p.lon, p.lat)]));
+  const at = POS;
   return (cache = { land, lakes, rivers, roads, lanes, cells, at });
 }
 
 /** Bir yerleşimin harita birimindeki yeri. */
-export const placeAt = (id) => layers().at[id];
+export const placeAt = (id) => POS[id];
 
 /** Bir yerleşimin ekrandaki yeri. */
-export const placeOnScreen = (cam, id) => toScreen(cam, layers().at[id].x, layers().at[id].y);
+export const placeOnScreen = (cam, id) => toScreen(cam, POS[id].x, POS[id].y);
 
 const MARK = { walk: INK.ink, easy: INK.good, risky: INK.warn, hopeless: INK.bad };
 
@@ -88,6 +92,9 @@ export function drawMap(ctx, cam, view, dpr) {
       strokeRoad(ctx, roadBetween(view.route[i - 1], view.route[i]), px, 3.6, [px(7), px(5)], INK.ink);
     }
   }
+  // Yürüyen orduların arkasındaki iz: geçtiği yollar ve şu anki yolun yürüdüğü kısmı, kendi
+  // renginde. Ordu yolda yürüyor, bir yerden ötekine zıplamıyor - bunu gözle görülür kılan bu.
+  for (const e of view.fx ?? []) if (e.kind === "trail") trail(ctx, e, px);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const tokens = drawPlaces(ctx, cam, view, L);
@@ -169,13 +176,26 @@ function still(cam, view, dpr, L) {
   return stillCanvas;
 }
 
+const lengths = {};
+/** İki komşu yerleşim arasındaki yolun uzunluğu, harita biriminde (kıvrımlarıyla). */
+export function roadLength(a, b) {
+  const k = a < b ? a + "|" + b : b + "|" + a;
+  if (k in lengths) return lengths[k];
+  const r = roadBetween(a, b);
+  if (!r) return (lengths[k] = 0);
+  const pts = roadLine(r).map(([lon, lat]) => project(lon, lat));
+  let n = 0;
+  for (let i = 1; i < pts.length; i++) n += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return (lengths[k] = n);
+}
+
 /**
  * İki komşu yerleşim arasındaki yolun `f` (0..1) kadarındaki nokta, harita biriminde. Yolun
  * kıvrımlarını izler: ordu kıyı boyunca yürür, denizin üstünden kestirmez.
  */
 export function alongRoad(from, to, f) {
   const r = roadBetween(from, to);
-  if (!r) return layers().at[to];
+  if (!r) return POS[to];
   let pts = roadLine(r).map(([lon, lat]) => project(lon, lat));
   if (r.a !== from) pts = pts.reverse();
   let total = 0;
@@ -194,6 +214,31 @@ export function alongRoad(from, to, f) {
     want -= lens[i];
   }
   return pts[pts.length - 1];
+}
+
+function trail(ctx, e, px) {
+  const p = new Path2D();
+  const at = (from, to, f) => alongRoad(from, to, f);
+  let first = true;
+  const put = (m) => { if (first) { p.moveTo(m.x, m.y); first = false; } else p.lineTo(m.x, m.y); };
+  for (let j = 0; j <= e.k; j++) {
+    const upto = j < e.k ? 1 : e.f;
+    const steps = Math.max(2, Math.ceil(roadLength(e.path[j], e.path[j + 1]) * 3 * upto));
+    for (let s = 0; s <= steps; s++) put(at(e.path[j], e.path[j + 1], (upto * s) / steps));
+  }
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = INK.card;
+  ctx.lineWidth = px(6);
+  ctx.globalAlpha = 0.7;
+  ctx.stroke(p);
+  ctx.strokeStyle = e.color;
+  ctx.lineWidth = px(3.2);
+  ctx.globalAlpha = 0.85;
+  ctx.setLineDash(e.sea ? [px(4), px(4)] : []);
+  ctx.stroke(p);
+  ctx.restore();
 }
 
 function strokeRoad(ctx, r, px, width, dash = null, color = null) {
@@ -323,8 +368,10 @@ function drawPlaces(ctx, cam, view, L) {
     ctx.fillText(text, s.x, box.y + 1);
   }
 
+  const now = performance.now();
   for (const t of tokens) {
-    const { x, y, w, h, army } = t;
+    const { x, w, h, army } = t;
+    const y = army.walking ? t.y + (army.sea ? Math.sin(now / 260) * 2 : -Math.abs(Math.sin(now / 110)) * 2.5) : t.y;
     ctx.globalAlpha = army.alpha ?? 1;
     if (army.ships > 0 || army.sea) boat(ctx, x, y + h + 3, w);
     // Gölge: sancak haritanın üstünde duruyor, kâğıda yapışık değil.

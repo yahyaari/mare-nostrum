@@ -85,7 +85,8 @@ function pickLang() {
 
 // Animasyon sürerken her kare çizilir; bitince bekleyen pencere (rapor, savaş sonucu) açılır.
 let pending = null; // animasyon bitince açılacak pencere
-let blocking = false; // tur arası gösterisi: ekrana dokunmak onu atlar
+let blocking = false; // tur arası gösterisi: ekrana dokunmak onu hızlandırır, ikinci dokunuş atlar
+let hurried = false;
 
 function redraw() {
   if (queued) return;
@@ -321,12 +322,13 @@ function dispatch(act) {
       // ordularının güzergâh adımları. Kaynakların artışı üst banttan yükselir.
       const t = anim.clock();
       anim.banner(fill(T().turn, game.turn), T().era);
-      anim.timeline(trace, t + 900, visible);
+      anim.timeline(trace, t + 900, visible, me);
       ["money", "weapons", "food"].forEach((k, i) => {
         const d = Math.round((game.civs[me][k] - before[k]) * 10) / 10;
         if (d) anim.riseAt(chipRise(cam, k), (d > 0 ? "+" : "−") + Math.abs(d), d > 0 ? INK.good : INK.bad, 500 + i * 120);
       });
       blocking = true;
+      hurried = false;
       pending = game.over ? { kind: "over" } : eventLines(game, ui.lang).length ? { kind: "report" } : next();
       save();
       break;
@@ -435,7 +437,7 @@ function dispatch(act) {
       // Ordu kapıya kadar yürür, kılıçlar çarpışır, sonra sonuç penceresi.
       const [ev, trace] = traced(() => attack(game, m.army, m.id));
       ui.modal = null;
-      anim.timeline(trace, anim.clock(), () => true, 380);
+      anim.timeline(trace, anim.clock(), () => true, me);
       pending = ev ? { kind: "battle", ev } : null;
       ui.sel = ev?.won ? { kind: "army", id: m.army } : null;
       checkOver(game);
@@ -518,12 +520,13 @@ function tapPlace(id) {
   }
   if (routeTo(game, a, id) === null) { toast(needsShips(game, a, id) ? T().needShips : T().noPath); return; }
   const [, trace] = traced(() => order(game, a.id, id));
-  anim.timeline(trace, anim.clock(), () => true, 380);
+  const t0 = anim.clock();
+  const arrive = anim.timeline(trace, t0, () => true, game.player) - t0;
   if (a.route.length) {
     // Yolun kalanı: varış yerinde kaç tur sonra orada olacağı yükselir.
     const turns = Math.ceil(a.route.length / trait(a.owner, "moves"));
-    anim.rise(a.route[a.route.length - 1], fill(T().eta, turns), INK.ink, trace.length * 380);
-  } else if (trace.length) anim.pulse(a.at, INK.ink, trace.length * 380);
+    anim.rise(a.route[a.route.length - 1], fill(T().eta, turns), INK.ink, arrive);
+  } else if (trace.length) anim.pulse(a.at, INK.ink, arrive);
   save();
   redraw();
 }
@@ -540,10 +543,16 @@ function nearest(x, y) {
 }
 
 function tap(x, y) {
-  // Tur arası gösterisi sürerken dokunmak gösteriyi atlar.
+  // Tur arası gösterisi sürerken ilk dokunuş hızlandırır, ikincisi bitirir. (Tek dokunuşla
+  // bitince ordular yerlerine sıçrıyordu: "ışınlanıyor".)
   if (blocking && anim.busy()) {
-    anim.finish();
-    settle();
+    if (!hurried) {
+      anim.hurry(4);
+      hurried = true;
+    } else {
+      anim.finish();
+      settle();
+    }
     return redraw();
   }
   for (let i = boxes.length - 1; i >= 0; i--) {

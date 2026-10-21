@@ -93,6 +93,13 @@ anı buluyor). Denge kararları için 70 oyun.
 
 ## Animasyon tuzakları
 
+- **"Ordu ışınlanıyor" (21.10, kullanıcı):** her yol 0.42 sn sürüyordu, tur arasında oyuncunun
+  adımları da sıkışıyordu, tek dokunuş gösteriyi bitirip orduları yerlerine sıçratıyordu. Şimdi
+  yol süresi uzunluğa bağlı (0.52-1.5 sn), ordu arkasında kendi renginde iz bırakır, sancak
+  yürürken sallanır; oyuncunun yürüyüşü hiç kısalmaz; ilk dokunuş hızlandırır (zıplamadan),
+  ikincisi bitirir. Test.mjs bunu ölçüyor (anim.js tarayıcısız çalışıyor: yer konumları
+  `POS`, Path2D istemiyor). Film şeridi: `node Logs/film.mjs`.
+
 - **Tur gösterisi sürerken dokunmak gösteriyi atlar** (tasarım gereği). Bir araç bu sırada basarsa
   basışı gösteri yer: peek.mjs saldırı penceresini açamadı, `ui.modal` boş kaldı ve `attack`
   patladı. Araçlar `M.anim.freeze/finish` kullanıyor; oyuncu testi `M.blocking` ise dokunuyor,

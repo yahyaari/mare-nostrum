@@ -727,6 +727,52 @@ section("Liman yapıları (bölüm 16)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
+
+{
+  const A = await import("../src/view/anim.js");
+  const { roadLength, placeAt } = await import("../src/view/draw.js");
+  const step = (army, owner, from, to) => ({ type: "move", army, owner, men: 30, from, to });
+  const short = A.legTime("olbia", "neapolis"), long = A.legTime("antioch", "babylon");
+  check("uzun yol kısa yoldan uzun sürer", long > short, `${short} ${long}`);
+  check("en kısa yol bile yarım saniyeden uzun", short >= 500, short);
+  check("süre yolun uzunluğuyla orantılı (sınırlar içinde)", Math.abs(A.legTime("rome", "ariminum") - Math.max(520, Math.min(1500, roadLength("rome", "ariminum") * 230))) < 1e-9);
+
+  // Kalabalık bir tur: rakiplerin 40 hamlesi ve oyuncunun 2 yollu yürüyüşü.
+  A.finish();
+  const t0 = 1e6;
+  A.freeze(t0);
+  const trace = [];
+  // Dört medeniyet sırayla: her biri ayrı bölüm, toplam süreyi aşarlar ve sıkıştırılırlar.
+  for (let i = 0; i < 40; i++) trace.push(step(100 + i, ["egypt", "macedon", "parthia", "gaul"][i % 4], "alexandria", "memphis"));
+  trace.push(step(7, "saka", "olbia", "neapolis"), step(7, "saka", "neapolis", "tanais"));
+  A.timeline(trace, t0, () => true, "saka");
+  const mine = (t) => { A.freeze(t); return A.shape({ owners: {}, armies: [{ id: 7, owner: "saka", at: "tanais", men: 30 }] }).armies.find((a) => a.id === 7); };
+  // Oyuncunun yürüyüşü ne zaman başlıyor: rakiplerinkinden sonra. İlk görüldüğü andan bitişine.
+  let start = null, end = null;
+  for (let t = t0; t < t0 + 60000; t += 20) {
+    const a = mine(t);
+    const moving = a && a.float && Math.hypot(a.float.x - placeAt("olbia").x, a.float.y - placeAt("olbia").y) > 1e-6;
+    if (moving && start === null) start = t;
+    if (a && !a.float && start !== null) { end = t; break; }
+  }
+  const want = A.legTime("olbia", "neapolis") + A.legTime("neapolis", "tanais");
+  check("kalabalık turda oyuncunun yürüyüşü kısalmaz", start !== null && end !== null && end - start >= want - 60, `${end - start} / ${want}`);
+  const mid = mine(start + want / 2);
+  check("yürüyüş sürerken ordu yolda, varış yerinde değil", mid?.float && Math.hypot(mid.float.x - placeAt("tanais").x, mid.float.y - placeAt("tanais").y) > 0.3);
+  // Hızlandırma: aynı anda konum aynı kalmalı (zıplama yok), sonra daha erken bitmeli.
+  A.freeze(start + want / 3);
+  const before = A.shape({ owners: {}, armies: [] }).armies.find((a) => a.id === 7).float;
+  A.hurry(4);
+  const after = A.shape({ owners: {}, armies: [] }).armies.find((a) => a.id === 7).float;
+  check("hızlandırınca ordu bulunduğu yerden zıplamaz", Math.hypot(before.x - after.x, before.y - after.y) < 1e-6);
+  A.freeze(start + want / 3 + (want * 2) / 3 / 4 + 50);
+  check("hızlanan yürüyüş dört kat erken biter", !A.shape({ owners: {}, armies: [] }).armies.some((a) => a.id === 7));
+  A.finish();
+  A.freeze(null);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Bot: oyun boyunca değişmezler");
 
 {

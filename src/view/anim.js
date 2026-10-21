@@ -6,15 +6,22 @@
 // kurar. Çizelge sürerken harita, durumun SON hâlini değil, çizelgenin o anını gösterir:
 // yürüyen ordunun sancağı yolda, alınan şehir eski renginde - ta ki sıra ona gelene kadar.
 //
-// Hiçbir kuralı değiştirmez. Ekrana dokununca hepsi biter (`finish`).
+// Ordu yolun UZUNLUĞUNA göre yürür (kısa yol yarım saniye, uzun yol bir buçuk) ve arkasında
+// yolda kendi renginde bir iz bırakır. İlk hâlinde her yol 0.4 saniyeydi, tur arasında da
+// kısalıyordu: oyuncu "ordu ışınlanıyor" dedi.
+//
+// Hiçbir kuralı değiştirmez. Tur gösterisinde ilk dokunuş hızlandırır (`hurry`), ikincisi
+// bitirir (`finish`).
 
 import { colorOf } from "./kit.js";
 import { roadBetween } from "../rules/graph.js";
-import { alongRoad, placeAt } from "./draw.js";
+import { alongRoad, placeAt, roadLength } from "./draw.js";
 
-export const LEG = 420; // bir yolu yürümek, ms
+const PER_UNIT = 230; // harita biriminde yol başına ms ...
+const LEG_MIN = 520; // ... ama en kısa yol bile bu kadar sürer ...
+const LEG_MAX = 1500; // ... ve en uzunu bu kadar.
 const CLASH = 700;
-const MAX = 4500; // tur arası gösterinin en uzun hâli; aşarsa adımlar kısalır
+const MAX = 6000; // rakiplerin hamleleri en fazla bu kadar sürsün; aşarsa onlar hızlanır
 
 let fixed = null;
 /** Animasyonun saati. Araçlar belirli bir anın fotoğrafını çekmek için dondurabilir. */
@@ -32,44 +39,69 @@ export function busy() {
 }
 export const endsAt = () => items.reduce((m, i) => Math.max(m, i.t0 + i.dur), clock());
 
+/**
+ * Kalan her şeyi `k` kat hızlandır: başlamamışlar öne çekilir, süren animasyon kaldığı
+ * yerden hızlanır (atlamaz).
+ */
+export function hurry(k = 4) {
+  const t = clock();
+  for (const i of items) {
+    if (i.t0 >= t) {
+      i.t0 = t + (i.t0 - t) / k;
+    } else {
+      const done = t - i.t0;
+      i.t0 = t - done / k;
+    }
+    i.dur /= k;
+    if (i.legs) i.legs = i.legs.map((x) => x / k);
+  }
+}
+
 const ease = (x) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
+
+/** Bir yolu yürümenin süresi: uzunluğuyla orantılı, sınırlar içinde. */
+export const legTime = (a, b) => Math.max(LEG_MIN, Math.min(LEG_MAX, roadLength(a, b) * PER_UNIT));
 
 /**
  * Bir izden çizelge kur. Art arda gelen aynı medeniyetin hamleleri bir bölüm: bölümün bütün
  * orduları birlikte yürür, sonra sıradaki medeniyet. Ekranda görünmeyen bölüm beklemeden geçer.
+ * `own`: oyuncunun medeniyeti - onun yürüyüşü hiç kısalmaz ve ekran dışında da oynar.
  * Dönen: çizelgenin bittiği an.
  */
-export function timeline(trace, start, visible, leg = LEG) {
-  const build = (legMs, dry) => {
+export function timeline(trace, start, visible, own = null) {
+  const build = (scale, dry) => {
     const out = [];
     let cursor = start;
     for (const seg of segments(trace)) {
-      const seen = seg.some((m) => m.path.some(visible));
-      const L = seen ? legMs : 0, C = seen ? CLASH : 0;
+      const mine = seg[0]?.owner === own;
+      const seen = mine || seg.some((m) => m.path.some(visible));
+      const k = mine ? 1 : scale;
       let end = cursor;
       for (const m of seg) {
-        const legs = m.path.length - 1;
-        const walk = legs * L;
+        const legs = m.path.slice(1).map((to, j) => (seen ? legTime(m.path[j], to) * k : 0));
+        const walk = legs.reduce((a, b) => a + b, 0);
+        const C = seen ? CLASH : 0;
         const dur = walk + (m.attack ? C : 0);
-        out.push({ kind: "march", t0: cursor, dur: Math.max(dur, 1), leg: L, army: m.army, owner: m.owner, men: m.men, path: m.path, attack: m.attack });
+        out.push({ kind: "march", t0: cursor, dur: Math.max(dur, 1), legs, army: m.army, owner: m.owner, men: m.men, path: m.path, attack: m.attack });
         if (m.attack) {
-          const at = m.path[legs];
-          out.push({ kind: "clash", t0: cursor + walk - L * 0.15, dur: C, at });
+          const at = m.path[m.path.length - 1];
+          const last = legs[legs.length - 1] ?? 0;
+          out.push({ kind: "clash", t0: cursor + walk - last * 0.15, dur: C, at });
           if (m.attack.won) {
             out.push({ kind: "repaint", t0: cursor + walk + C * 0.45, dur: seen ? 1100 : 1, at, from: m.attack.oldOwner, to: m.owner });
           }
         }
         end = Math.max(end, cursor + dur);
       }
-      cursor = end + (seen ? 120 : 0);
+      cursor = end + (seen ? 150 : 0);
     }
     if (!dry) add(...out);
     return cursor;
   };
-  const end = build(leg, true);
-  // Çok hamle varsa hepsi sığsın diye adımlar kısalır, ama yürüyüş görünmez olacak kadar değil.
-  const legMs = end - start > MAX ? Math.max(160, leg * (MAX / (end - start))) : leg;
-  return build(legMs, false);
+  // Rakiplerin hamleleri çoksa onlar hızlanır (oyuncununki asla), ama yürüyüş görünür kalır.
+  const end = build(1, true);
+  const scale = end - start > MAX ? Math.max(0.35, MAX / (end - start)) : 1;
+  return build(scale, false);
 }
 
 /** İzi bölümlere ayırır: [[{ army, owner, men, path, attack }...], ...]. */
@@ -106,7 +138,7 @@ export function banner(text, sub, delay = 0) {
 
 /**
  * Haritanın görünümünü çizelgenin bu anına göre ayarla: henüz sırası gelmemiş alınan yerler
- * eski renginde, yürüyen ordular yolun üstünde, efektler listede.
+ * eski renginde, yürüyen ordular yolun üstünde (arkalarında izleriyle), efektler listede.
  */
 export function shape(view) {
   const t = clock();
@@ -122,21 +154,26 @@ export function shape(view) {
     } else if (i.kind === "march") {
       if (p >= 1) continue;
       hidden.add(i.army);
-      const legs = i.path.length - 1;
-      const walk = legs * i.leg;
+      const n = i.path.length - 1;
+      const walk = i.legs.reduce((a, b) => a + b, 0);
       const e = Math.max(0, t - i.t0);
-      let pos, alpha = 1, sea = false;
-      if (legs > 0 && e < walk) {
-        const k = Math.min(legs - 1, Math.floor(e / i.leg));
+      let pos, alpha = 1, sea = false, walking = false;
+      if (n > 0 && e < walk) {
+        // Hangi yoldayız, ve o yolun ne kadarındayız.
+        let k = 0, before = 0;
+        while (k < n - 1 && e >= before + i.legs[k]) before += i.legs[k++];
+        const f = ease(Math.min(1, (e - before) / (i.legs[k] || 1)));
         sea = !!roadBetween(i.path[k], i.path[k + 1])?.sea; // deniz yolunda: gemide
         // Saldırı yolunda hedefin içine girmez, kapısında durur.
-        const stop = i.attack && k === legs - 1 ? 0.78 : 1;
-        pos = alongRoad(i.path[k], i.path[k + 1], ease((e - k * i.leg) / i.leg) * stop);
-      } else if (legs > 0 && i.attack) {
-        pos = alongRoad(i.path[legs - 1], i.path[legs], i.attack.won ? 0.78 + 0.22 * Math.min(1, (e - walk) / (i.dur - walk)) : 0.78);
+        const stop = i.attack && k === n - 1 ? 0.78 : 1;
+        pos = alongRoad(i.path[k], i.path[k + 1], f * stop);
+        walking = e > 0;
+        fx.push({ kind: "trail", path: i.path, k, f: f * stop, color: colorOf(i.owner), sea });
+      } else if (n > 0 && i.attack) {
+        pos = alongRoad(i.path[n - 1], i.path[n], i.attack.won ? 0.78 + 0.22 * Math.min(1, (e - walk) / (i.dur - walk)) : 0.78);
         if (!i.attack.won) alpha = Math.max(0, 1 - (e - walk) / (i.dur - walk));
-      } else pos = placeAt(i.path[legs]);
-      moving.push({ id: i.army, owner: i.owner, men: i.men, float: pos, alpha, at: null, sea });
+      } else pos = placeAt(i.path[n]);
+      moving.push({ id: i.army, owner: i.owner, men: i.men, float: pos, alpha, at: null, sea, walking });
     } else if (p >= 0 && p < 1) {
       if (i.kind === "clash") fx.push({ kind: "clash", at: i.at, p });
       else if (i.kind === "float") fx.push({ kind: "float", at: i.at, screen: i.screen, p, text: i.text, color: i.color, size: i.size });
