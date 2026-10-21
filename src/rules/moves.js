@@ -128,7 +128,7 @@ export function forecast(state, unit, civ, id) {
   const pl = state.places[id];
   const from = unit.at ?? null;
   const bySea = from && roadBetween(from, id)?.sea;
-  const sea = bySea ? navalOdds({ civ, ships: unit.ships ?? 0 }, { civ: pl.owner, ships: shipsAt(state, id) }) : "easy";
+  const sea = bySea ? navalOdds({ civ, ships: unit.ships ?? 0 }, { civ: pl.owner, ships: shipsAt(state, id), fort: fortOf(state, id) }) : "easy";
   const land = estimate(
     { civ, inf: unit.inf, arch: unit.arch, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null },
     { ...defenders(state, id), gen: bestAt(state, id, pl.owner) },
@@ -147,6 +147,9 @@ export function canAttack(state, army, id) {
   return !!road && (!road.sea || canSail(army)) && hostile(access(state, army.owner, id));
 }
 
+/** Liman kalesinin savunan filoya çarpanı. */
+export const fortOf = (state, id) => 1 + (state.places[id].fort ?? 0) * N.port.fortPerLevel;
+
 /** Bir yerin gemileri: limandakiler ve sahibinin orada duran ordularınınkiler. */
 export function shipsAt(state, id) {
   const pl = state.places[id];
@@ -164,7 +167,7 @@ export function attack(state, armyId, id, luck = null) {
   // Denizden saldırı: önce limandaki gemilerle deniz savaşı. Filo batarsa ordu denizde kaybolur.
   let navalEv = null;
   if (roadBetween(army.at, id).sea && shipsAt(state, id) > 0) {
-    const nr = naval({ civ: army.owner, ships: army.ships }, { civ: pl.owner, ships: shipsAt(state, id) }, luck ?? rollLuck(state));
+    const nr = naval({ civ: army.owner, ships: army.ships }, { civ: pl.owner, ships: shipsAt(state, id), fort: fortOf(state, id) }, luck ?? rollLuck(state));
     navalEv = { won: nr.attWins, sunk: shipsAt(state, id) - nr.def, lost: army.ships - nr.att };
     sinkAt(state, id, nr.def);
     army.ships = nr.att;

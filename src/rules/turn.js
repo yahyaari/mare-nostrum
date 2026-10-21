@@ -63,6 +63,7 @@ export function endTurn(state) {
     state.places[id].upgraded = false;
     state.places[id].recruited = 0;
     state.places[id].games = false;
+    state.places[id].built = 0;
   }
   // Olaylar: oyuncununki gelen kutusuna, bilgisayarlarınki hemen çözülür.
   for (const c of CIVS) if (state.civs[c.id].alive) roll(state, c.id);

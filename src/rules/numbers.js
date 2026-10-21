@@ -69,7 +69,11 @@ export const N = {
   // Bilgisayarlar arası: bu turdan önce kimse kimseye savaş açmaz (önce bağımsızlar), ve ancak
   // bu kadar güçlüyken açar. 6. tur iken biri 15-25. turda yok oluyordu.
   aiPeace: 12,
-  aiWarRatio: 1.8,
+  // 1.5 iken sadakat gelince erken düşüşler oldu, 1.8'e çıktı; donanma ve liman yapıları
+  // fetihleri yavaşlatınca 1.8'de dünya donmaya başladı (7 oyunun 4'ünde hiç savaş yok): 1.5.
+  aiWarRatio: 1.5,
+  aiGreed: 0.005, // eşik her tur bu kadar düşer ...
+  aiWarRatioMin: 1.1, // ... ama bundan aşağı değil
   aiWarChance: 0.15,
 
   // Sadakat (bölüm 12). 0-100. Başlangıçta herkes 100; alınan yer düşük başlar.
@@ -100,6 +104,14 @@ export const N = {
     upkeep: 0.5, // gemi başına turda yiyecek
     start: { capital: 2, port: 1, freeBig: 2, free: 1 },
     blockadeMoney: 0.5, // ablukadaki limanın vergisi
+  },
+
+  // Liman yapıları (bölüm 16). Hepsi 0'dan başlar (tersane 1), şehir seviyesini geçemez.
+  port: {
+    fishPerLevel: 2, // balıkçılık: her seviye turda +2 balık (limanın kendi 1 balığına ek)
+    tradePerLevel: 2, // ticaret: her seviye turda +2 para
+    fortPerLevel: 0.25, // liman kalesi: savunan gemiler ve abluka eşiği her seviye +%25
+    shipDiscount: 1, // tersane: 1. seviyeden sonraki her seviye gemiyi 1 para ucuzlatır
   },
 
   // Generaller (bölüm 14)

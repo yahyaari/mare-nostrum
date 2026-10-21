@@ -9,10 +9,10 @@
 import { CIVS } from "../data/world.js";
 import { canDeclare, canPropose } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
-import { access, canAttack, defenders, forecast, hostile, menace, shipsAt, wallsOf } from "../rules/moves.js";
+import { access, canAttack, defenders, forecast, fortOf, hostile, menace, shipsAt, wallsOf } from "../rules/moves.js";
 import { N, UNITS, trait } from "../rules/numbers.js";
 import {
-  UPGRADES, armiesAt, armyById, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  PORT_UPGRADES, UPGRADES, armiesAt, armyById, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -222,30 +222,65 @@ function troops(T, u) {
 
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const shipRow = p.port ? 54 : 0;
-  const r = cardRect(cam, 538 + shipRow);
+  // Liman şehrinin kartı iki sekmeli: Şehir (yükseltme, sadakat, asker) ve Liman (liman
+  // yapıları, gemi, filo). Sekme çubuğu başlığın altında, kart iki sekmede de aynı boyda.
+  const tabs = p.port ? 42 : 0;
+  const tab = p.port && ui.cardTab === "port" ? "port" : "city";
+  const r = cardRect(cam, 538 + tabs);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
   let y = r.y;
-  const Y = 44; // sadakat satırı: altındaki her şey bu kadar aşağıda
 
   text(ctx, p.name[ui.lang], x, y + 32, { bold: true, size: 20 });
   text(ctx, kindLine(id, game, T), x, y + 52, { italic: true, size: 13, color: INK.soft });
 
   const cap = popCap(pl, p.kind);
   amount(ctx, "pop", `${pl.pop} / ${Math.round(cap)}`, x, y + 80, { size: 14 });
+  if (blockaded(game, id)) text(ctx, T.blockadeNote, right, y + 80, { italic: true, bold: true, size: 12, color: INK.bad, align: "right" });
   // Garnizon kendi satırında: dört tür yan yana nüfusun yanına sığmıyor.
   text(ctx, troops(T, pl), x, y + 102, { size: 13 });
 
   const o = output(game, id);
   text(ctx, T.perTurn, x, y + 126, { italic: true, size: 12, color: INK.soft });
-  if (blockaded(game, id)) text(ctx, T.blockadeNote, right, y + 80, { italic: true, bold: true, size: 12, color: INK.bad, align: "right" });
   let cx = x + measure(ctx, T.perTurn, { italic: true, size: 12 }) + 12;
   for (const k of ["money", "weapons", "food"]) cx += amount(ctx, k, delta(o[k]), cx, y + 126, { size: 13 }) + 14;
 
+  if (p.port) {
+    // Sekmeler: seçili olan dolu.
+    const tw = (r.w - 36 - 8) / 2;
+    [["city", T.tabCity], ["port", "⚓ " + T.tabPort]].forEach(([k, label], i) => {
+      button(ctx, boxes, { x: x + i * (tw + 8), y: y + 140, w: tw, h: 32, label, size: 13, main: tab === k, act: { do: "cardTab", tab: k } });
+    });
+    y += tabs;
+  }
+
   y += 22;
   rule(ctx, x, right, y + 116);
+  if (tab === "port") portTab(ctx, game, boxes, T, id, x, right, r, y);
+  else cityTab(ctx, game, boxes, T, id, x, right, r, y);
+}
+
+/** Bir yükseltme satırı: ad, seviye, etkisi ya da neden olmadığı, fiyatlı düğme. */
+function upgradeRow(ctx, game, boxes, T, id, what, x, right, ry) {
+  const u = upgradeInfo(game, id, what);
+  const done = u.why === "max" || u.why === "needLevel";
+  text(ctx, `${T[what]}  ${u.now}${done ? "" : " → " + (u.now + 1)}`, x, ry + 17, { bold: true, size: 13 });
+  const note = u.why === "max" ? T.whyMax : u.why === "needLevel" ? fill(T.whyNeedLevel, u.now + 1)
+    : u.why === "done" ? T.whyDone : effect(game, id, what, T);
+  text(ctx, note, x, ry + 33, { italic: true, size: 12, color: u.why && u.why !== "money" ? INK.faint : INK.soft });
+  if (!done) {
+    const bx = right - 92, by = ry + 5;
+    button(ctx, boxes, { x: bx, y: by, w: 92, h: 30, label: "", off: !!u.why, act: { do: "upgrade", id, what } });
+    const c = u.why ? INK.faint : INK.ink;
+    const w = 16 + measure(ctx, String(u.cost), { bold: true, size: 13 });
+    amount(ctx, "money", u.cost, bx + 46 - w / 2, by + 20, { size: 13, bold: true, color: c });
+  }
+}
+
+function cityTab(ctx, game, boxes, T, id, x, right, r, y) {
+  const pl = game.places[id];
+  const Y = 44; // sadakat satırı: altındaki her şey bu kadar aşağıda
 
   // Sadakat: çubuk, bu turki değişim, oyunlar düğmesi.
   const lo = pl.loyalty, dr = drift(game, id).total;
@@ -272,22 +307,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   rule(ctx, x, right, y + 116 + Y);
 
   // Dört yükseltme
-  UPGRADES.forEach((what, i) => {
-    const ry = y + Y + 122 + i * 42;
-    const u = upgradeInfo(game, id, what);
-    const done = u.why === "max" || u.why === "needLevel";
-    text(ctx, `${T[what]}  ${u.now}${done ? "" : " → " + (u.now + 1)}`, x, ry + 17, { bold: true, size: 13 });
-    const note = u.why === "max" ? T.whyMax : u.why === "needLevel" ? fill(T.whyNeedLevel, u.now + 1)
-      : u.why === "done" ? T.whyDone : effect(game, id, what, T);
-    text(ctx, note, x, ry + 33, { italic: true, size: 12, color: u.why && u.why !== "money" ? INK.faint : INK.soft });
-    if (!done) {
-      const bx = right - 92, by = ry + 5;
-      button(ctx, boxes, { x: bx, y: by, w: 92, h: 30, label: "", off: !!u.why, act: { do: "upgrade", id, what } });
-      const c = u.why ? INK.faint : INK.ink;
-      const w = 16 + measure(ctx, String(u.cost), { bold: true, size: 13 });
-      amount(ctx, "money", u.cost, bx + 46 - w / 2, by + 20, { size: 13, bold: true, color: c });
-    }
-  });
+  UPGRADES.forEach((what, i) => upgradeRow(ctx, game, boxes, T, id, what, x, right, y + Y + 122 + i * 42));
 
   y += Y;
   rule(ctx, x, right, y + 292);
@@ -311,19 +331,39 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   });
 
   button(ctx, boxes, {
-    x, y: y + 428 + shipRow, w: r.w - 36, h: 32, label: T.formArmy, size: 13,
+    x, y: y + 428, w: r.w - 36, h: 32, label: T.formArmy, size: 13,
     off: men(pl) === 0 && !pl.ships, act: { do: "formOpen", id },
   });
-  if (p.port) {
-    // Gemi: tek düğme, altında maliyet (ya da neden yapılamadığı). Asker hakkından yer.
-    const si = shipInfo(game, id);
-    const locked = si.why === "notPort";
-    button(ctx, boxes, {
-      x, y: y + 428, w: r.w - 36, h: 46, label: `⛵ ${T.addShip}  ·  ${pl.ships} ${T.ships}`, size: 13, off: !!si.why,
-      act: { do: "buildShip", id },
-      sub: (cx2, cy2, color) => (locked ? null : costLine(ctx, { money: N.navy.cost.money, weapons: N.navy.cost.weapons }, cx2, cy2 + 2, color)),
-    });
-  }
+}
+
+/** Liman sekmesi: filo durumu, dört liman yapısı, gemi yapımı. */
+function portTab(ctx, game, boxes, T, id, x, right, r, y) {
+  const pl = game.places[id];
+  // Filo: limandaki gemiler, sahibinin buradaki ordularındakiler, abluka durumu.
+  const here = shipsAt(game, id);
+  text(ctx, `⛵ ${T.fleetHere}: ${here}`, x, y + 140, { bold: true, size: 14 });
+  const shut = blockaded(game, id);
+  text(ctx, shut ? T.blockaded.toLocaleUpperCase() : T.openSea, right, y + 140, { italic: true, bold: shut, size: 12, color: shut ? INK.bad : INK.good, align: "right" });
+  text(ctx, fill(T.navalDefence, Math.round(fortOf(game, id) * 100) / 100), x, y + 158, { italic: true, size: 12, color: INK.soft });
+  rule(ctx, x, right, y + 170);
+
+  PORT_UPGRADES.forEach((what, i) => upgradeRow(ctx, game, boxes, T, id, what, x, right, y + 176 + i * 42));
+  rule(ctx, x, right, y + 346);
+
+  // Gemi yapımı: tersane hakkından (asker hakkından ayrı).
+  const si = shipInfo(game, id);
+  text(ctx, T.shipyardLabel, x, y + 366, { bold: true, size: 13 });
+  const note = si.why && si.why !== "done" ? whyText(si.why, T) : fill(T.shipsLeft, si.left);
+  text(ctx, note, right, y + 366, { italic: true, size: 12, color: si.why && si.why !== "done" ? INK.bad : INK.soft, align: "right" });
+  button(ctx, boxes, {
+    x, y: y + 376, w: r.w - 36, h: 46, label: `⛵ ${T.addShip}  ·  ${pl.ships} ${T.ships}`, size: 13, off: !!si.why,
+    act: { do: "buildShip", id },
+    sub: (cx2, cy2, color) => costLine(ctx, si.cost, cx2, cy2 + 2, color),
+  });
+  button(ctx, boxes, {
+    x, y: y + 428, w: r.w - 36, h: 32, label: T.formArmy, size: 13,
+    off: men(pl) === 0 && !pl.ships, act: { do: "formOpen", id },
+  });
 }
 
 function whyText(why, T) {
@@ -337,6 +377,10 @@ function effect(game, id, what, T) {
   if (what === "level") return fill(T.levelFx, Math.round(popCap({ ...pl, level: pl.level + 1 }, p.kind)));
   if (what === "farms") return fill(T.farmsFx, r1(N.wheatPerFarm * castle * trait(c, "wheat")));
   if (what === "industry") return fill(T.industryFx, r1(castle * trait(c, "weapons"))) + (pl.industry + 1 === 3 ? " · " + T.industrySiege : "");
+  if (what === "fishery") return fill(T.fisheryFx, r1(N.port.fishPerLevel * castle * trait(c, "fish")));
+  if (what === "trade") return fill(T.tradeFx, r1(N.port.tradePerLevel * castle * trait(c, "money")));
+  if (what === "fort") return fill(T.fortFx, Math.round((1 + (pl.fort + 1) * N.port.fortPerLevel) * 100) / 100);
+  if (what === "shipyard") return fill(T.shipyardFx, pl.shipyard + 1, Math.max(1, N.navy.cost.money - pl.shipyard * N.port.shipDiscount));
   const unlock = pl.barracks + 1 === 2 ? " · " + T.barracksArch : pl.barracks + 1 === 3 ? " · " + T.barracksCav : "";
   return fill(T.barracksFx, pl.barracks + 1) + unlock;
 }

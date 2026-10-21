@@ -32,7 +32,12 @@ ve `path`'in yol süzgeci (`canUse`). Kayıt sürümü 4. **Boş ordu** artık `
 gemisi olmayan; "askeri 0 olan ordu silinir" varsayımı dört yerdeydi ve gemi filolarını
 silerdi (kıtlıktaki eski hâli süvari/kuşatma ordularını da siliyordu).
 
-Kullanıcının onayladığı derinlik listesi bitti. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
+Kullanıcının onayladığı derinlik listesi bitti.
+
+**Liman yapıları** (kurallar.md 16, kullanıcı istedi): balıkçılık, tersane, ticaret, liman
+kalesi; liman şehrinin kartı iki sekmeli (`ui.cardTab`). Kayıt sürümü 5. Roma liman oldu
+(Ostia). Denge araçları: `Logs/who.mjs <medeniyet>` (kimin yerini kim alıyor),
+`Logs/str20.mjs <kök>` (20. turda ortalama güçler), `Logs/rome.mjs` - bunlar Logs'ta, depoda yok. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
 düşman ordularının nereye yürüdüğünü göstermek.
 
 ## Komutlar

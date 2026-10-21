@@ -8,7 +8,7 @@ import { CIVS, PLACES, ROADS } from "../data/world.js";
 import { byId } from "./graph.js";
 import { LEVELS, N, UNITS, trait } from "./numbers.js";
 
-export const VERSION = 4;
+export const VERSION = 5;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -28,6 +28,13 @@ export function migrate(s) {
     for (const u of [...Object.values(s.places), ...s.armies]) u.ships ??= 0;
     s.version = 4;
   }
+  if (s.version === 4) {
+    for (const [id, p] of Object.entries(s.places)) {
+      p.fishery ??= 0; p.trade ??= 0; p.fort ??= 0; p.built ??= 0;
+      p.shipyard ??= byId[id].port ? 1 : 0;
+    }
+    s.version = 5;
+  }
   return s;
 }
 
@@ -44,6 +51,8 @@ export function newGame(player, seed = 1, level = "normal") {
     const place = {
       owner: p.owner, level: lv, industry: 1, farms: 1, barracks: 1,
       pop: 0, inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, upgraded: false, recruited: 0,
+      // Liman yapıları (sadece limanda kullanılır). Tersane 1 ile başlar: gemi yapılabilsin.
+      fishery: 0, shipyard: p.port ? 1 : 0, trade: 0, fort: 0, built: 0,
       loyalty: 100, games: false,
     };
     place.pop = Math.round(popCap(place, p.kind) * N.startPop);
@@ -89,7 +98,9 @@ export const canSail = (u) => (u.ships ?? 0) * N.navy.carry >= men(u) && men(u) 
 export function blockaded(state, id) {
   const p = byId[id], pl = state.places[id];
   if (!p.port || !pl.owner) return false;
-  const mine = pl.ships + armiesAt(state, id).filter((a) => a.owner === pl.owner).reduce((n, a) => n + a.ships, 0);
+  // Liman kalesi limanın gemilerini daha değerli kılar: ablukaya almak için daha çok gemi gerekir.
+  const mine = (pl.ships + armiesAt(state, id).filter((a) => a.owner === pl.owner).reduce((n, a) => n + a.ships, 0))
+    * (1 + (pl.fort ?? 0) * N.port.fortPerLevel);
   for (const r of seaLanes[id] ?? []) {
     const other = r.a === id ? r.b : r.a;
     let theirs = 0;
@@ -117,10 +128,13 @@ export function output(state, id) {
   // Zorluk: bilgisayar medeniyetlerinin üretimi (oyuncunun değil).
   const ai = c && c !== state.player ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;
   const shut = blockaded(state, id);
+  // Liman: kendi 1 balığı + balıkçılık, ve ticaret parası. Ablukada balık yok, para yarı.
+  const fish = p.port && !shut ? (N.fish + pl.fishery * N.port.fishPerLevel) * castle * trait(c, "fish") : 0;
+  const trade = p.port ? pl.trade * N.port.tradePerLevel * castle : 0;
   return {
-    money: (pl.pop / N.taxPer) * trait(c, "money") * ai * (shut ? N.navy.blockadeMoney : 1),
+    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * ai * (shut ? N.navy.blockadeMoney : 1),
     weapons: pl.industry * castle * trait(c, "weapons") * ai,
-    food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") + (p.port && !shut ? N.fish * trait(c, "fish") : 0)) * ai,
+    food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") + fish) * ai,
   };
 }
 
@@ -167,6 +181,8 @@ export const enemiesOf = (state, civ) => CIVS.map((c) => c.id).filter((o) => sta
 // ---- yükseltme ----
 
 export const UPGRADES = ["level", "farms", "industry", "barracks"];
+/** Sadece limanlarda: balıkçılık, tersane, ticaret, liman kalesi (bölüm 16). */
+export const PORT_UPGRADES = ["fishery", "shipyard", "trade", "fort"];
 
 /** Bir yükseltmenin fiyatı ve yapılıp yapılamayacağı. `why`: neden olmuyor. */
 export function upgradeInfo(state, id, what) {
@@ -175,7 +191,8 @@ export function upgradeInfo(state, id, what) {
   const max = what === "level" ? (p.kind === "castle" ? N.maxCastle : N.maxCity) : pl.level;
   const cost = (now + 1) * N.upgradeCost * (what === "level" ? N.levelCostMul : 1);
   let why = null;
-  if (now >= max) why = what === "level" ? "max" : "needLevel";
+  if (PORT_UPGRADES.includes(what) && !p.port) why = "notPort";
+  else if (now >= max) why = what === "level" ? "max" : "needLevel";
   else if (pl.upgraded) why = "done";
   else if (state.civs[pl.owner].money < cost) why = "money";
   return { now, max, cost, why };
@@ -214,26 +231,33 @@ export function holdGames(state, id) {
 
 // ---- gemi ----
 
+/**
+ * Gemi: limanın tersanesinde. Tersane seviyesi kadar gemi turda (asker hakkından ayrı); 1.
+ * seviyeden sonraki her seviye gemiyi 1 para ucuzlatır.
+ */
 export function shipInfo(state, id) {
   const pl = state.places[id], civ = state.civs[pl.owner];
+  const cost = { money: Math.max(1, N.navy.cost.money - Math.max(0, (pl.shipyard ?? 0) - 1) * N.port.shipDiscount), weapons: N.navy.cost.weapons };
   let why = null;
   if (!byId[id].port) why = "notPort";
-  else if (pl.recruited >= pl.barracks) why = "done";
+  else if ((pl.shipyard ?? 0) < 1) why = "needShipyard";
+  else if ((pl.built ?? 0) >= pl.shipyard) why = "done";
   else if (pl.pop < N.navy.pop + 10) why = "pop";
-  else if (civ.money < N.navy.cost.money) why = "money";
-  else if (civ.weapons < N.navy.cost.weapons) why = "weapons";
-  return { cost: N.navy.cost, why };
+  else if (civ.money < cost.money) why = "money";
+  else if (civ.weapons < cost.weapons) why = "weapons";
+  return { cost, why, left: Math.max(0, (pl.shipyard ?? 0) - (pl.built ?? 0)) };
 }
 
-/** Limanda bir gemi yap. Asker basma hakkından yer (kışla tersane işi de görüyor). */
+/** Limanda bir gemi yap. */
 export function buildShip(state, id) {
-  if (shipInfo(state, id).why) return false;
+  const si = shipInfo(state, id);
+  if (si.why) return false;
   const pl = state.places[id], civ = state.civs[pl.owner];
-  civ.money -= N.navy.cost.money;
-  civ.weapons -= N.navy.cost.weapons;
+  civ.money -= si.cost.money;
+  civ.weapons -= si.cost.weapons;
   pl.pop -= N.navy.pop;
   pl.ships += 1;
-  pl.recruited += 1;
+  pl.built += 1;
   return true;
 }
 

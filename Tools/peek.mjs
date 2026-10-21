@@ -176,7 +176,9 @@ await shot("27_general_kart", `${D({ do: "close" })}; const a = M.game.armies.fi
 // Donanma: Kartaca ile yeni oyun.
 await shot("30_kartaca_liman", `M.ui.modal = null; ${D({ do: "newGame" })}; ${D({ do: "pick", civ: "carthage" })}; ${D({ do: "start" })};
   ${D({ do: "close" })}; M.game.civs.carthage.money = 80; M.ui.sel = { kind: 'place', id: 'carthage' }; M.look('carthage', 2.4)`);
-await shot("31_gemili_ordu_cikar", D({ do: "formOpen", id: "carthage" }));
+await shot("30b_liman_sekmesi", `${D({ do: "cardTab", tab: "port" })}; M.game.places.carthage.fishery = 1; M.game.places.carthage.trade = 1`);
+await shot("30c_liman_tr", `${D({ do: "lang", lang: "tr" })}`);
+await shot("31_gemili_ordu_cikar", `${D({ do: "lang", lang: "en" })}; ${D({ do: "cardTab", tab: "city" })}; ${D({ do: "formOpen", id: "carthage" })}`);
 await shot("32_denizde", `M.ui.modal.ships = 2; ${D({ do: "formOk" })}; ${TAP("lilybaeum")}; ${AT(190)}`);
 await shot("33_deniz_saldiri", `${DONE}; const g = M.game; const a = g.armies.find((x) => x.owner === 'carthage');
   a.at = 'carthage'; a.moves = 1; a.inf = 70; a.ships = 3; a.route = []; M.ui.sel = { kind: 'army', id: a.id }; M.look('carthage', 2.2);

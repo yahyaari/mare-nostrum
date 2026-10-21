@@ -14,7 +14,7 @@ import { access, advance, attack, canAttack, defenders, forecast, hostile, order
 import { LEVELS, N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import {
-  armiesAt, armiesOf, budget, buildShip, canSail, enemiesOf, formArmy, gamesInfo, holdGames, info, key, merge, men,
+  armiesAt, armiesOf, blockaded, budget, buildShip, canSail, enemiesOf, formArmy, gamesInfo, holdGames, info, key, merge, men,
   placesOf, popCap, recruit, recruitInfo, relation, shipInfo, station, strength, upgrade, upgradeInfo,
 } from "./state.js";
 
@@ -60,7 +60,12 @@ function diplomacy(state, civ, events) {
   const level = LEVELS[state.level] ?? LEVELS.normal;
   // Oyuncuya karşı zorluğun sayıları, bilgisayarlar arasında her zaman aynıları.
   const peace = (o) => (o === state.player ? level.peace : N.aiPeace);
-  const ratio = (o) => (o === state.player ? level.warRatio : N.aiWarRatio);
+  // Bilgisayarlar arası hırs zamanla artar: denk güçler arasında da er geç savaş çıksın.
+  // (Donanma ve liman yapılarından sonra dengelenen dünyada 7 oyunun 2'sinde 120 tur hiç savaş
+  // çıkmıyordu.) Alınacak bağımsız yer kalmamışsa daha da hırslı.
+  const noFreeLeft = !Object.values(state.places).some((p) => p.owner === null);
+  const greed = Math.max(N.aiWarRatioMin, N.aiWarRatio - N.aiGreed * Math.max(0, state.turn - N.aiPeace) - (noFreeLeft ? 0.15 : 0));
+  const ratio = (o) => (o === state.player ? level.warRatio : greed);
   if (state.turn < Math.min(N.aiPeace, level.peace)) return;
   const me = strength(state, civ);
   const wars = enemiesOf(state, civ);
@@ -140,15 +145,19 @@ function build(state, civ) {
     if (pl.upgraded) continue;
     const b = budget(state, civ);
     const cap = popCap(pl, info(id).kind);
+    const port = info(id).port;
     const wish = [];
-    if (b.food < 2) wish.push("farms");
+    if (b.food < 2) wish.push("farms", ...(port ? ["fishery"] : []));
     if (pl.pop >= cap * 0.9) wish.push("level");
     if (pl.barracks < 2) wish.push("barracks");
     if (b.weapons < mine.length) wish.push("industry");
-    wish.push("farms", "level", "industry", "barracks");
+    // Liman: ablukadaysa kale, ve erken bir ticaret (10 paraya turda +2: beş turda kendini öder).
+    if (port && blockaded(state, id)) wish.push("fort");
+    if (port && pl.trade < 1) wish.push("trade");
+    wish.push("farms", ...(port ? ["fishery", "trade"] : []), "level", "industry", "barracks", ...(port ? ["shipyard", "fort"] : []));
     for (const w of wish) {
       const u = upgradeInfo(state, id, w);
-      if (u.why === "max" || u.why === "needLevel") continue;
+      if (u.why === "max" || u.why === "needLevel" || u.why === "notPort") continue;
       if (!u.why && state.civs[civ].money >= u.cost + reserve) upgrade(state, id, w);
       break; // en çok istenene para yetmiyorsa ucuz olana kaçmıyor: biriktiriyor
     }
@@ -166,7 +175,10 @@ function shipyard(state, civ) {
     const pl = state.places[id];
     if (!info(id).port || !neighbours(id).some((n) => roadBetween(id, n).sea)) continue;
     const spare = Math.max(0, men(pl) - need(state, civ, id));
-    const want = Math.min(6, Math.max(1, Math.ceil(spare / N.navy.carry)));
+    // Filo ancak denizin karşısında alınacak bir yer varsa; yoksa savunma için tek gemi. (Her
+    // limana 6 gemi yapınca limanı olanlar bakımdan eriyordu, limansız Galya Roma'yı yutuyordu.)
+    const overseas = neighbours(id).some((n) => roadBetween(id, n).sea && hostile(access(state, civ, n)));
+    const want = overseas ? Math.min(6, Math.max(1, Math.ceil(spare / N.navy.carry))) : 1;
     for (let guard = 0; guard < 3 && pl.ships < want; guard++) {
       // Gemi de yer: yiyecek darsa tersane durur (yoksa bilgisayar kıtlığa giriyordu).
       if (shipInfo(state, id).why || state.civs[civ].money < N.navy.cost.money + 10 || budget(state, civ).food < 2) break;

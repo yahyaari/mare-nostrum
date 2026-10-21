@@ -62,7 +62,7 @@ export function fight(att, def, walls, luck = [1, 1]) {
  */
 export function naval(att, def, luck = [1, 1]) {
   const a = att.ships * trait(att.civ, "navy") * luck[0];
-  const d = def.ships * trait(def.civ, "navy") * luck[1];
+  const d = def.ships * trait(def.civ, "navy") * (def.fort ?? 1) * luck[1];
   const attWins = def.ships === 0 ? att.ships > 0 : a > d;
   const [winShips, losePow, winPow] = attWins ? [att.ships, d, a] : [def.ships, a, d];
   const left = winShips - (winPow > 0 ? Math.round(winShips * (losePow / winPow) ** 2 * N.winnerLoss) : 0);

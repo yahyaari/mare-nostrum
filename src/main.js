@@ -306,6 +306,9 @@ function dispatch(act) {
     case "close":
       ui.modal = next();
       break;
+    case "cardTab":
+      ui.cardTab = act.tab;
+      break;
     case "deselect":
       ui.sel = null;
       break;

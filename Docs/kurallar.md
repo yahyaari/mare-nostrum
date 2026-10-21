@@ -200,8 +200,9 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 - Müttefikler birbirinin topraklarından geçebilir ama birbirine saldıramaz.
 - **Barış:** Savaştaki biriyle barış teklif edilebilir. Kaybeden taraf kabul etmeye yatkındır.
 - **Bağımsız yerleşimlere** herkes her zaman saldırabilir.
-- Bilgisayar 12. turdan önce kimseye savaş açmaz. Bilgisayarlar birbirine ancak 1.8 kat güçlüyken
-  açar (sana karşı eşik zorluğa bağlı, bölüm 9b).
+- Bilgisayar 12. turdan önce kimseye savaş açmaz. Bilgisayarlar birbirine 1.5 kat güçlüyken
+  açar; bu eşik zamanla 1.1'e kadar iner (bölüm 16'daki not). Sana karşı eşik zorluğa bağlı,
+  sabit (bölüm 9b).
 - **Bilgisayarın sana teklifleri** (birkaç turda bir, karar penceresi olarak gelir):
   - *Barış:* seninle savaşta ve senden açıkça zayıfsa.
   - *İttifak:* tarafsızsınız ve ortak bir düşmanınız var.
@@ -327,6 +328,29 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
 > ilk düşüş 143. tura fırladı. Tersane şartı kalktı, bir gemi 25 asker taşıyor, bilgisayar
 > limandaki gemilere biniyor: ilk düşüş 70 oyunda 61. tur (donanmadan önce 41). Dünya biraz
 > daha yavaş - oyuncunun nefes alacak zamanı daha çok.
+
+## 16. Liman yapıları
+
+Liman şehirlerinin kartında ikinci bir sekme var: **Liman**. Dört yapı, hepsi şehir seviyesini
+geçemez ve diğer yükseltmelerle aynı fiyatta (yeni seviye × 10 para), aynı turluk hakla:
+
+| Yapı | Başlangıç | Her seviye |
+|---|---|---|
+| **Balıkçılık** | 0 | Turda +2 balık (limanın kendi 1 balığına ek; ablukada hiç) |
+| **Tersane** | 1 | Turda bir gemi daha; 1. seviyeden sonra gemi 1 para ucuz (4 → 3 → 2) |
+| **Ticaret** | 0 | Turda +2 para (medeniyetin para bonusu da uygulanır; ablukada yarı) |
+| **Liman kalesi** | 0 | Savunan gemiler × 1.25 daha; ablukaya almak için o kadar çok gemi gerek |
+
+- **Gemi artık asker basma hakkından yemez**, tersanenin kendi hakkı var.
+- Tersanesi olmayan limanda gemi yapılamaz (başlangıçta her limanın tersanesi 1).
+- **Roma artık liman** (Ostia, Tiber ağzı) ve Sardinya'ya (Karalis) deniz yolu var.
+
+> Denge: gemi asker hakkından ayrılınca herkes daha çok asker bastı; Roma'nın payı küçüldü ve
+> limansız Galya onu 70 oyunun 31'inde ayakta bırakacak kadar yuttu (önce 43). Roma'ya Ostia
+> limanı verildi (tarihte de vardı). Güçler dengelenince bilgisayarlar arası savaş 1.8 kat
+> eşiğinde dünya dondu (7 oyunun 4'ünde hiç savaş yok); eşik 1.5'e döndü ve zamanla düşüyor
+> (12. turdan sonra her tur −0.005, en az 1.1; alınacak bağımsız kalmayınca −0.15 daha).
+> 70 oyunda ilk düşüş ortalaması 51. tur, Roma 57 oyunda ayakta.
 
 ---
 

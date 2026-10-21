@@ -27,7 +27,8 @@ const cap = (owner, more = {}) => ({ owner, capital: true, ...more });
 
 export const PLACES = [
   // Roma
-  P("rome", "Rome", "Roma", 41.89, 12.49, "city", cap("rome")),
+  // Roma limanı Ostia: Tiber ağzı. Roma liman olmadan 70 oyunun ancak 30unda ayakta kalıyordu.
+  P("rome", "Rome", "Roma", 41.89, 12.49, "city", cap("rome", port)),
   P("tarentum", "Tarentum", "Tarentum", 40.47, 17.24, "city", own("rome", port)),
   P("ariminum", "Ariminum", "Ariminum", 44.06, 12.57, "castle", own("rome")),
   // Kartaca
@@ -146,6 +147,7 @@ export const ROADS = [
   S("gades", "tingis", [[36.27, -6.21]]),
   S("massalia", "caralis", [[38.72, 8.77], [39.12, 9.17]]),
   S("caralis", "carthage", [[36.85, 10.41]]),
+  S("rome", "caralis", [[41.92, 12.41], [41.82, 12.31], [41.72, 12.21], [38.92, 9.41]]),
   S("tarentum", "syracuse", [[38.87, 17.19]]),
   S("lilybaeum", "carthage"),
   S("tarentum", "epidamnos", [[40.07, 17.64], [39.67, 18.34]]),

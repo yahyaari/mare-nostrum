@@ -120,7 +120,9 @@ function sample(r, step = 0.04, skip = 0.15) {
 }
 
 for (const r of ROADS) {
-  const { out, step } = sample(r);
+  // Deniz geçişinin uçlarında kıyıya kadar olan kısım sayılmaz (iç liman: Roma Tiber üstünde).
+  const inland = r.sea ? Math.max(...[byId[r.a], byId[r.b]].map((p) => coastDistance(p.lon, p.lat))) + 0.05 : 0;
+  const { out, step } = sample(r, 0.04, Math.max(0.15, inland));
   const wet = out.filter(([lon, lat]) => !onLand(lon, lat));
   if (r.sea) {
     // Kesik çizgi bir yarımadanın üstünden geçmesin: uçlar dışında karaya hiç değmemeli.
@@ -142,10 +144,12 @@ section("Güzergâh");
 check("Gades'ten Nisa'ya yol var", !!path("gades", "nisa"));
 check("komşuya tek adım", path("rome", "tarentum")?.length === 2);
 check("kendine sıfır adım", path("rome", "rome")?.length === 1);
-// Elle sayıldı: Kartaca > Lilybaion > Siraküza > Tarentum > Roma. Sardinya üstünden beş.
+// Elle sayıldı: Kartaca > Karalis > Roma (Ostia'dan Sardinya'ya deniz yolu). Sicilya üstünden dört.
 const p1 = path("carthage", "rome");
-check("Kartaca'dan Roma'ya en kısa yol 4 adım", p1?.length === 5, p1?.join(" > "));
-check("Kartaca'dan Roma'ya Sicilya üstünden", p1?.includes("syracuse"), p1?.join(" > "));
+check("Kartaca'dan Roma'ya en kısa yol 2 adım", p1?.length === 3, p1?.join(" > "));
+check("Kartaca'dan Roma'ya Sardinya üstünden", p1?.includes("caralis"), p1?.join(" > "));
+const p2 = path("carthage", "rome", (id) => id !== "caralis");
+check("Sardinya kapalıyken Sicilya üstünden 4 adım", p2?.length === 5 && p2.includes("syracuse"), p2?.join(" > "));
 // Girilemeyen yer: güzergâh onun etrafından dolaşmalı, ya da hiç olmamalı.
 const around = path("carthage", "rome", (id) => id !== "syracuse");
 check("Siraküza kapalıyken başka yoldan", !!around && !around.includes("syracuse"), around?.join(" > "));
@@ -578,12 +582,12 @@ section("Donanma (bölüm 15)");
 {
   const s = S.newGame("carthage", 7);
   check("başlangıç gemileri: liman başkenti 2, liman 1, büyük bağımsız 2, bağımsız 1, karada 0",
-    s.places.carthage.ships === 2 && s.places.gades.ships === 1 && s.places.syracuse.ships === 2 && s.places.massalia.ships === 1 && s.places.rome.ships === 0);
+    s.places.carthage.ships === 2 && s.places.gades.ships === 1 && s.places.syracuse.ships === 2 && s.places.massalia.ships === 1 && s.places.memphis.ships === 0);
   check("karada gemi yapılmaz", S.shipInfo(s, "memphis").why === "notPort");
   const pop = s.places.carthage.pop;
   check("gemi: 4 para, 2 silah, 5 nüfus", S.buildShip(s, "carthage") && s.places.carthage.ships === 3
     && s.civs.carthage.money === 26 && s.civs.carthage.weapons === 3 && s.places.carthage.pop === pop - 5);
-  check("gemi asker hakkından yer", S.recruitInfo(s, "carthage", "inf").why === "done");
+  check("gemi asker hakkından yemez, tersaneninkinden yer", !S.recruitInfo(s, "carthage", "inf").why && S.shipInfo(s, "carthage").why === "done");
 
   // Deniz yolu gemi ister: bir gemi 25 asker.
   const a = S.formArmy(s, "carthage", 30, 0);
@@ -657,6 +661,72 @@ section("Donanma (bölüm 15)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Liman yapıları (bölüm 16)");
+
+{
+  const s = S.newGame("rome", 7);
+  s.civs.rome.money = 200;
+  check("liman yapıları limanda başlar: tersane 1, ötekiler 0", s.places.tarentum.shipyard === 1 && s.places.tarentum.fishery === 0 && s.places.tarentum.trade === 0 && s.places.tarentum.fort === 0);
+  check("karada liman yapısı yapılmaz", S.upgradeInfo(s, "ariminum", "fishery").why === "notPort");
+  check("liman yapısı şehir seviyesini geçemez", (s.places.tarentum.fishery = 1, S.upgradeInfo(s, "tarentum", "fishery").why === "needLevel"));
+  s.places.tarentum.fishery = 0;
+  const f0 = S.output(s, "tarentum").food;
+  check("balıkçılık 1: turda +2 balık", S.upgrade(s, "tarentum", "fishery") && S.output(s, "tarentum").food === f0 + 2);
+  s.places.tarentum.upgraded = false;
+  s.places.tarentum.level = 2;
+  const m0 = S.output(s, "tarentum").money;
+  check("ticaret 1: turda +2 para", S.upgrade(s, "tarentum", "trade") && Math.abs(S.output(s, "tarentum").money - (m0 + 2)) < 1e-9);
+  const k = S.newGame("carthage", 7);
+  k.places.carthage.trade = 1;
+  check("Kartaca ticareti x1.5: +3", Math.abs(S.output(k, "carthage").money - S.output(S.newGame("carthage", 7), "carthage").money - 3) < 1e-9);
+
+  // Tersane: gemi hakkı ve fiyatı.
+  const t = S.newGame("rome", 7);
+  t.civs.rome.money = 200; t.civs.rome.weapons = 50;
+  t.places.tarentum.level = 3; t.places.tarentum.pop = 200;
+  check("tersane 1: turda 1 gemi, 4 para", S.shipInfo(t, "tarentum").cost.money === 4 && S.buildShip(t, "tarentum") && S.shipInfo(t, "tarentum").why === "done");
+  t.places.tarentum.shipyard = 3; t.places.tarentum.built = 0;
+  check("tersane 3: gemi 2 para, turda 3 gemi", S.shipInfo(t, "tarentum").cost.money === 2
+    && S.buildShip(t, "tarentum") && S.buildShip(t, "tarentum") && S.buildShip(t, "tarentum") && S.shipInfo(t, "tarentum").why === "done");
+  check("gemi asker hakkını yemez", !S.recruitInfo(t, "tarentum", "inf").why);
+  T.endTurn(t);
+  check("tur başında tersane hakkı yenilenir", t.places.tarentum.built === 0 || t.places.tarentum.owner !== "rome");
+  const nz = S.newGame("rome", 7);
+  nz.places.tarentum.shipyard = 0;
+  check("tersanesiz liman gemi yapamaz", S.shipInfo(nz, "tarentum").why === "needShipyard");
+
+  // Liman kalesi: savunan gemiler daha güçlü, abluka daha zor.
+  const fight = (fort) => {
+    const g = S.newGame("rome", 7);
+    g.places.syracuse.ships = 4;
+    g.places.syracuse.fort = fort;
+    const army = S.formArmy(g, "tarentum", 10, 0);
+    army.inf = 50; army.ships = 5;
+    return M.attack(g, army.id, "syracuse", [1, 1]);
+  };
+  check("liman kalesi 1: 4 gemi 5 gemiyi durdurur (kalesiz durduramaz)", fight(1).drowned && !fight(0).drowned);
+  const b = S.newGame("rome", 7);
+  b.relations[S.key("carthage", "rome")] = "war";
+  b.places.syracuse.owner = "carthage";
+  b.places.syracuse.ships = 0; // Siraküza'nın başlangıç gemileri de Kartaca'ya geçmesin: karşıda sadece filo
+  const fl = S.formArmy(b, "carthage", 0, 0, 0, 0, 2); fl.at = "syracuse"; fl.ships = 2;
+  b.places.tarentum.ships = 1;
+  check("2 gemi 1 gemiyi abluka eder", S.blockaded(b, "tarentum"));
+  b.places.tarentum.fort = 3; b.places.tarentum.ships = 2;
+  check("liman kalesi 3: 2 gemi 2 gemiyi abluka edemez (2 x 1.75)", !S.blockaded(b, "tarentum"));
+  b.places.tarentum.fort = 0;
+  b.places.tarentum.trade = 1;
+  const shut = S.output(b, "tarentum");
+  check("ablukada ticaret parası da yarı", Math.abs(shut.money - (b.places.tarentum.pop / N.taxPer + 2) * 0.5) < 1e-9 || !S.blockaded(b, "tarentum"));
+
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 4;
+  for (const p of Object.values(old.places)) { delete p.fishery; delete p.shipyard; delete p.trade; delete p.fort; delete p.built; }
+  S.migrate(old);
+  check("4. sürüm kayıt yükseltiliyor", old.version === S.VERSION && old.places.tarentum.shipyard === 1 && old.places.ariminum.shipyard === 0 && old.places.tarentum.fishery === 0);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Bot: oyun boyunca değişmezler");
 
 {
@@ -673,6 +743,11 @@ section("Bot: oyun boyunca değişmezler");
       }
       for (const k of ["farms", "industry", "barracks"]) if (p[k] > p.level) bad.push(`t${s.turn} ${id}.${k} > seviye`);
       if (!Number.isInteger(p.loyalty) || p.loyalty < 0 || p.loyalty > 100) bad.push(`t${s.turn} ${id}.loyalty=${p.loyalty}`);
+      for (const k of S.PORT_UPGRADES) {
+        if (!Number.isInteger(p[k]) || p[k] < 0 || (k !== "shipyard" && p[k] > p.level)) bad.push(`t${s.turn} ${id}.${k}=${p[k]}`);
+        if (!byId[id].port && p[k] > 0) bad.push(`t${s.turn} karada ${id}.${k}`);
+      }
+      if (p.owner && byId[id].port && p.fishery + p.trade + p.fort > 0) portWork++;
       for (const k of ["farms", "industry", "barracks", "level"]) if (p[k] < 1) bad.push(`t${s.turn} ${id}.${k} < 1`);
       if (p.pop > S.popCap(p, byId[id].kind) + 1e-9) bad.push(`t${s.turn} ${id} nüfusu tavanı aşıyor`);
     }
@@ -694,12 +769,13 @@ section("Bot: oyun boyunca değişmezler");
     }
     seenInbox += s.inbox.length;
   };
-  let seenInbox = 0, generals = 0;
+  let seenInbox = 0, generals = 0, portWork = 0;
   const games = [];
   for (let i = 0; i < 7; i++) games.push(play({ seed: 500 + i, player: CIVS[i].id, turns: 120, watch }));
   check("hiçbir turda bozuk sayı, bozuk ordu yok", !bad.length, bad.slice(0, 5).join(" | "));
   check("oyuncuya mektuplar geliyor", seenInbox > 0, seenInbox);
   check("bilgisayar general atıyor", generals > 0, generals);
+  check("bilgisayar liman yapıları kuruyor", portWork > 0, portWork);
   const free25 = games.map((g) => g.freeLeft[24] ?? 0);
   check("25. tura kadar bağımsızların çoğu alınıyor", free25.every((n) => n <= 8), free25.join(" "));
   // Bilgisayarlar arası savaş eşiği 1.8 (sadakat gelince 1.5 erken yok ediyordu): ilk savaş geç olabilir.

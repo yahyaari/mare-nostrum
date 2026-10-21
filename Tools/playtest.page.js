@@ -5,7 +5,7 @@
 window.PT = (() => {
   const M = window.MareNostrum;
   const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  const stats = { decided: 0, pressed: 0, missed: [], attacks: 0, won: 0, recruits: 0, upgrades: 0, armies: 0, marches: 0, wars: 0, allies: 0 };
+  const stats = { port: 0, ships: 0, decided: 0, pressed: 0, missed: [], attacks: 0, won: 0, recruits: 0, upgrades: 0, armies: 0, marches: 0, wars: 0, allies: 0 };
   let R = null;
 
   async function load() {
@@ -103,7 +103,19 @@ window.PT = (() => {
       await deselect();
       await tapPlace(id);
       if (M.ui.sel?.kind !== "place" || M.ui.sel.id !== id) { stats.missed.push("şehir seçilemedi " + id); continue; }
+      // Limanda önce Liman sekmesi: bir liman yapısı (sırayla) ve bir gemi; sonra Şehir sekmesine dön.
+      let upgraded = false;
+      if (await press((a) => a.do === "cardTab" && a.tab === "port")) {
+        const order = ["trade", "fishery", "shipyard", "fort"];
+        for (let j = 0; j < order.length && !upgraded; j++) {
+          const what = order[(j + g.turn) % order.length];
+          if (await press((a) => a.do === "upgrade" && a.id === id && a.what === what)) { stats.upgrades++; stats.port++; upgraded = true; }
+        }
+        if (g.turn % 3 === 0 && (await press((a) => a.do === "buildShip" && a.id === id))) stats.ships++;
+        await press((a) => a.do === "cardTab" && a.tab === "city", "şehir sekmesi");
+      }
       for (const what of ["farms", "level", "barracks", "industry"]) {
+        if (upgraded) break;
         if (await press((a) => a.do === "upgrade" && a.id === id && a.what === what)) { stats.upgrades++; break; }
       }
       for (let k = 0; k < 3; k++) {
