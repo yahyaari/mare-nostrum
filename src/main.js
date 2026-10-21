@@ -200,6 +200,7 @@ function mapView() {
   view.fog = ui.fog;
   view.seen = sight(game, game.player);
   view.friends = new Set(PLACES.filter((p) => { const o = game.places[p.id].owner; return o === game.player || (o && relation(game, game.player, o) === "ally"); }).map((p) => p.id));
+  view.levels = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.level]));
   view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place).map((x) => [x.place, true]));
   view.docked = Object.fromEntries(PLACES.filter((p) => p.port && game.places[p.id].ships > 0).map((p) => [p.id, game.places[p.id].ships]));
   view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));

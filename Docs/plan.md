@@ -110,7 +110,9 @@ kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sa
 
 **Kuşatma YAPILDI (21.10, kullanıcı "devam et"):** `rules/siege.js`, kurallar.md 20. Surlu yere Saldır / Kuşat / Vazgeç; kamp hedefin yolunda çadırlarla, hedefte kırmızı halka; turda %10 erime (makineyle +%2/10, en çok %25), üretim yok, sadakat −5, kamp −%3; teslim; yürüyünce/saldırınca/barışta kalkar. Bilgisayar sadece "zor" hedefi kuşatır (dengeyi bu tuttu: ilk düşüş 51). 21 yeni kontrol (1865). Ordu alanı `besieging` (`siege` kuşatma makinesi sayısı - isim çakışmasına dikkat).
 
-**Sırada (plan sırası): büyüyen şehirler, kronik, savaş sahnesi, arazi/mevsim, iki kişi; en son öğretici.**
+**Büyüyen şehirler YAPILDI (21.10):** maket seviyeyle büyür (`pieces.cityModel(…, level)`): 1 ahşap çit + iki ev, 2 taş sur + iki kule, 3 arka sıra evler + ortada yüksek kule, 4+ geniş sur + dört kule ve bir boy büyük; kale 2. seviyede ikinci kule. Kartın manzarası da seviyeyi gösterir.
+
+**Sırada (plan sırası): kronik, savaş sahnesi, arazi/mevsim, iki kişi; en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`

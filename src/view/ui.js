@@ -168,7 +168,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const vh = vignetteHeight(cam, 538 + tabs + wh);
   const r = cardRect(cam, 538 + tabs + wh + vh);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
-  if (vh) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: vh - 4 });
+  if (vh) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: vh - 4 }, pl.level);
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
   let y = r.y + vh;
@@ -405,7 +405,7 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
   const vh = vignetteHeight(cam, h);
   const r = cardRect(cam, h + vh);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
-  if (vh) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: vh - 4 });
+  if (vh) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: vh - 4 }, pl.level);
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
   let y = r.y + vh;

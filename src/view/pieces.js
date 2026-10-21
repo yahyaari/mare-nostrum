@@ -407,9 +407,17 @@ function crenel(ctx, x, y, w, h, n) {
   ctx.closePath();
 }
 
-/** Şehir maketi: surların ardında evler, köşelerde kuleler. (x, y) zeminin ortası. */
-export function cityModel(ctx, x, y, z, capital) {
-  const k = z * (capital ? 1.2 : 1);
+/**
+ * Şehir maketi, seviyesiyle büyür (plan.md 2.8, "büyüyen şehirler"). (x, y) zeminin ortası.
+ *   1. seviye: ahşap çit ardında iki ev.
+ *   2: taş sur, iki köşe kulesi, üç ev.
+ *   3: ikinci sıra evler ve ortada yüksek bir kule (başkentte tapınak).
+ *   4+: sur daha geniş, ortada da bir kule; şehir bir boy büyük.
+ */
+export function cityModel(ctx, x, y, z, capital, level = 2) {
+  const lv = Math.max(1, Math.min(5, level));
+  const k = z * (capital ? 1.2 : 1) * (0.86 + 0.07 * Math.min(4, lv));
+  const half = lv >= 4 ? 15 : 12;
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(k, k);
@@ -419,9 +427,15 @@ export function cityModel(ctx, x, y, z, capital) {
   // Zemin gölgesi
   ctx.fillStyle = "rgba(20,14,8,0.32)";
   ctx.beginPath();
-  ctx.ellipse(1, 1, 15, 4.5, 0, 0, TAU);
+  ctx.ellipse(1, 1, half + 3, 4.5, 0, 0, TAU);
   ctx.fill();
-  // Arkadaki evler (ve başkentte tapınak)
+  // Arka sıra (3. seviyeden): daha koyu çatılar, biraz yukarıda.
+  if (lv >= 3) {
+    gable(ctx, -11, -9, 5, 4, ROOF_DARK);
+    gable(ctx, 6, -10, 5, 5, ROOF_DARK);
+    if (lv >= 4) gable(ctx, -6, -12, 4, 4, ROOF);
+  }
+  // Evler
   gable(ctx, -9, -5, 6, 5, ROOF_DARK);
   gable(ctx, 2, -6, 7, 6, ROOF);
   if (capital) {
@@ -440,16 +454,41 @@ export function cityModel(ctx, x, y, z, capital) {
     ctx.fillStyle = "#efe6d2";
     ctx.fill();
     ctx.stroke();
-  } else {
+  } else if (lv >= 3) {
+    // Ortada yüksek kule
+    crenel(ctx, -2.5, -4, 5, 13, 2);
+    ctx.fillStyle = STONE;
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = STONE_SHADE;
+    ctx.fillRect(1, -16, 1.5, 12);
+  } else if (lv >= 2) {
     gable(ctx, -3, -8, 5, 5, ROOF);
   }
+  if (lv === 1) {
+    // Ahşap çit: sivri kazıklar.
+    ctx.fillStyle = "#8a6440";
+    ctx.beginPath();
+    ctx.moveTo(-half, 1);
+    for (let px = -half; px <= half; px += 2) {
+      ctx.lineTo(px, -2.5);
+      ctx.lineTo(px + 1, -4);
+      ctx.lineTo(px + 2, -2.5);
+    }
+    ctx.lineTo(half + 2, 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
   // Ön sur
-  crenel(ctx, -12, 1, 24, 6, 6);
+  crenel(ctx, -half, 1, 2 * half, 6, lv >= 4 ? 8 : 6);
   ctx.fillStyle = STONE;
   ctx.fill();
   ctx.stroke();
   ctx.fillStyle = STONE_SHADE;
-  ctx.fillRect(-12, -1, 24, 2);
+  ctx.fillRect(-half, -1, 2 * half, 2);
   // Kapı
   ctx.beginPath();
   ctx.moveTo(-2, 1);
@@ -458,9 +497,10 @@ export function cityModel(ctx, x, y, z, capital) {
   ctx.lineTo(2, 1);
   ctx.fillStyle = "#4a3a28";
   ctx.fill();
-  // Köşe kuleleri
-  for (const tx of [-14, 10]) {
-    crenel(ctx, tx, 1.5, 4.5, 10, 2);
+  // Köşe kuleleri (4. seviyeden kapının iki yanında da)
+  const towers = lv >= 4 ? [-half - 2, -7, 2.5, half - 2] : [-half - 2, half - 2];
+  for (const tx of towers) {
+    crenel(ctx, tx, 1.5, 4.5, lv >= 4 ? 11 : 10, 2);
     ctx.fillStyle = STONE;
     ctx.fill();
     ctx.stroke();
@@ -470,8 +510,8 @@ export function cityModel(ctx, x, y, z, capital) {
   ctx.restore();
 }
 
-/** Kale maketi: yüksek bir burç ve yanında alçak bir kule. */
-export function castleModel(ctx, x, y, z) {
+/** Kale maketi: yüksek bir burç ve yanında alçak bir kule; 2. seviyeden ikinci bir kule. */
+export function castleModel(ctx, x, y, z, level = 1) {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(z, z);
@@ -480,8 +520,14 @@ export function castleModel(ctx, x, y, z) {
   ctx.strokeStyle = OUTLINE;
   ctx.fillStyle = "rgba(20,14,8,0.32)";
   ctx.beginPath();
-  ctx.ellipse(1, 1, 11, 3.8, 0, 0, TAU);
+  ctx.ellipse(1, 1, level >= 2 ? 14 : 11, 3.8, 0, 0, TAU);
   ctx.fill();
+  if (level >= 2) {
+    crenel(ctx, 6, 1, 6, 12, 2);
+    ctx.fillStyle = STONE;
+    ctx.fill();
+    ctx.stroke();
+  }
   crenel(ctx, -3, 1, 10, 9, 3);
   ctx.fillStyle = STONE;
   ctx.fill();

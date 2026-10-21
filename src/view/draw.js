@@ -145,7 +145,7 @@ if (TERRAIN) {
  */
 const FY = 0.7;
 
-export function drawVignette(ctx, id, owner, r) {
+export function drawVignette(ctx, id, owner, r, level = 2) {
   const p = byIdPlace[id], m = POS[id];
   ctx.save();
   ctx.beginPath();
@@ -168,8 +168,8 @@ export function drawVignette(ctx, id, owner, r) {
   const cx = r.x + r.w / 2, cy = r.y + r.h * FY;
   const f = flagSize(p, owner, z * 0.62);
   banner(ctx, owner, cx, cy - 3 * z, f.w, f.h, f.pole, { gold: p.capital && !!owner });
-  if (p.kind === "castle") castleModel(ctx, cx, cy + 2 * z, z * 1.1);
-  else cityModel(ctx, cx, cy + 2 * z, z, p.capital);
+  if (p.kind === "castle") castleModel(ctx, cx, cy + 2 * z, z * 1.1, level);
+  else cityModel(ctx, cx, cy + 2 * z, z, p.capital, level);
   // Üstte ve altta solma: üst koyu, alt kâğıda.
   const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
   g.addColorStop(0, "rgba(20,14,8,0.35)");
@@ -597,8 +597,9 @@ function drawPlaces(ctx, cam, view, L) {
     ctx.globalAlpha = view.fog && !view.seen.has(p.id) ? 0.62 : 1;
     const wave = now0 / 650 + (p.id.charCodeAt(0) + p.id.length * 7) * 0.9;
     banner(ctx, owner, s.x, s.y - 3 * z, f.w, f.h, f.pole, { gold: p.capital && !!owner, wave });
-    if (p.kind === "castle") castleModel(ctx, s.x, s.y + 2 * z, z * 1.15);
-    else cityModel(ctx, s.x, s.y + 2 * z, z * 1.15, p.capital);
+    const lv = view.levels?.[p.id] ?? 2;
+    if (p.kind === "castle") castleModel(ctx, s.x, s.y + 2 * z, z * 1.15, lv);
+    else cityModel(ctx, s.x, s.y + 2 * z, z * 1.15, p.capital, lv);
     if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1, view.blockade?.[p.id]);
     ctx.globalAlpha = 1;
     // Dünya harikası: sancağın sağında altın tapınaklı madalyon.
