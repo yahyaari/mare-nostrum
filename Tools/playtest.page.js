@@ -38,8 +38,10 @@ window.PT = (() => {
   }
 
   async function tapPlace(id) {
+    await skip();
     M.look(id, 2.4);
     await frame();
+    for (let i = 0; i < 120 && M.gliding; i++) await frame();
     const p = M.where(id);
     M.tap(p.x, p.y);
     await frame();
@@ -48,6 +50,8 @@ window.PT = (() => {
   async function tapArmy(armyId) {
     const a = M.game.armies.find((x) => x.id === armyId);
     if (!a) return false;
+    // Açık bir kart sancağın üstünü örtebilir (telefonda haritanın yarısı): önce kapat.
+    if (M.ui.sel) await press((x) => x.do === "deselect");
     M.look(a.at, 2.4);
     await frame();
     const t = M.tokens().find((x) => x.army === armyId);
@@ -57,7 +61,20 @@ window.PT = (() => {
     return M.ui.sel?.kind === "army" && M.ui.sel.id === armyId;
   }
 
+  /**
+   * Animasyon sürüyorsa bir oyuncunun yapacağı gibi ekrana dokunup atla. (Tur arası gösterisi
+   * dokununca biter; ordu yürüyüşü kısa, onu bekle.) Sonra bekleyen pencere açılır.
+   */
+  async function skip() {
+    for (let i = 0; i < 400 && M.anim.busy(); i++) {
+      if (M.blocking) M.tap(6, M.cam.h / 2);
+      await frame();
+    }
+    await frame();
+  }
+
   async function closeAll() {
+    await skip();
     for (let i = 0; i < 6 && M.ui.modal && M.ui.modal.kind !== "over"; i++) {
       if (!(await press((a) => a.do === "close"))) break;
     }
@@ -104,6 +121,7 @@ window.PT = (() => {
         await tapPlace(near[0]);
         if (await press((x) => x.do === "attack", "saldır düğmesi")) {
           stats.attacks++;
+          await skip();
           if (M.ui.modal?.kind === "battle" && M.ui.modal.ev.won) stats.won++;
           await closeAll();
         }
@@ -138,10 +156,11 @@ window.PT = (() => {
       await closeAll();
     }
 
+    await skip();
     const t0 = performance.now();
     await press((a) => a.do === "endTurn", "turu bitir düğmesi");
     const ms = performance.now() - t0;
-    await frame();
+    await skip();
     const report = M.ui.modal?.kind ?? null;
     const ui = await import("./src/view/ui.js");
     const lines = report === "report" ? ui.eventLines(M.game, "tr").map(([s]) => s) : [];

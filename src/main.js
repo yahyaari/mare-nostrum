@@ -15,9 +15,11 @@ import {
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
 import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.js";
-import { drawMap, placeAt, placeOnScreen } from "./view/draw.js";
-import { civName } from "./view/kit.js";
-import { drawUI, eventLines } from "./view/ui.js";
+import * as anim from "./view/anim.js";
+import { drawMap, drawOverlay, placeAt, placeOnScreen } from "./view/draw.js";
+import { INK, civName, colorOf } from "./view/kit.js";
+import { chipRise, drawUI, eventLines } from "./view/ui.js";
+import { trait } from "./rules/numbers.js";
 
 const started = performance.now();
 const canvas = document.getElementById("game");
@@ -77,16 +79,50 @@ function pickLang() {
 
 // ---- çizim ----
 
+// Animasyon sürerken her kare çizilir; bitince bekleyen pencere (rapor, savaş sonucu) açılır.
+let pending = null; // animasyon bitince açılacak pencere
+let blocking = false; // tur arası gösterisi: ekrana dokunmak onu atlar
+
 function redraw() {
   if (queued) return;
   queued = true;
   requestAnimationFrame(() => {
     queued = false;
-    tokens = drawMap(ctx, cam, mapView(), dpr);
+    const gliding = stepGlide();
+    const view = anim.shape(mapView());
+    tokens = drawMap(ctx, cam, view, dpr);
     boxes = [];
     drawUI(ctx, cam, game, ui, boxes);
+    drawOverlay(ctx, cam, view.fx);
+    if (anim.busy() || gliding) redraw();
+    if (!anim.busy()) settle();
   });
 }
+
+/** Animasyon bitti ya da atlandı: bekleyen pencereyi aç. */
+function settle() {
+  blocking = false;
+  if (pending) {
+    ui.modal = pending;
+    pending = null;
+    redraw();
+  }
+}
+
+/** Bir kuralı çalıştırırken hamlelerin izini tut (ekran için); iz kayda girmesin diye silinir. */
+function traced(fn) {
+  game.trace = [];
+  const result = fn();
+  const trace = game.trace;
+  delete game.trace;
+  return [result, trace];
+}
+
+/** Ekranda görünüyor mu (çizelge görünmeyen hamleleri beklemeden geçer). */
+const visible = (id) => {
+  const s = placeOnScreen(cam, id);
+  return s.x > -40 && s.y > -40 && s.x < cam.w + 40 && s.y < cam.h + 40;
+};
 
 const ownArmy = () => {
   if (!game || ui.sel?.kind !== "army") return null;
@@ -156,7 +192,45 @@ function lookAtHome() {
   const home = placesOf(game, game.player).find((id) => PLACES.find((p) => p.id === id).capital) ?? placesOf(game, game.player)[0];
   if (!home) return;
   const m = placeAt(home);
-  focus(cam, m.x, m.y, cam.min * (cam.w < 640 ? 1.5 : 2.4));
+  glide(m.x, m.y, cam.min * (cam.w < 640 ? 1.5 : 2.4), 900);
+}
+
+// ---- kamera kayması ----
+//
+// Kamera bir yerden ötekine zıplamaz, kayar: oyuncu nereye gittiğini görsün. Kayma sürerken
+// her kare çizilir (redraw bunu glideOn ile bilir).
+
+let glideTo = null;
+
+function glide(x, y, scale = cam.scale, ms = 450) {
+  glideTo = { from: { x: cam.x, y: cam.y, scale: cam.scale }, to: { x, y, scale }, t0: performance.now(), ms };
+  redraw();
+}
+
+function stepGlide() {
+  if (!glideTo) return false;
+  const g = glideTo;
+  const p = Math.min(1, (performance.now() - g.t0) / g.ms);
+  const e = 1 - (1 - p) ** 3;
+  // Yakınlık logaritmik kayar, yoksa uzaklaşırken başta hızlı sonra yavaş gibi görünür.
+  const scale = Math.exp(Math.log(g.from.scale) + (Math.log(g.to.scale) - Math.log(g.from.scale)) * e);
+  focus(cam, g.from.x + (g.to.x - g.from.x) * e, g.from.y + (g.to.y - g.from.y) * e, scale);
+  if (p >= 1) glideTo = null;
+  return !!glideTo;
+}
+
+/**
+ * Dar ekranda kart haritanın alt yarısını kaplıyor: seçilen yer kartın altında kalacaksa
+ * harita onu kartın üstüne kaydırsın.
+ */
+function keepVisible(id) {
+  if (cam.w >= 640) return;
+  const s = placeOnScreen(cam, id);
+  const top = cam.h * 0.18, bottom = cam.h * 0.36;
+  if (s.y >= top && s.y <= bottom && s.x > 30 && s.x < cam.w - 30) return;
+  const m = placeAt(id);
+  // Yeri ekranın yatay ortasına ve dikeyde %28'ine getir.
+  glide(m.x, m.y + (cam.h * 0.5 - cam.h * 0.28) / cam.scale);
 }
 
 // ---- eylemler ----
@@ -215,22 +289,37 @@ function dispatch(act) {
     case "close":
       ui.modal = game?.over ? { kind: "over" } : null;
       break;
+    case "deselect":
+      ui.sel = null;
+      break;
     case "endTurn": {
       ui.modal = null;
-      endTurn(game);
+      const before = { ...game.civs[me] };
+      const [, trace] = traced(() => endTurn(game));
       if (ui.sel?.kind === "army" && !armyById(game, ui.sel.id)) ui.sel = null;
-      if (game.over) ui.modal = { kind: "over" };
-      else if (eventLines(game, ui.lang).length) ui.modal = { kind: "report" };
-      else toast(T().quiet);
+      // Gösteri: önce tur şeridi, sonra rakiplerin hamleleri sırayla, en son kendi
+      // ordularının güzergâh adımları. Kaynakların artışı üst banttan yükselir.
+      const t = anim.clock();
+      anim.banner(fill(T().turn, game.turn), T().era);
+      anim.timeline(trace, t + 900, visible);
+      ["money", "weapons", "food"].forEach((k, i) => {
+        const d = Math.round((game.civs[me][k] - before[k]) * 10) / 10;
+        if (d) anim.riseAt(chipRise(cam, k), (d > 0 ? "+" : "−") + Math.abs(d), d > 0 ? INK.good : INK.bad, 500 + i * 120);
+      });
+      blocking = true;
+      pending = game.over ? { kind: "over" } : eventLines(game, ui.lang).length ? { kind: "report" } : null;
       save();
       break;
     }
     case "upgrade":
-      upgrade(game, act.id, act.what);
+      if (upgrade(game, act.id, act.what)) {
+        anim.rise(act.id, T()[act.what] + " " + game.places[act.id][act.what], INK.good);
+        anim.pulse(act.id, INK.good);
+      }
       save();
       break;
     case "recruit":
-      recruit(game, act.id, act.type);
+      if (recruit(game, act.id, act.type)) anim.rise(act.id, act.type === "inf" ? T().addInf : T().addArch, INK.ink);
       save();
       break;
     case "formOpen": {
@@ -246,15 +335,20 @@ function dispatch(act) {
     case "formOk": {
       const a = formArmy(game, m.id, m.inf, m.arch);
       ui.modal = null;
-      if (a) ui.sel = { kind: "army", id: a.id };
+      if (a) {
+        ui.sel = { kind: "army", id: a.id };
+        anim.pulse(a.at, colorOf(a.owner));
+      }
       save();
       break;
     }
-    case "station":
-      station(game, act.army);
+    case "station": {
+      const at = armyById(game, act.army)?.at;
+      if (station(game, act.army)) anim.pulse(at, INK.ink);
       ui.sel = null;
       save();
       break;
+    }
     case "split": {
       const b = split(game, act.army);
       if (b) ui.sel = { kind: "army", id: b.id };
@@ -273,15 +367,19 @@ function dispatch(act) {
       const next = mine.find((a) => a.id > cur) ?? mine[0];
       ui.sel = { kind: "army", id: next.id };
       const mm = placeAt(next.at);
-      focus(cam, mm.x, mm.y, Math.max(cam.scale, cam.min * 2));
+      glide(mm.x, mm.y, Math.max(cam.scale, cam.min * 2));
       break;
     }
     case "attackAsk":
       ui.modal = { kind: "attack", army: act.army, id: act.id };
       break;
     case "attack": {
-      const ev = attack(game, m.army, m.id);
-      ui.modal = ev ? { kind: "battle", ev } : null;
+      if (m?.kind !== "attack") break;
+      // Ordu kapıya kadar yürür, kılıçlar çarpışır, sonra sonuç penceresi.
+      const [ev, trace] = traced(() => attack(game, m.army, m.id));
+      ui.modal = null;
+      anim.timeline(trace, anim.clock(), () => true, 380);
+      pending = ev ? { kind: "battle", ev } : null;
       ui.sel = ev?.won ? { kind: "army", id: m.army } : null;
       checkOver(game);
       save();
@@ -330,6 +428,7 @@ function tapMap(x, y) {
     // Seçili ordu varken yabancı bir sancağa basmak, onun durduğu yere basmaktır.
     if (mine && a.owner !== game.player) return tapPlace(a.at);
     ui.sel = { kind: "army", id: a.id };
+    keepVisible(a.at);
     return redraw();
   }
   const p = nearest(x, y);
@@ -341,6 +440,7 @@ function tapPlace(id) {
   const a = ownArmy();
   if (!a || id === a.at) {
     ui.sel = { kind: "place", id };
+    keepVisible(id);
     return redraw();
   }
   const k = access(game, a.owner, id);
@@ -358,7 +458,14 @@ function tapPlace(id) {
     ui.sel = { kind: "place", id };
     return redraw();
   }
-  if (routeTo(game, a, id) === null || order(game, a.id, id) < 0) toast(T().noPath);
+  if (routeTo(game, a, id) === null) { toast(T().noPath); return; }
+  const [, trace] = traced(() => order(game, a.id, id));
+  anim.timeline(trace, anim.clock(), () => true, 380);
+  if (a.route.length) {
+    // Yolun kalanı: varış yerinde kaç tur sonra orada olacağı yükselir.
+    const turns = Math.ceil(a.route.length / trait(a.owner, "moves"));
+    anim.rise(a.route[a.route.length - 1], fill(T().eta, turns), INK.ink, trace.length * 380);
+  } else if (trace.length) anim.pulse(a.at, INK.ink, trace.length * 380);
   save();
   redraw();
 }
@@ -375,6 +482,12 @@ function nearest(x, y) {
 }
 
 function tap(x, y) {
+  // Tur arası gösterisi sürerken dokunmak gösteriyi atlar.
+  if (blocking && anim.busy()) {
+    anim.finish();
+    settle();
+    return redraw();
+  }
   for (let i = boxes.length - 1; i >= 0; i--) {
     const b = boxes[i];
     if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
@@ -400,6 +513,7 @@ const at = (e) => {
 
 window.addEventListener("pointerdown", (e) => {
   pointers.set(e.pointerId, at(e));
+  glideTo = null;
   if (pointers.size === 1) {
     const p = at(e);
     gesture = { moved: 0, startX: p.x, startY: p.y };
@@ -479,10 +593,13 @@ fit();
 
 // Araçlar (Tools/peek.mjs) için: oyunun içine bakma ve bir anı kurma kapısı.
 window.MareNostrum = {
-  cam, ui, dispatch, redraw, tap,
+  cam, ui, dispatch, redraw, tap, anim,
   get game() { return game; },
   set game(g) { game = g; ui.screen = g ? "game" : "start"; redraw(); },
+  /** Kayma bitene kadar çizer; araç beklemek isterse. */
+  get gliding() { return !!glideTo; },
   look(id, zoom = 1) {
+    glideTo = null;
     const mm = placeAt(id);
     focus(cam, mm.x, mm.y, cam.min * zoom);
     redraw();
@@ -491,6 +608,8 @@ window.MareNostrum = {
   /** Bir yerleşimin ekrandaki yeri: araç oraya gerçek bir basış gönderebilsin. */
   where(id) { return placeOnScreen(cam, id); },
   tokens: () => tokens,
+  /** Tur arası gösterisi sürüyor mu (dokunmak onu atlar). */
+  get blocking() { return blocking; },
   boxes: () => boxes,
 };
 

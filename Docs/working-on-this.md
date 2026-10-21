@@ -10,6 +10,11 @@ raporu, kazanma/kaybetme ve tarayıcıya otomatik kayıt çalışıyor. EN/TR.
 Zorluk (Kolay/Normal/Zor), tehdit uyarısı (yanında düşman ordusu olan şehrin kırmızı halkası ve
 raporda satırı), Sıradaki ordu düğmesi de var.
 
+**21.10.2026 — animasyon.** Ordular yol boyunca yürüyor; tur değişince şerit geçiyor, rakiplerin
+hamleleri sırayla oynanıyor (yürüyüş, kılıç çarpışması, el değiştiren yerin yeni renginde halka),
+kaynak artışları üst banttan yükseliyor, rapor animasyon bitince açılıyor; dokununca atlanıyor.
+Kamera zıplamıyor, kayıyor; telefonda seçilen yer kartın üstüne kayıyor, kartlarda × var.
+
 Sıradakiler: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
 düşman ordularının nereye yürüdüğünü göstermek.
 
@@ -36,11 +41,22 @@ node Tools/route.mjs                                denize giren yol için ara n
 | `src/rules/` | Saf kurallar, DOM yok: `numbers.js` (bütün sayılar), `state.js` (yeni oyun, üretim, yükseltme, asker, ordu), `combat.js`, `moves.js` (hareket, saldırı, ele geçirme), `diplomacy.js`, `ai.js`, `turn.js`, `graph.js`, `rng.js` (tohumlu: kayıtla birlikte saklanıyor) |
 | `Tools/bot.mjs` | TEK bot: oyuncunun yerine `ai.js`'i oynatır. test.mjs de bunu kullanır. |
 | `src/view/` | `camera.js`, `draw.js` (harita, ordular, seçim işaretleri), `ui.js` (bant, kartlar, pencereler), `kit.js` (panel, düğme, simgeler), `regions.js`. Hiçbir kuralı değiştirmez: her düğme bir `act` bırakır, `main.js` çalıştırır. |
-| `src/main.js` | Açılış, girdi, çizim döngüsü. `window.MareNostrum` araçların kapısı. |
+| `src/main.js` | Açılış, girdi, çizim döngüsü, kamera kayması. `window.MareNostrum` araçların kapısı. |
+| `src/view/anim.js` | Animasyon. Kurallar hamleleri `state.trace`e yazar (sadece ekran isterse; `traced()` iz bitince siler, kayda girmez), burası o izden zaman çizelgesi kurar ve haritayı çizelgenin o anına göre gösterir (alınan yer sırası gelene kadar eski renginde). `freeze(t)` araçlar için zamanı dondurur. |
 | `Tools/ne/` | Natural Earth 1:50m kaynak verisi (kamu malı). |
 
 **Kural:** `src/rules/` DOM'a dokunmaz. Bilgisayar rakipler ve test botu aynı kodla, tarayıcısız
 oynayacak (HOTICE-Notes/tuzaklar.md, bölüm 6).
+
+## Animasyon tuzakları
+
+- **Tur gösterisi sürerken dokunmak gösteriyi atlar** (tasarım gereği). Bir araç bu sırada basarsa
+  basışı gösteri yer: peek.mjs saldırı penceresini açamadı, `ui.modal` boş kaldı ve `attack`
+  patladı. Araçlar `M.anim.freeze/finish` kullanıyor; oyuncu testi `M.blocking` ise dokunuyor,
+  değilse (kısa ordu yürüyüşü) bekliyor - yoksa dokunuş haritaya gidip seçimi kaldırıyordu.
+- Rapor ve savaş sonucu animasyon bitince açılır (`pending`): animasyon sürerken `ui.modal` boş.
+- Haritanın durağan katmanı önbellekte; anahtarı kamera + sahiplik. Sahiplik çizelgede
+  değişince bir kere yeniden çizilir.
 
 ## Harita verisi yazarken
 

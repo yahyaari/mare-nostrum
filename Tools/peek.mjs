@@ -115,6 +115,9 @@ if (!ready()) {
 const D = (act) => `M.dispatch(${JSON.stringify(act)})`;
 // Gerçek bir basış: bir yerleşimin ekrandaki yerine, oyunun kendi girdi yolundan.
 const TAP = (id) => `{ const p = M.where('${id}'); M.tap(p.x, p.y); }`;
+// Animasyonun belirli bir anını dondur (ms, şimdiden itibaren) ya da çözüp sonuna atla.
+const AT = (ms) => `M.anim.freeze(performance.now() + ${ms})`;
+const DONE = "M.anim.freeze(null); M.anim.finish(); M.redraw()";
 
 await shot("01_baslangic", "");
 await shot("02_secim_tr", `${D({ do: "lang", lang: "tr" })}; ${D({ do: "pick", civ: "saka" })}`);
@@ -123,12 +126,15 @@ await shot("04_harita", D({ do: "close" }));
 await shot("05_sehir_karti", TAP("rome"));
 await shot("06_ordu_cikar", D({ do: "formOpen", id: "rome" }));
 await shot("07_ordu_secili", D({ do: "formOk" }));
-await shot("08_yurudu", TAP("ariminum"));
-await shot("09_tur_raporu", D({ do: "endTurn" }));
+await shot("08_yolda", `${TAP("ariminum")}; ${AT(200)}`);
+await shot("08b_vardi", DONE);
+await shot("09_tur_seridi", `${D({ do: "endTurn" })}; ${AT(450)}`);
+await shot("09b_tur_raporu", DONE);
 await shot("10_saldiri_isaretleri", `${D({ do: "close" })}; const a = M.game.armies.find((x) => x.owner === 'rome');
   a.inf = 120; M.ui.sel = { kind: 'army', id: a.id }; M.look('ariminum', 2.6)`);
 await shot("11_saldiri_penceresi", TAP("mediolanum"));
-await shot("12_savas_sonucu", D({ do: "attack" }));
+await shot("12_saldiri_ani", `${D({ do: "attack" })}; ${AT(520)}`);
+await shot("12b_savas_sonucu", DONE);
 await shot("13_diplomasi", `${D({ do: "close" })}; ${D({ do: "open", modal: "diplo" })}`);
 await shot("14_menu", `${D({ do: "close" })}; ${D({ do: "open", modal: "menu" })}`);
 await shot("15_tr_sehir", `${D({ do: "close" })}; ${D({ do: "lang", lang: "tr" })}; M.ui.sel = { kind: 'place', id: 'mediolanum' }; M.redraw()`);
@@ -139,6 +145,11 @@ await shot("17_tehdit_raporu", `${D({ do: "lang", lang: "en" })}; const g = M.ga
   g.armies.push({ id: 999, owner: 'carthage', at: 'syracuse', inf: 80, arch: 20, moves: 1, route: [] });
   M.ui.sel = null; M.look('tarentum', 2.2); ${D({ do: "open", modal: "report" })}`);
 await shot("18_tehdit_halkasi", D({ do: "close" }));
+// Rakibin hamlesi: Kartaca'nın 100 askeri Tarentum'a yürüyüp saldırır, tur arası gösterisinde.
+await shot("19_rakip_yuruyor", `${D({ do: "endTurn" })}; ${AT(1150)}`);
+await shot("19b_rakip_carpisma", AT(1350));
+await shot("19c_el_degisti", AT(1900));
+await shot("19d_rapor", DONE);
 
 for (const line of log) console.log("  " + line);
 console.log(bad ? `${bad} HATA` : "konsol temiz");

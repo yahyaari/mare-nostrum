@@ -294,6 +294,37 @@ section("Hareket ve diplomasi (bölüm 6, 8)");
   check("ertesi tur edilir", D.declareWar(d, "rome", "gaul")?.type === "war");
   check("savaşla barış teklifi turda bir", D.proposePeace(d, "rome", "gaul") && D.proposePeace(d, "rome", "gaul") === null);
 
+  // Ekranın izi: her adım ve her saldırı kaydediliyor; iz istenmediyse hiç yazılmıyor.
+  const tr = S.newGame("saka", 7);
+  tr.trace = [];
+  const ta = S.formArmy(tr, "olbia", 10, 0);
+  M.order(tr, ta.id, "tanais");
+  check("iz: iki yol, iki adım", tr.trace.length === 2 && tr.trace[0].from === "olbia" && tr.trace[1].to === "tanais",
+    JSON.stringify(tr.trace));
+  const tq = S.newGame("rome", 7);
+  const tb = S.formArmy(tq, "rome", 30, 0);
+  M.order(tq, tb.id, "ariminum");
+  check("iz istenmediyse yazılmıyor", !("trace" in tq));
+  M.refresh(tq, "rome");
+  tq.trace = [];
+  tb.inf = 200;
+  M.attack(tq, tb.id, "mediolanum", [1, 1]);
+  check("iz: saldırı kaydı", tq.trace.length === 1 && tq.trace[0].type === "attack" && tq.trace[0].won && tq.trace[0].oldOwner === null);
+
+  // Saldıranı püskürten savunma asker kazanamaz (bölüğe yuvarlama 7'yi 10 yapıyordu).
+  let grew = 0;
+  for (let i = 0; i < 60; i++) {
+    const g = S.newGame("rome", 7);
+    g.places.mediolanum.inf = 3 + i;
+    g.places.mediolanum.arch = (i * 7) % 23;
+    const a2 = S.formArmy(g, "ariminum", 10, 0);
+    a2.inf = 2 + (i % 9);
+    const was = g.places.mediolanum.inf + g.places.mediolanum.arch;
+    const ev2 = M.attack(g, a2.id, "mediolanum", [1, 1]);
+    if (ev2 && !ev2.won && g.places.mediolanum.inf + g.places.mediolanum.arch > was) grew++;
+  }
+  check("püskürten savunma asker kazanmıyor", grew === 0, grew);
+
   // Tehdit uyarısı: yanında SAVAŞTIĞI birinin ordusu varsa; tarafsızın ordusu tehdit değil.
   const w = S.newGame("rome", 7);
   const c = S.formArmy(w, "carthage", 30, 0);

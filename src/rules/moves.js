@@ -94,6 +94,8 @@ export function advance(state, army) {
       army.route = [];
       break;
     }
+    // Ekran için iz: kim nereden nereye yürüdü (state.trace sadece ekran isterse var, kayda girmez).
+    state.trace?.push({ type: "move", army: army.id, owner: army.owner, men: men(army), from: army.at, to: next });
     army.at = next;
     army.moves -= 1;
     army.route.shift();
@@ -133,6 +135,10 @@ export function attack(state, armyId, id, luck = null) {
     won: r.attWins, before: { att: { inf: army.inf, arch: army.arch }, def: { inf: def.inf, arch: def.arch } },
     after: { att: r.att, def: r.def },
   };
+  state.trace?.push({
+    type: "attack", army: army.id, owner: army.owner, men: men(army), from: army.at, to: id,
+    won: r.attWins, oldOwner: pl.owner,
+  });
   army.moves = 0;
   army.route = [];
 
@@ -144,13 +150,14 @@ export function attack(state, armyId, id, luck = null) {
     army.at = id;
     ev.fallen = loser && !state.civs[loser].alive ? loser : null;
   } else {
-    // Savunanların sağ kalanları: her birim aynı oranda.
+    // Savunanların sağ kalanları: her birim aynı oranda. (Bölüğe yuvarlanıyordu: 7 kişi 10
+    // oluyordu, savaşı kazanan savunma asker kazanabiliyordu.)
     const keep = (was, now) => (was > 0 ? now / was : 0);
     const ki = keep(def.inf, r.def.inf), ka = keep(def.arch, r.def.arch);
     const units = [pl, ...armiesAt(state, id).filter((a) => a.owner === pl.owner)];
     for (const u of units) {
-      u.inf = Math.round((u.inf * ki) / N.company) * N.company;
-      u.arch = Math.round((u.arch * ka) / N.company) * N.company;
+      u.inf = Math.floor(u.inf * ki);
+      u.arch = Math.floor(u.arch * ka);
     }
     state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && men(a) === 0));
   }

@@ -170,19 +170,35 @@ function drawTop(ctx, cam, game, ui, boxes, T) {
 
   // Kaynaklar: ambardaki ve turluk değişim
   const civ = game.civs[me], b = budget(game, me);
-  const chips = [["money", civ.money, b.money], ["weapons", civ.weapons, b.weapons], ["food", civ.food, b.food]];
-  const cy = narrow ? 70 : 34;
-  let cx = narrow ? 14 : 200;
-  const step = narrow ? (cam.w - 28) / 3 : 130;
-  for (const [k, have, d] of chips) {
-    const w = amount(ctx, k, fmt(have), cx, cy, { size: 16, bold: true });
-    text(ctx, delta(d), cx + w + 6, cy, { size: 12, color: d < 0 ? INK.bad : INK.good, bold: true });
-    cx += step;
+  for (const [k, have, d] of [["money", civ.money, b.money], ["weapons", civ.weapons, b.weapons], ["food", civ.food, b.food]]) {
+    const c = chip(cam, k);
+    const w = amount(ctx, k, fmt(have), c.x, c.y, { size: 16, bold: true });
+    text(ctx, delta(d), c.x + w + 6, c.y, { size: 12, color: d < 0 ? INK.bad : INK.good, bold: true });
   }
 }
 
+/** Üst banttaki bir kaynağın yeri (yazının taban çizgisinin solu). */
+function chip(cam, k) {
+  const narrow = narrowOf(cam);
+  const i = ["money", "weapons", "food"].indexOf(k);
+  const step = narrow ? (cam.w - 28) / 3 : 130;
+  return { x: (narrow ? 14 : 200) + i * step, y: narrow ? 70 : 34 };
+}
+
+/** Bir kaynağın değişimi yükselirken nereden çıksın: sayının hemen altı. */
+export const chipRise = (cam, k) => {
+  const c = chip(cam, k);
+  return { x: c.x + 40, y: c.y + 32 };
+};
+
 // ---------------------------------------------------------------------------------------------
 // Kartlar
+
+/** Kartın sağ üst köşesinde kapatma düğmesi: telefonda kart haritanın yarısını kaplıyor. */
+function closeX(ctx, boxes, r) {
+  const s = 34, x = r.x + r.w - s - 6, y = r.y + 6;
+  button(ctx, boxes, { x, y, w: s, h: s, label: "×", size: 20, act: { do: "deselect" } });
+}
 
 function cardRect(cam, h) {
   const narrow = narrowOf(cam);
@@ -205,6 +221,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
   const r = cardRect(cam, 418);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
+  closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
   let y = r.y;
 
@@ -297,6 +314,7 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
   const h = 150 + lines.length * 18 + (can ? 52 : 0);
   const r = cardRect(cam, h);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
+  closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
   const y = r.y;
 
@@ -342,6 +360,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   const h = 116 + (a.route.length ? 20 : 0) + hint.length * 16 + (mine ? 52 : 0);
   const r = cardRect(cam, h);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
+  closeX(ctx, boxes, r);
   const x = r.x + 18;
   let y = r.y + 32;
 
