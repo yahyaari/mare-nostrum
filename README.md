@@ -9,6 +9,7 @@ Plain HTML canvas, no build step, no dependencies. Open `index.html` through any
 node Tools/serve.mjs . 8060
 ```
 
-Rules: `Docs/kurallar.md` (Turkish). Working notes: `Docs/working-on-this.md`.
+Plan and status: `Docs/plan.md`. Rules: `Docs/kurallar.md`. Working notes: `Docs/working-on-this.md`.
+(All in Turkish.)
 
 Coastlines, lakes and rivers: [Natural Earth](https://www.naturalearthdata.com/) (public domain).

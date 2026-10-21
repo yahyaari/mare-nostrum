@@ -2,6 +2,9 @@
 
 ## NEREDE KALDIK
 
+> **Önce `Docs/plan.md`'yi oku:** yapılanların özeti, sıradaki işler (tasarım taslaklarıyla),
+> açık riskler, çalışma düzeni. Aşağısı ayrıntılı geçmiş.
+
 **20.10.2026 — oyun oynanabilir.** Yayında: https://yahyaari.github.io/mare-nostrum/ (master'a
 push bir dakikada yayınlanır). Medeniyet seçimi, şehir yükseltme, asker basma, ordu çıkarma,
 yürüme, otomatik savaş, diplomasi (savaş, ittifak, bozma, barış), bilgisayar rakipler, tur
@@ -36,9 +39,13 @@ Kullanıcının onayladığı derinlik listesi bitti.
 
 **Liman yapıları** (kurallar.md 16, kullanıcı istedi): balıkçılık, tersane, ticaret, liman
 kalesi; liman şehrinin kartı iki sekmeli (`ui.cardTab`). Kayıt sürümü 5. Roma liman oldu
-(Ostia). Denge araçları: `Logs/who.mjs <medeniyet>` (kimin yerini kim alıyor),
-`Logs/str20.mjs <kök>` (20. turda ortalama güçler), `Logs/rome.mjs` - bunlar Logs'ta, depoda yok. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
-düşman ordularının nereye yürüdüğünü göstermek.
+(Ostia).
+
+**Yürüyüş** (21.10, kullanıcı "ordular ışınlanıyor" dedi): yol uzunluğuna göre süre, iz,
+sallanma; dokunuş önce hızlandırır. Aşağıda "Animasyon tuzakları".
+
+**Sıradakiler:** `plan.md` bölüm 2. Denge araçları artık `Tools/` altında: `balance.mjs`,
+`who.mjs`, `strength.mjs`, `diverge.mjs`, `film.mjs`.
 
 ## Komutlar
 
@@ -47,6 +54,8 @@ node Tools/serve.mjs . 8060                         oyunu sun  ->  http://localh
 node Tools/serve.mjs . 8060 0.0.0.0                 aynı ağdaki telefon da girsin
 node Tools/test.mjs                                 bütün kontroller (tarayıcısız, birkaç sn)
 node Tools/bot.mjs 7 200                            7 oyunu bilgisayara oynat, özetini yaz
+node Tools/balance.mjs 70                           denge: 70 oyun (ilk düşüş, ayakta kalma)
+node Tools/who.mjs rome 35                          bir medeniyetin yerlerini kim alıyor
 node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720          ekran fotoğrafları
 node Tools/peek.mjs http://localhost:8060/ Logs/peek-phone 390 844     telefon, dikey
 node Tools/playtest.mjs http://localhost:8060/ saka 60 easy             tarayıcıda, düğmelere basarak 60 tur oyna
