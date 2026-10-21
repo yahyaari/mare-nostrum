@@ -23,7 +23,10 @@ raporundan sonra kapatılamayan karar penceresi olarak sorulur. Kayıt sürümü
 `moves.forecast` (generaller dahil) - arayüz, bilgisayar ve oyuncu testi bunu kullanıyor; eskiden
 üçü ayrı ayrı `estimate` çağırıyordu ve general gelince üçü de yanlış olurdu.
 
-Sıradakiler (kullanıcının onayladığı derinlik listesi): süvari ve kuşatma makinesi, donanma. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
+**Süvari ve kuşatma makinesi** (kurallar.md 5, 7). Asker türleri artık `UNITS` listesinde
+(numbers.js): her yer ve her ordu `inf, arch, cav, siege` taşıyor, kayıt sürümü 3.
+
+Sıradakiler (kullanıcının onayladığı derinlik listesi): donanma. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
 düşman ordularının nereye yürüdüğünü göstermek.
 
 ## Komutlar
@@ -63,6 +66,19 @@ neredeyse hiç isyan yok, bilgisayar garnizon bırakıyor), bilgisayarların fet
 tutması yüzünden. Bilgisayarlar arası savaş eşiği 1.5 -> 1.8 ve Makedonya'nın nüfus cezası 0.8 ->
 0.9 ile ilk düşüş ortalaması 56. tura çıktı, en erken 25. Ölçüm: `node Logs/sum.mjs 28` gibi bir
 özet (28 oyun, 7 medeniyet sırayla oyuncu).
+
+## Denge: süvari gelince (21.10) - yanlış teşhis dersi
+
+İlk ölçümde ilk düşüş 28. tura indi; süvariyi üç kez zayıflattım (yiyecek, güç, hücum) ve hiçbiri
+sayıyı kıpırdatmadı. Asıl sebep süvari değildi: yeni bileşimde **okçu payları da düşürülmüştü**
+(0.35 -> 0.3). Okçu sur arkasında iki kat attığı için savunmanın bel kemiği. Okçu payları eski
+değerine dönünce 41'e geri geldi ve süvari tasarlandığı gibi (× 1.2, hücum 5) bırakıldı.
+
+İki ders: (1) **Değişkenleri tek tek ayır** - "süvari var, kuşatma yok" denemesi okçu payını
+da değiştiriyordu, o yüzden süvariyi suçladı. (2) **28 oyun az:** yüklenen sürüm 28 oyunda 56,
+70 oyunda 41 çıktı. Kayıpları türlere dağıtan yuvarlamadaki tek bir farkın bile oyunu bambaşka
+bir yöne götürdüğü görüldü (`Logs/diverge.mjs` iki sürümü aynı tohumla oynatıp ilk ayrıldıkları
+anı buluyor). Denge kararları için 70 oyun.
 
 ## Animasyon tuzakları
 

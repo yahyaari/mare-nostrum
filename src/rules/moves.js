@@ -8,7 +8,7 @@ import { CIVS } from "../data/world.js";
 import { estimate, fight } from "./combat.js";
 import { neighbours, path } from "./graph.js";
 import { bestAt, bury, has, learn } from "./generals.js";
-import { N, trait } from "./numbers.js";
+import { N, UNITS, trait } from "./numbers.js";
 import { between } from "./rng.js";
 import { armiesAt, armyById, info, men, placesOf, relation } from "./state.js";
 
@@ -40,11 +40,9 @@ export function wallsOf(state, id) {
 export function defenders(state, id) {
   const pl = state.places[id];
   const own = armiesAt(state, id).filter((a) => a.owner === pl.owner);
-  return {
-    civ: pl.owner,
-    inf: pl.inf + own.reduce((n, a) => n + a.inf, 0),
-    arch: pl.arch + own.reduce((n, a) => n + a.arch, 0),
-  };
+  const out = { civ: pl.owner };
+  for (const k of UNITS) out[k] = pl[k] + own.reduce((n, a) => n + a[k], 0);
+  return out;
 }
 
 /**
@@ -122,7 +120,7 @@ export function menace(state, id) {
 export function forecast(state, unit, civ, id) {
   const pl = state.places[id];
   return estimate(
-    { civ, inf: unit.inf, arch: unit.arch, gen: unit.general ?? null },
+    { civ, inf: unit.inf, arch: unit.arch, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null },
     { ...defenders(state, id), gen: bestAt(state, id, pl.owner) },
     wallsOf(state, id),
   );
@@ -144,10 +142,10 @@ export function attack(state, armyId, id, luck = null) {
   const def = defenders(state, id);
   const walls = wallsOf(state, id);
   const defGen = bestAt(state, id, pl.owner);
-  const r = fight({ civ: army.owner, inf: army.inf, arch: army.arch, gen: army.general }, { ...def, gen: defGen }, walls, luck ?? rollLuck(state));
+  const r = fight({ civ: army.owner, ...pickUnits(army), gen: army.general }, { ...def, gen: defGen }, walls, luck ?? rollLuck(state));
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
-    won: r.attWins, before: { att: { inf: army.inf, arch: army.arch }, def: { inf: def.inf, arch: def.arch } },
+    won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },
     after: { att: r.att, def: r.def },
   };
   state.trace?.push({
@@ -158,8 +156,7 @@ export function attack(state, armyId, id, luck = null) {
   army.route = [];
 
   if (r.attWins) {
-    army.inf = r.att.inf;
-    army.arch = r.att.arch;
+    for (const k of UNITS) army[k] = r.att[k];
     const loser = pl.owner;
     capture(state, id, army.owner);
     army.at = id;
@@ -168,12 +165,10 @@ export function attack(state, armyId, id, luck = null) {
   } else {
     // Savunanların sağ kalanları: her birim aynı oranda. (Bölüğe yuvarlanıyordu: 7 kişi 10
     // oluyordu, savaşı kazanan savunma asker kazanabiliyordu.)
-    const keep = (was, now) => (was > 0 ? now / was : 0);
-    const ki = keep(def.inf, r.def.inf), ka = keep(def.arch, r.def.arch);
     const units = [pl, ...armiesAt(state, id).filter((a) => a.owner === pl.owner)];
-    for (const u of units) {
-      u.inf = Math.floor(u.inf * ki);
-      u.arch = Math.floor(u.arch * ka);
+    for (const k of UNITS) {
+      const keep = def[k] > 0 ? r.def[k] / def[k] : 0;
+      for (const u of units) u[k] = Math.floor(u[k] * keep);
     }
     // Saldıranın generali ordusuyla öldü; savunmayı tutan general tecrübe kazandı.
     bury(state, army.owner, army.general);
@@ -185,14 +180,15 @@ export function attack(state, armyId, id, luck = null) {
   return ev;
 }
 
+const pickUnits = (u) => Object.fromEntries(UNITS.map((k) => [k, u[k] ?? 0]));
+
 const rollLuck = (state) => [between(state, 1 - N.luck, 1 + N.luck), between(state, 1 - N.luck, 1 + N.luck)];
 
 /** Yer el değiştirir: savunanlar yok olur, nüfusun dörtte biri kaçar, yapılar kalır. */
 export function capture(state, id, civ) {
   const pl = state.places[id];
   const loser = pl.owner;
-  pl.inf = 0;
-  pl.arch = 0;
+  for (const k of UNITS) pl[k] = 0;
   pl.owner = civ;
   pl.pop = Math.round(pl.pop * (1 - N.captureLoss));
   pl.upgraded = true; // alındığı tur yükseltilmez
@@ -217,7 +213,7 @@ export function expel(state, a, b) {
     const owner = state.places[army.at].owner;
     if ((army.owner === a && owner === b) || (army.owner === b && owner === a)) {
       const home = nearestOwn(state, army.owner, army.at);
-      if (home) { army.at = home; army.route = []; } else army.inf = army.arch = 0;
+      if (home) { army.at = home; army.route = []; } else for (const k of UNITS) army[k] = 0;
     }
   }
   state.armies = state.armies.filter((x) => men(x) > 0);

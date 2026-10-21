@@ -10,7 +10,7 @@ import { CIVS } from "../data/world.js";
 import { canDeclare, canPropose } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import { access, canAttack, defenders, forecast, hostile, menace, wallsOf } from "../rules/moves.js";
-import { N, trait } from "../rules/numbers.js";
+import { N, UNITS, trait } from "../rules/numbers.js";
 import {
   UPGRADES, armiesAt, armyById, budget, gamesInfo, key, men, output, placesOf, popCap, recruitCost,
   recruitInfo, relation, strength, upgradeInfo,
@@ -215,13 +215,14 @@ function kindLine(id, game, T) {
     .filter(Boolean).join(" · ") + " · " + fill(T.lvl, pl.level);
 }
 
+/** "120 piyade · 40 okçu · 20 süvari": piyade ve okçu hep, ötekiler varsa. */
 function troops(T, u) {
-  return `${u.inf} ${T.inf} · ${u.arch} ${T.arch}`;
+  return UNITS.filter((k) => k === "inf" || k === "arch" || u[k] > 0).map((k) => `${u[k] ?? 0} ${T[k]}`).join(" · ");
 }
 
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const r = cardRect(cam, 462);
+  const r = cardRect(cam, 538);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
@@ -233,13 +234,15 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
 
   const cap = popCap(pl, p.kind);
   amount(ctx, "pop", `${pl.pop} / ${Math.round(cap)}`, x, y + 80, { size: 14 });
-  text(ctx, troops(T, pl), right, y + 80, { size: 13, align: "right" });
+  // Garnizon kendi satırında: dört tür yan yana nüfusun yanına sığmıyor.
+  text(ctx, troops(T, pl), x, y + 102, { size: 13 });
 
   const o = output(game, id);
-  text(ctx, T.perTurn, x, y + 104, { italic: true, size: 12, color: INK.soft });
+  text(ctx, T.perTurn, x, y + 126, { italic: true, size: 12, color: INK.soft });
   let cx = x + measure(ctx, T.perTurn, { italic: true, size: 12 }) + 12;
-  for (const k of ["money", "weapons", "food"]) cx += amount(ctx, k, delta(o[k]), cx, y + 104, { size: 13 }) + 14;
+  for (const k of ["money", "weapons", "food"]) cx += amount(ctx, k, delta(o[k]), cx, y + 126, { size: 13 }) + 14;
 
+  y += 22;
   rule(ctx, x, right, y + 116);
 
   // Sadakat: çubuk, bu turki değişim, oyunlar düğmesi.
@@ -287,22 +290,26 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   y += Y;
   rule(ctx, x, right, y + 292);
 
-  // Asker basma
-  const ri = recruitInfo(game, id, "inf"), ra = recruitInfo(game, id, "arch");
+  // Asker basma: dört tür, iki sıra. Kapalı düğmenin altında maliyet yerine neden kapalı olduğu.
+  const ri = recruitInfo(game, id, "inf");
   text(ctx, T.recruit, x, y + 312, { bold: true, size: 13 });
   const why = ri.why && ri.why !== "done" ? whyText(ri.why, T) : fill(T.recruitLeft, ri.left);
   text(ctx, why, right, y + 312, { italic: true, size: 12, color: ri.why && ri.why !== "done" ? INK.bad : INK.soft, align: "right" });
   const bw = (r.w - 36 - 10) / 2;
-  for (const [i, type, info, label] of [[0, "inf", ri, T.addInf], [1, "arch", ra, T.addArch]]) {
+  UNITS.forEach((type, i) => {
+    const info = recruitInfo(game, id, type);
+    const locked = info.why && info.why.startsWith("need");
     button(ctx, boxes, {
-      x: x + i * (bw + 10), y: y + 320, w: bw, h: 46, label, size: 13, off: !!info.why,
+      x: x + (i % 2) * (bw + 10), y: y + 320 + Math.floor(i / 2) * 54, w: bw, h: 46, label: T["add" + type[0].toUpperCase() + type.slice(1)], size: 13, off: !!info.why,
       act: { do: "recruit", id, type },
-      sub: (cx2, cy2, color) => costLine(ctx, recruitCost(game.player, type), cx2, cy2 + 2, color),
+      sub: (cx2, cy2, color) => (locked
+        ? text(ctx, whyText(info.why, T), cx2, cy2 + 2, { size: 11, italic: true, color, align: "center" })
+        : costLine(ctx, recruitCost(game.player, type), cx2, cy2 + 2, color)),
     });
-  }
+  });
 
   button(ctx, boxes, {
-    x, y: y + 374, w: r.w - 36, h: 32, label: T.formArmy, size: 13,
+    x, y: y + 428, w: r.w - 36, h: 32, label: T.formArmy, size: 13,
     off: men(pl) === 0, act: { do: "formOpen", id },
   });
 }
@@ -317,8 +324,9 @@ function effect(game, id, what, T) {
   const r1 = (n) => String(Math.round(n * 10) / 10);
   if (what === "level") return fill(T.levelFx, Math.round(popCap({ ...pl, level: pl.level + 1 }, p.kind)));
   if (what === "farms") return fill(T.farmsFx, r1(N.wheatPerFarm * castle * trait(c, "wheat")));
-  if (what === "industry") return fill(T.industryFx, r1(castle * trait(c, "weapons")));
-  return fill(T.barracksFx, pl.barracks + 1) + (pl.barracks + 1 === 2 ? " · " + T.barracksArch : "");
+  if (what === "industry") return fill(T.industryFx, r1(castle * trait(c, "weapons"))) + (pl.industry + 1 === 3 ? " · " + T.industrySiege : "");
+  const unlock = pl.barracks + 1 === 2 ? " · " + T.barracksArch : pl.barracks + 1 === 3 ? " · " + T.barracksCav : "";
+  return fill(T.barracksFx, pl.barracks + 1) + unlock;
 }
 
 function rule(ctx, x1, x2, y) {
@@ -508,10 +516,12 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
 
 function formModal(ctx, cam, game, ui, boxes, T, m) {
   const pl = game.places[m.id];
-  const r = modalFrame(ctx, cam, boxes, 250);
+  // Garnizonda olan türler (piyade ve okçu her zaman).
+  const rows = UNITS.filter((k) => k === "inf" || k === "arch" || pl[k] > 0).map((k) => [k, T[k]]);
+  const r = modalFrame(ctx, cam, boxes, 146 + rows.length * 52);
   const x = r.x + 22, right = r.x + r.w - 22;
   text(ctx, `${T.formArmy} · ${placeName(m.id, ui.lang)}`, r.x + r.w / 2, r.y + 40, { bold: true, size: 19, align: "center" });
-  [["inf", T.inf], ["arch", T.arch]].forEach(([type, label], i) => {
+  rows.forEach(([type, label], i) => {
     const y = r.y + 64 + i * 52;
     const max = pl[type];
     text(ctx, label[0].toLocaleUpperCase(ui.lang) + label.slice(1), x, y + 26, { bold: true, size: 14 });
@@ -521,7 +531,7 @@ function formModal(ctx, cam, game, ui, boxes, T, m) {
     button(ctx, boxes, { x: bx + 120, y, w: 40, h: 38, label: "+", size: 18, off: m[type] >= max, act: { do: "formStep", type, by: N.company } });
     button(ctx, boxes, { x: bx + 166, y, w: 44, h: 38, label: T.all, size: 11, off: m[type] >= max, act: { do: "formStep", type, by: Infinity } });
   });
-  twoButtons(ctx, boxes, r, { label: T.march, act: { do: "formOk" }, off: m.inf + m.arch <= 0 }, { label: T.cancel, act: { do: "close" } });
+  twoButtons(ctx, boxes, r, { label: T.march, act: { do: "formOk" }, off: men(m) <= 0 }, { label: T.cancel, act: { do: "close" } });
 }
 
 function diploModal(ctx, cam, game, ui, boxes, T) {

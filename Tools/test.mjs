@@ -159,7 +159,7 @@ const C = await import("../src/rules/combat.js");
 const M = await import("../src/rules/moves.js");
 const D = await import("../src/rules/diplomacy.js");
 const T = await import("../src/rules/turn.js");
-const { N } = await import("../src/rules/numbers.js");
+const { N, UNITS } = await import("../src/rules/numbers.js");
 const { play } = await import("./bot.mjs");
 
 {
@@ -535,6 +535,42 @@ const GN = await import("../src/rules/generals.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Süvari ve kuşatma makinesi (bölüm 5, 7)");
+
+{
+  const s = S.newGame("rome", 7);
+  s.civs.rome.money = 100; s.civs.rome.weapons = 50; s.civs.rome.food = 50;
+  check("süvari için kışla 3 gerek", S.recruitInfo(s, "rome", "cav").why === "needBarracks3");
+  check("kuşatma makinesi için sanayi 3 gerek", S.recruitInfo(s, "rome", "siege").why === "needIndustry3");
+  s.places.rome.level = 3; s.places.rome.barracks = 3; s.places.rome.industry = 3;
+  check("süvari basılıyor: 2 para (Roma x1.5 = 3), 2 silah, 1 yiyecek", S.recruit(s, "rome", "cav")
+    && s.civs.rome.money === 97 && s.civs.rome.weapons === 48 && s.civs.rome.food === 49 && s.places.rome.cav === 10);
+  check("kuşatma makinesi basılıyor: 3 silah", S.recruit(s, "rome", "siege") && s.civs.rome.weapons === 45 && s.places.rome.siege === 10);
+  const b0 = S.budget(s, "rome").upkeep;
+  s.places.rome.cav += 100;
+  check("süvari bakımı piyadeyle aynı", S.budget(s, "rome").upkeep === b0 + 10);
+
+  const F = (a, d, walls = null, civ = null) => C.fight({ civ, inf: 0, arch: 0, cav: 0, siege: 0, ...a }, { civ: null, inf: 0, arch: 0, cav: 0, siege: 0, ...d }, walls);
+  // Hücum ok yağmuruyla aynı anda: 5 bölük x 5 = 25 okçu, yağmur atlıları vurmadan önce.
+  check("süvari hücumu okçuları biçer: 5 bölük, 25 okçu", F({ cav: 50 }, { inf: 100, arch: 50 }).charge.byAtt === 25);
+  check("Saka süvarisi x1.3: 33 okçu", F({ cav: 50 }, { inf: 100, arch: 50 }, null, "saka").charge.byAtt === 33);
+  check("süvari açık arazide okçu ağırlıklı orduyu yener", F({ cav: 60 }, { inf: 20, arch: 60 }).attWins);
+  check("aynı süvari surlu şehre karşı yenilir, piyade alır", !F({ cav: 100 }, { inf: 70 }, "city").attWins && F({ inf: 100 }, { inf: 70 }, "city").attWins);
+  check("kale: 100 piyade alamaz, 5 bölük kuşatma makinesiyle alır",
+    !F({ inf: 100 }, { inf: 30, arch: 30 }, "castle").attWins && F({ inf: 100, siege: 50 }, { inf: 30, arch: 30 }, "castle").attWins);
+  check("sadece kuşatma makinesi boş yeri bile alamaz", !F({ siege: 50 }, {}).attWins);
+  check("kayıplar türlere dağılıyor, toplam tutuyor", (() => {
+    const r = F({ inf: 47, arch: 13, cav: 21, siege: 9 }, { inf: 30, arch: 20 });
+    return S.men(r.att) <= 90 && UNITS.every((k) => Number.isInteger(r.att[k]) && r.att[k] >= 0);
+  })());
+
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 2;
+  for (const p of Object.values(old.places)) { delete p.cav; delete p.siege; }
+  check("2. sürüm kayıt yükseltiliyor", S.migrate(old).version === S.VERSION && old.places.rome.cav === 0 && old.places.rome.siege === 0);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Bot: oyun boyunca değişmezler");
 
 {
@@ -546,7 +582,7 @@ section("Bot: oyun boyunca değişmezler");
       if (!civ.alive && (S.placesOf(s, c).length || S.armiesOf(s, c).length)) bad.push(`t${s.turn} ölü ${c}'nin malı var`);
     }
     for (const [id, p] of Object.entries(s.places)) {
-      for (const k of ["pop", "inf", "arch", "level", "farms", "industry", "barracks"]) {
+      for (const k of ["pop", ...UNITS, "level", "farms", "industry", "barracks"]) {
         if (!Number.isInteger(p[k]) || p[k] < 0) bad.push(`t${s.turn} ${id}.${k}=${p[k]}`);
       }
       for (const k of ["farms", "industry", "barracks"]) if (p[k] > p.level) bad.push(`t${s.turn} ${id}.${k} > seviye`);
@@ -555,7 +591,7 @@ section("Bot: oyun boyunca değişmezler");
       if (p.pop > S.popCap(p, byId[id].kind) + 1e-9) bad.push(`t${s.turn} ${id} nüfusu tavanı aşıyor`);
     }
     for (const a of s.armies) {
-      if (!(a.inf + a.arch > 0) || !Number.isInteger(a.inf) || !Number.isInteger(a.arch)) bad.push(`t${s.turn} ordu ${a.id} ${a.inf}/${a.arch}`);
+      if (!(S.men(a) > 0) || !UNITS.every((k) => Number.isInteger(a[k]) && a[k] >= 0)) bad.push(`t${s.turn} ordu ${a.id} ${UNITS.map((k) => a[k]).join("/")}`);
       const k = M.access(s, a.owner, a.at);
       if (k !== "own" && k !== "ally") bad.push(`t${s.turn} ordu ${a.id} (${a.owner}) yabancı yerde: ${a.at} ${k}`);
       if (!s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);

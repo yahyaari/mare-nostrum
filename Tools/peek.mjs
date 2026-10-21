@@ -166,6 +166,11 @@ await shot("24_general_ata", `${D({ do: "lang", lang: "en" })}; M.game.civs.rome
 await shot("25_general_atandi", `${D({ do: "appoint", army: 0 }).replace("0", "M.ui.sel.id")}; ${DONE}`);
 await shot("26_general_zafer", `const a = M.game.armies.find((x) => x.owner === 'rome' && x.at === 'mediolanum'); a.general.xp = 2;
   ${TAP("massalia")}; ${D({ do: "attack" })}; ${DONE}`);
+await shot("28_dort_tur", `M.ui.modal = null; const r = M.game.places.rome; r.level = 3; r.barracks = 3; r.industry = 3; r.cav = 20; r.siege = 10;
+  r.upgraded = false; r.recruited = 0; M.game.civs.rome.money = 90; M.game.civs.rome.weapons = 30; M.game.civs.rome.food = 30;
+  M.ui.sel = { kind: 'place', id: 'rome' }; M.look('rome', 2.2)`);
+await shot("29_ordu_cikar_dort", D({ do: "formOpen", id: "rome" }));
+await evaluate(`(() => { const M = window.MareNostrum; M.dispatch({ do: "close" }); return true; })()`);
 await shot("27_general_kart", `${D({ do: "close" })}; const a = M.game.armies.find((x) => x.owner === 'rome' && x.general);
   M.ui.sel = { kind: 'army', id: a.id }; M.redraw()`);
 await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "en" })}; return true; })()`);

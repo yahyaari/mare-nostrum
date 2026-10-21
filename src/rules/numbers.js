@@ -1,6 +1,9 @@
 // Bütün sayılar tek yerde. Docs/kurallar.md'deki başlangıç değerleri; bot oynatılarak
 // ayarlanacak. Bir sayıyı burada değiştiren, kurallar.md'yi de değiştirsin.
 
+// Asker türleri, her yerde bu sırayla. Kuşatma makinesi dövüşmez ama sayılır (mürettebat).
+export const UNITS = ["inf", "arch", "cav", "siege"];
+
 export const N = {
   // Kaynaklar (bölüm 3)
   taxPer: 20, // her 20 nüfus turda 1 para
@@ -25,7 +28,10 @@ export const N = {
   cost: {
     inf: { money: 1, weapons: 1, food: 1 },
     arch: { money: 1, weapons: 2, food: 1 },
+    cav: { money: 2, weapons: 2, food: 1 },
+    siege: { money: 3, weapons: 3, food: 1 },
   },
+  cavUpkeep: 1, // süvari bölüğü turda kaç bölük gibi yer (2 iken süvari yiyeceğe göre piyadeden zayıftı: tuzak birlik)
   upkeep: 1, // bölük başına turda yiyecek
   starve: 0.1, // açlıkta turda kayıp
 
@@ -33,6 +39,10 @@ export const N = {
   volley: 5, // bir okçu bölüğünün ok yağmurunda düşürdüğü asker
   archMelee: 0.6, // okçu yakın dövüşte, piyadenin arkasındayken
   archBare: 0.25, // piyadesinden fazla olan okçular: korumasız yakalananlar
+  cavMelee: 1.2, // süvari yakın dövüşte
+  cavWall: 0.5, // süvari sura karşı (hücumda ve göğüs göğüse)
+  charge: 5, // bir süvari bölüğünün hücumda biçtiği okçu
+  siegeBreach: 0.2, // bir kuşatma makinesi bölüğünün söktüğü sur bonusu payı (5 bölük suru tamamen açar)
   luck: 0.1, // ±%10
   winnerLoss: 0.5,
   castleWall: 1.5,
@@ -105,7 +115,7 @@ export const TRAITS = {
   macedon: { defInf: 1.5, popCap: 0.9 },
   parthia: { arch: 1.5, inf: 0.75 },
   gaul: { recruitMoney: 0, growth: 1.5, arch: 0.7 },
-  saka: { moves: 2, siege: 0.6 },
+  saka: { moves: 2, siege: 0.6, cav: 1.3 },
 };
 
 /** Bir medeniyetin bir özelliği; bağımsızlar (null) ve yazılmayanlar için varsayılan. */

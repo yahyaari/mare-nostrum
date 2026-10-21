@@ -119,6 +119,8 @@ Bir **bölük** 10 askerdir. Asker basmak şehrin nüfusundan düşer.
 |---|---|---|
 | **Piyade** | 1 para + 1 silah + 1 yiyecek + 10 nüfus | Yakın dövüşte güçlü |
 | **Okçu** | 1 para + 2 silah + 1 yiyecek + 10 nüfus | Önce ok yağdırır, yakın dövüşte zayıf |
+| **Süvari** | 2 para + 2 silah + 1 yiyecek + 10 nüfus · kışla 3 | Hücumda okçuları biçer, yakın dövüşte × 1.2, sura karşı yarı güç |
+| **Kuşatma makinesi** | 3 para + 3 silah + 1 yiyecek + 10 nüfus · sanayi 3 | Dövüşmez; her bölüğü düşman surunun bonusunun beşte birini söker |
 
 - **Her bölük her tur 1 yiyecek yer.** Bu, ordular ve garnizonlar için aynıdır.
 - **Açlık:** Yiyecek ambarı biterse bütün askerler her tur %10 eriyir ve nüfus artmaz.
@@ -157,6 +159,19 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
    Sonuç: tek başına okçu aynı sayıda piyadeye ezilir. Yarı yarıya karışık bir ordu ise aynı
    sayıda düz piyadeyi yener. (İlk taslaktaki 2 asker ve × 0.5 ile okçu her durumda piyadeden
    kötüydü.)
+
+   **Süvari hücumu** ok yağmuruyla aynı anda olur: her süvari bölüğü 5 düşman okçusunu biçer
+   (sura dalarken yarısı). Yakın dövüşte süvari × 1.2, sura karşı × 0.5. Okçular önlerinde
+   piyade ya da süvari varsa korunur. (Hücum yağmurdan sonra gelince okçular atlıların yarısını
+   hücumdan önce öldürüyordu ve süvari tam da okçu ağırlıklı orduya yeniliyordu.)
+
+   **Kuşatma makinesi** dövüşmez (mürettebatı sayılır ama gücü yok, tek başına bir yeri
+   alamaz). Saldıran tarafın her bölüğü surun bütün bonuslarının (kale × 1.5, kale okları × 2,
+   şehir × 1.25) beşte birini söker; 5 bölük suru tamamen açar. Kuşatma ustası general ile
+   birlikte çarpılır.
+
+   Taş-kâğıt-makas: okçu piyadeyi yıpratır, süvari okçuyu biçer, piyade ve sur süvariyi durdurur,
+   kuşatma makinesi suru açar.
 3. **Sonuç:**
    - Kaybeden ordu dağılır.
    - Kazananın kaybı, iki gücün birbirine ne kadar yakın olduğuna bağlıdır:
@@ -205,7 +220,7 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 | **Makedonya** | Savunan piyade × 1.5 (falanks) | Nüfus tavanı × 0.9 |
 | **Partlar** | Okçu × 1.5 | Piyade × 0.75 |
 | **Galyalılar** | Bölük para istemez, nüfus artışı × 1.5 | Okçu × 0.7 |
-| **Sakalar** | Ordular turda iki yol yürür (bozkır atlıları) | Surlu yere saldırı × 0.6 |
+| **Sakalar** | Ordular turda iki yol yürür, süvari × 1.3 (bozkır atlıları) | Surlu yere saldırı × 0.6 |
 
 Bu sayılar 28 bot oyunuyla ayarlandı. Mısır ve Kartaca hâlâ en sık büyüyenler, Roma ortada
 sıkıştığı için en sık düşen. Tarihe de uyuyor; oyuncu oynadıkça bakılacak.

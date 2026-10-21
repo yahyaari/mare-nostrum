@@ -11,7 +11,7 @@ import { fight } from "./combat.js";
 import { breakAlliance, declareWar } from "./diplomacy.js";
 import { seat } from "./loyalty.js";
 import { defenders, wallsOf } from "./moves.js";
-import { N } from "./numbers.js";
+import { N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import { armiesAt, budget, info, key, men, placesOf, relation, strength } from "./state.js";
 
@@ -56,15 +56,17 @@ export const EVENTS = {
       const own = armiesAt(s, it.place).filter((a) => a.owner === pl.owner);
       if (r.attWins) {
         // Akıncılar kazandı: savunanlar öldü, yağma: nüfusun dörtte biri ve bir tarla.
-        pl.inf = pl.arch = 0;
+        for (const k of UNITS) pl[k] = 0;
         s.armies = s.armies.filter((a) => !own.includes(a));
         pl.pop = Math.round(pl.pop * 0.75);
         pl.farms = Math.max(1, pl.farms - 1);
         return { held: false };
       }
-      const ki = def.inf ? r.def.inf / def.inf : 0, ka = def.arch ? r.def.arch / def.arch : 0;
-      for (const u of [pl, ...own]) { u.inf = Math.floor(u.inf * ki); u.arch = Math.floor(u.arch * ka); }
-      s.armies = s.armies.filter((a) => a.inf + a.arch > 0);
+      for (const k of UNITS) {
+        const keep = def[k] ? r.def[k] / def[k] : 0;
+        for (const u of [pl, ...own]) u[k] = Math.floor(u[k] * keep);
+      }
+      s.armies = s.armies.filter((a) => men(a) > 0);
       return { held: true, lost: men(def) - men(r.def) };
     },
     ai: (s, it) => (men(defenders(s, it.place)) >= it.raiders * 1.3 || s.civs[it.civ].money < it.bribe + 5 ? "fight" : "bribe"),

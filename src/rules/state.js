@@ -6,9 +6,9 @@
 
 import { CIVS, PLACES } from "../data/world.js";
 import { byId } from "./graph.js";
-import { LEVELS, N, trait } from "./numbers.js";
+import { LEVELS, N, UNITS, trait } from "./numbers.js";
 
-export const VERSION = 2;
+export const VERSION = 3;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -19,6 +19,10 @@ export function migrate(s) {
     s.truce ??= {};
     s.offered ??= {};
     s.version = 2;
+  }
+  if (s.version === 2) {
+    for (const u of [...Object.values(s.places), ...s.armies]) { u.cav ??= 0; u.siege ??= 0; }
+    s.version = 3;
   }
   return s;
 }
@@ -35,7 +39,7 @@ export function newGame(player, seed = 1, level = "normal") {
     const lv = free ? start.level : p.capital ? 2 : 1;
     const place = {
       owner: p.owner, level: lv, industry: 1, farms: 1, barracks: 1,
-      pop: 0, inf: 0, arch: 0, upgraded: false, recruited: 0,
+      pop: 0, inf: 0, arch: 0, cav: 0, siege: 0, upgraded: false, recruited: 0,
       loyalty: 100, games: false,
     };
     place.pop = Math.round(popCap(place, p.kind) * N.startPop);
@@ -63,7 +67,7 @@ export const placesOf = (state, civ) => Object.keys(state.places).filter((id) =>
 export const armiesOf = (state, civ) => state.armies.filter((a) => a.owner === civ);
 export const armiesAt = (state, id) => state.armies.filter((a) => a.at === id);
 export const armyById = (state, id) => state.armies.find((a) => a.id === id) ?? null;
-export const men = (u) => u.inf + u.arch;
+export const men = (u) => UNITS.reduce((n, k) => n + (u[k] ?? 0), 0);
 
 /** Nüfus tavanı. `kind`: "city" ya da "castle". */
 export function popCap(place, kind) {
@@ -103,7 +107,9 @@ export function budget(state, civ) {
   }
   // İaşeci generalin ordusu yarı yiyecek yer.
   const fed = armiesOf(state, civ).reduce((n, a) => n + (a.general?.traits.includes("supply") ? men(a) / 2 : 0), 0);
-  b.upkeep = Math.ceil((strength(state, civ) - fed) / N.company) * N.upkeep;
+  // Süvarinin atları da yer: süvari bölüğü iki bölük sayılır.
+  const horses = [...placesOf(state, civ).map((id) => state.places[id]), ...armiesOf(state, civ)].reduce((n, u) => n + (u.cav ?? 0), 0);
+  b.upkeep = Math.ceil((strength(state, civ) - fed + horses * (N.cavUpkeep - 1)) / N.company) * N.upkeep;
   b.food -= b.upkeep;
   return b;
 }
@@ -180,6 +186,8 @@ export function recruitInfo(state, id, type) {
   const cost = recruitCost(pl.owner, type);
   let why = null;
   if (type === "arch" && pl.barracks < 2) why = "needBarracks";
+  else if (type === "cav" && pl.barracks < 3) why = "needBarracks3";
+  else if (type === "siege" && pl.industry < 3) why = "needIndustry3";
   else if (pl.recruited >= pl.barracks) why = "done";
   else if (pl.pop < N.company + 10) why = "pop"; // şehri boşaltma: en az 10 kişi kalsın
   else if (civ.money < cost.money) why = "money";
@@ -208,13 +216,13 @@ export function recruit(state, id, type) {
  * Garnizondan ordu çıkarır. Sayılar bölüğün katı olmak zorunda değil: savaş ve açlık
  * kayıpları bölük gözetmiyor, garnizonda kalan 7 adam da yola çıkabilmeli.
  */
-export function formArmy(state, id, inf, arch) {
+export function formArmy(state, id, inf, arch, cav = 0, siege = 0) {
   const pl = state.places[id];
-  if (!Number.isInteger(inf) || !Number.isInteger(arch)) return null;
-  if (inf < 0 || arch < 0 || inf + arch <= 0 || inf > pl.inf || arch > pl.arch) return null;
-  pl.inf -= inf;
-  pl.arch -= arch;
-  const army = { id: state.nextArmy++, owner: pl.owner, at: id, inf, arch, moves: trait(pl.owner, "moves"), route: [], general: null };
+  const want = { inf, arch, cav, siege };
+  if (!UNITS.every((k) => Number.isInteger(want[k]) && want[k] >= 0 && want[k] <= pl[k])) return null;
+  if (men(want) <= 0) return null;
+  for (const k of UNITS) pl[k] -= want[k];
+  const army = { id: state.nextArmy++, owner: pl.owner, at: id, ...want, moves: trait(pl.owner, "moves"), route: [], general: null };
   state.armies.push(army);
   return army;
 }
@@ -223,8 +231,7 @@ export function formArmy(state, id, inf, arch) {
 export function station(state, armyId) {
   const a = armyById(state, armyId);
   if (!a || state.places[a.at].owner !== a.owner) return false;
-  state.places[a.at].inf += a.inf;
-  state.places[a.at].arch += a.arch;
+  for (const k of UNITS) state.places[a.at][k] += a[k];
   state.armies = state.armies.filter((x) => x !== a);
   return true;
 }
@@ -233,8 +240,7 @@ export function station(state, armyId) {
 export function merge(state, intoId, fromId) {
   const a = armyById(state, intoId), b = armyById(state, fromId);
   if (!a || !b || a === b || a.at !== b.at || a.owner !== b.owner) return false;
-  a.inf += b.inf;
-  a.arch += b.arch;
+  for (const k of UNITS) a[k] += b[k];
   a.moves = Math.min(a.moves, b.moves);
   // İki general varsa daha tecrübelisi komutayı alır, öteki emekli olur (adı yine kullanılabilir).
   if (b.general && (!a.general || b.general.xp > a.general.xp)) a.general = b.general;
@@ -248,11 +254,10 @@ export function split(state, armyId) {
   const a = armyById(state, armyId);
   if (!a) return null;
   const half = (n) => Math.floor(n / N.company / 2) * N.company;
-  const inf = half(a.inf), arch = half(a.arch);
-  if (inf + arch <= 0) return null;
-  a.inf -= inf;
-  a.arch -= arch;
-  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, inf, arch, moves: a.moves, route: [], general: null };
+  const part = Object.fromEntries(UNITS.map((k) => [k, half(a[k])]));
+  if (men(part) <= 0) return null;
+  for (const k of UNITS) a[k] -= part[k];
+  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, ...part, moves: a.moves, route: [], general: null };
   state.armies.push(b);
   return b;
 }

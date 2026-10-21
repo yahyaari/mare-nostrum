@@ -45,7 +45,7 @@ export async function open(url, W = 1280, H = 720) {
   });
   const send = (method, params = {}) => new Promise((resolve, reject) => {
     const id = nextId++;
-    const timer = setTimeout(() => reject(new Error(`${method} cevap vermedi`)), 30000);
+    const timer = setTimeout(() => reject(new Error(`${method} cevap vermedi`)), 180000);
     pending.set(id, (m) => { clearTimeout(timer); resolve(m); });
     ws.send(JSON.stringify({ id, method, params }));
   });

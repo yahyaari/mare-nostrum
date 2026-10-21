@@ -66,7 +66,10 @@ window.PT = (() => {
    * dokununca biter; ordu yürüyüşü kısa, onu bekle.) Sonra bekleyen pencere açılır.
    */
   async function skip() {
-    for (let i = 0; i < 400 && M.anim.busy(); i++) {
+    // Sadece bekletenler: tur arası gösterisi (dokunup atla) ve arkasında pencere bekleyen
+    // animasyon (savaş sonucu). Yükselen yazılar ve ordu yürüyüşü oyuncuyu bekletmez; onları
+    // beklemek turu 10-20 saniyeye çıkarıyordu.
+    for (let i = 0; i < 400 && M.anim.busy() && (M.blocking || M.waiting); i++) {
       if (M.blocking) M.tap(6, M.cam.h / 2);
       await frame();
     }
@@ -106,7 +109,9 @@ window.PT = (() => {
       for (let k = 0; k < 3; k++) {
         if (state.budget(g, me).food < 1.5) break;
         const pl = g.places[id];
-        const type = k % 2 && pl.barracks >= 2 ? "arch" : "inf";
+        // Sırayla: piyade, okçu, süvari (kışla 3), kuşatma (sanayi 3); açık değilse piyade.
+        const want = ["inf", "arch", "cav", "siege"][(k + g.turn) % 4];
+        const type = want === "arch" && pl.barracks >= 2 ? "arch" : want === "cav" && pl.barracks >= 3 ? "cav" : want === "siege" && pl.industry >= 3 ? "siege" : "inf";
         if (!(await press((a) => a.do === "recruit" && a.id === id && a.type === type))) break;
         stats.recruits++;
       }

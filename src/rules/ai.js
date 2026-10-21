@@ -11,15 +11,24 @@ import { appoint, appointInfo } from "./generals.js";
 import { rebels } from "./loyalty.js";
 import { neighbours, path } from "./graph.js";
 import { access, advance, attack, defenders, forecast, hostile, order, refresh } from "./moves.js";
-import { LEVELS, N } from "./numbers.js";
+import { LEVELS, N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import {
   armiesAt, armiesOf, budget, enemiesOf, formArmy, gamesInfo, holdGames, info, key, merge, men,
   placesOf, popCap, recruit, recruitInfo, relation, station, strength, upgrade, upgradeInfo,
 } from "./state.js";
 
-// Okçu payı hedefi: güçlü okçusu olan daha çok, zayıf okçusu olan daha az basar.
-const ARCHERS = { parthia: 0.55, gaul: 0.15, rome: 0.3 };
+// Ordunun hedeflenen bileşimi (payları; gerisi piyade). Güçlü okçusu olan daha çok okçu, zayıf
+// okçusu olan daha az; Sakalar süvari. Kuşatma makinesi az ama hep biraz: surlu hedefler için.
+// Okçu payları süvari gelmeden önceki değerler: 0.35 -> 0.3 indirmek savunmaları zayıflattı ve
+// ilk düşüşü 70 oyunda 41. turdan 28. tura çekti (okçu sur arkasında iki kat atıyor).
+const MIX = {
+  default: { arch: 0.35, cav: 0.1, siege: 0.04 },
+  parthia: { arch: 0.55, cav: 0.08, siege: 0.03 },
+  gaul: { arch: 0.15, cav: 0.12, siege: 0.03 },
+  rome: { arch: 0.3, cav: 0.06, siege: 0.06 },
+  saka: { arch: 0.35, cav: 0.25, siege: 0.03 },
+};
 
 export function aiTurn(state, civ, events) {
   if (!state.civs[civ].alive) return;
@@ -148,15 +157,18 @@ function build(state, civ) {
 // ---- asker ----
 
 function recruitAll(state, civ) {
-  const share = ARCHERS[civ] ?? 0.35;
+  const mix = MIX[civ] ?? MIX.default;
   for (const id of placesOf(state, civ)) {
     for (let guard = 0; guard < 6; guard++) {
-      // Her bölük turda 1 yiyecek yer: ambar eksiye düşmesin.
+      // Her bölük turda 1 yiyecek yer (süvari 2): ambar eksiye düşmesin.
       if (budget(state, civ).food < 1) return;
-      const total = strength(state, civ);
-      const archers = placesOf(state, civ).reduce((n, p) => n + state.places[p].arch, 0)
-        + armiesOf(state, civ).reduce((n, a) => n + a.arch, 0);
-      const type = archers < total * share && !recruitInfo(state, id, "arch").why ? "arch" : "inf";
+      const total = strength(state, civ) || 1;
+      const units = [...placesOf(state, civ).map((p) => state.places[p]), ...armiesOf(state, civ)];
+      const have = (k) => units.reduce((n, u) => n + u[k], 0) / total;
+      // En çok eksik olan tür, basılabiliyorsa; yoksa piyade.
+      const type = ["siege", "cav", "arch"]
+        .filter((k) => have(k) < mix[k] && !recruitInfo(state, id, k).why)
+        .sort((a, b) => have(a) / mix[a] - have(b) / mix[b])[0] ?? "inf";
       if (!recruit(state, id, type)) break;
     }
   }
@@ -229,10 +241,10 @@ function military(state, civ, events) {
     const spare = men(pl) - need(state, civ, id);
     if (spare < 20) continue;
     const k = spare / men(pl);
-    const force = { inf: Math.floor(pl.inf * k), arch: Math.floor(pl.arch * k) };
+    const force = Object.fromEntries(UNITS.map((t) => [t, Math.floor(pl[t] * k)]));
     const target = bestTarget(state, civ, force, neighbours(id));
     if (target) {
-      const a = formArmy(state, id, force.inf, force.arch);
+      const a = formArmy(state, id, force.inf, force.arch, force.cav, force.siege);
       const ev = a && attack(state, a.id, target);
       if (ev) events.push(ev);
     }
@@ -244,7 +256,7 @@ function military(state, civ, events) {
     const spare = men(pl) - need(state, civ, id);
     if (spare >= 50) {
       const k = spare / men(pl);
-      formArmy(state, id, Math.floor(pl.inf * k), Math.floor(pl.arch * k));
+      formArmy(state, id, ...UNITS.map((t) => Math.floor(pl[t] * k)));
     }
   }
   for (const a of armiesOf(state, civ)) {

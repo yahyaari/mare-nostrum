@@ -11,7 +11,7 @@
 
 import { byId, neighbours } from "./graph.js";
 import { capture, defenders } from "./moves.js";
-import { N } from "./numbers.js";
+import { N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import { men, placesOf } from "./state.js";
 
@@ -71,7 +71,7 @@ export function tick(state, civ, starving, events) {
     if (men(def) >= r) {
       // Bastırıldı: isyancıların yarısı kadar asker kaybı, ama sadakat biraz toparlanır.
       let loss = Math.ceil(r / 2);
-      for (const t of ["inf", "arch"]) {
+      for (const t of UNITS) {
         const n = Math.min(pl[t], loss);
         pl[t] -= n;
         loss -= n;

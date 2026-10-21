@@ -10,7 +10,7 @@ import { aiTurn } from "./ai.js";
 import { roll, settleInbox } from "./events.js";
 import { tick } from "./loyalty.js";
 import { advance, refresh } from "./moves.js";
-import { N, trait } from "./numbers.js";
+import { N, UNITS, trait } from "./numbers.js";
 import { armiesOf, budget, info, placesOf, popCap } from "./state.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -30,7 +30,7 @@ export function economy(state, events) {
       const units = [...placesOf(state, c.id).map((id) => state.places[id]), ...armiesOf(state, c.id)];
       let lost = 0;
       for (const u of units) {
-        for (const t of ["inf", "arch"]) {
+        for (const t of UNITS) {
           const n = Math.ceil(u[t] * N.starve);
           u[t] -= n;
           lost += n;

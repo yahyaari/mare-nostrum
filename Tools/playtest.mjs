@@ -29,7 +29,9 @@ try {
 
   let slow = 0, last = null;
   for (let i = 0; i < turns; i++) {
+    const t0 = Date.now();
     const r = await page.evaluate("PT.turn()");
+    if (Date.now() - t0 > 8000) console.log(`  YAVAŞ TUR: ${r.turn ?? r} ${Date.now() - t0}ms`);
     if (r === "over") break;
     last = r;
     slow = Math.max(slow, r.ms);

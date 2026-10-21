@@ -267,7 +267,8 @@ function dispatch(act) {
       break;
     case "start":
       if (!ui.pick) break;
-      game = newGame(ui.pick, (Date.now() % 1e9) | 0, ui.level);
+      // ?seed=123 aynı oyunu tekrar kurar (araçlar ve hata ayıklama için).
+      game = newGame(ui.pick, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level);
       ui.screen = "game";
       ui.sel = null;
       ui.modal = { kind: "help" };
@@ -362,12 +363,12 @@ function dispatch(act) {
       save();
       break;
     case "recruit":
-      if (recruit(game, act.id, act.type)) anim.rise(act.id, act.type === "inf" ? T().addInf : T().addArch, INK.ink);
+      if (recruit(game, act.id, act.type)) anim.rise(act.id, T()["add" + act.type[0].toUpperCase() + act.type.slice(1)], INK.ink);
       save();
       break;
     case "formOpen": {
       const pl = game.places[act.id];
-      ui.modal = { kind: "form", id: act.id, inf: pl.inf, arch: pl.arch };
+      ui.modal = { kind: "form", id: act.id, inf: pl.inf, arch: pl.arch, cav: pl.cav, siege: pl.siege };
       break;
     }
     case "formStep": {
@@ -376,7 +377,7 @@ function dispatch(act) {
       break;
     }
     case "formOk": {
-      const a = formArmy(game, m.id, m.inf, m.arch);
+      const a = formArmy(game, m.id, m.inf, m.arch, m.cav ?? 0, m.siege ?? 0);
       ui.modal = null;
       if (a) {
         ui.sel = { kind: "army", id: a.id };
@@ -653,6 +654,8 @@ window.MareNostrum = {
   tokens: () => tokens,
   /** Tur arası gösterisi sürüyor mu (dokunmak onu atlar). */
   get blocking() { return blocking; },
+  /** Animasyon bitince açılacak bir pencere bekliyor mu (savaş sonucu, rapor). */
+  get waiting() { return !!pending; },
   boxes: () => boxes,
 };
 
