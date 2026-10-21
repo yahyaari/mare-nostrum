@@ -5,8 +5,9 @@
 // yabancı bir yere asla kendi başına girmez - saldırı her zaman açık bir emirdir.
 
 import { CIVS } from "../data/world.js";
-import { fight } from "./combat.js";
+import { estimate, fight } from "./combat.js";
 import { neighbours, path } from "./graph.js";
+import { bestAt, bury, has, learn } from "./generals.js";
 import { N, trait } from "./numbers.js";
 import { between } from "./rng.js";
 import { armiesAt, armyById, info, men, placesOf, relation } from "./state.js";
@@ -114,6 +115,19 @@ export function menace(state, id) {
   return n;
 }
 
+/**
+ * Bir saldırının tahmini, generaller dahil: `unit` bir ordu ya da { inf, arch, general? }.
+ * Arayüz ve bilgisayar bunu kullanır - savaşın kendisiyle aynı sayılar.
+ */
+export function forecast(state, unit, civ, id) {
+  const pl = state.places[id];
+  return estimate(
+    { civ, inf: unit.inf, arch: unit.arch, gen: unit.general ?? null },
+    { ...defenders(state, id), gen: bestAt(state, id, pl.owner) },
+    wallsOf(state, id),
+  );
+}
+
 /** Saldırabilir mi: komşu, düşman/bağımsız, hareketi var. */
 export function canAttack(state, army, id) {
   return !!army && army.moves > 0 && neighbours(army.at).includes(id) && hostile(access(state, army.owner, id));
@@ -129,7 +143,8 @@ export function attack(state, armyId, id, luck = null) {
   const pl = state.places[id];
   const def = defenders(state, id);
   const walls = wallsOf(state, id);
-  const r = fight({ civ: army.owner, inf: army.inf, arch: army.arch }, def, walls, luck ?? rollLuck(state));
+  const defGen = bestAt(state, id, pl.owner);
+  const r = fight({ civ: army.owner, inf: army.inf, arch: army.arch, gen: army.general }, { ...def, gen: defGen }, walls, luck ?? rollLuck(state));
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
     won: r.attWins, before: { att: { inf: army.inf, arch: army.arch }, def: { inf: def.inf, arch: def.arch } },
@@ -149,6 +164,7 @@ export function attack(state, armyId, id, luck = null) {
     capture(state, id, army.owner);
     army.at = id;
     ev.fallen = loser && !state.civs[loser].alive ? loser : null;
+    if (army.general) ev.gen = { name: army.general.name, ...learn(state, army.general, true) };
   } else {
     // Savunanların sağ kalanları: her birim aynı oranda. (Bölüğe yuvarlanıyordu: 7 kişi 10
     // oluyordu, savaşı kazanan savunma asker kazanabiliyordu.)
@@ -159,6 +175,11 @@ export function attack(state, armyId, id, luck = null) {
       u.inf = Math.floor(u.inf * ki);
       u.arch = Math.floor(u.arch * ka);
     }
+    // Saldıranın generali ordusuyla öldü; savunmayı tutan general tecrübe kazandı.
+    bury(state, army.owner, army.general);
+    if (army.general) ev.genFell = army.general.name;
+    if (defGen) learn(state, defGen, true);
+    for (const a of state.armies) if (a.at === id && a.owner === pl.owner && men(a) === 0) bury(state, a.owner, a.general);
     state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && men(a) === 0));
   }
   return ev;
@@ -180,6 +201,7 @@ export function capture(state, id, civ) {
   pl.loyalty = civ ? N.loyalty.captured : 100;
   // Eski sahibin oradaki orduları savunurken öldü; başkalarının (müttefik) orduları en yakın
   // kendi yerlerine çekilir, yoksa dağılır.
+  for (const a of state.armies) if (a.at === id && a.owner === loser) bury(state, loser, a.general);
   state.armies = state.armies.filter((a) => !(a.at === id && a.owner === loser));
   for (const a of armiesAt(state, id)) {
     if (a.owner === civ) continue;
@@ -227,5 +249,5 @@ export function eliminate(state, civ) {
 
 /** Bir medeniyetin ordularına turun başında hareketlerini geri ver. */
 export function refresh(state, civ) {
-  for (const a of state.armies) if (a.owner === civ) a.moves = trait(civ, "moves");
+  for (const a of state.armies) if (a.owner === civ) a.moves = trait(civ, "moves") + (has(a.general, "swift") ? 1 : 0);
 }

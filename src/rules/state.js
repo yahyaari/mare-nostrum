@@ -14,6 +14,7 @@ export const VERSION = 2;
 export function migrate(s) {
   if (s.version === 1) {
     for (const p of Object.values(s.places)) { p.loyalty ??= 100; p.games ??= false; }
+    for (const a of s.armies) a.general ??= null;
     s.inbox ??= [];
     s.truce ??= {};
     s.offered ??= {};
@@ -100,7 +101,9 @@ export function budget(state, civ) {
     b.weapons += o.weapons;
     b.food += o.food;
   }
-  b.upkeep = Math.ceil(strength(state, civ) / N.company) * N.upkeep;
+  // İaşeci generalin ordusu yarı yiyecek yer.
+  const fed = armiesOf(state, civ).reduce((n, a) => n + (a.general?.traits.includes("supply") ? men(a) / 2 : 0), 0);
+  b.upkeep = Math.ceil((strength(state, civ) - fed) / N.company) * N.upkeep;
   b.food -= b.upkeep;
   return b;
 }
@@ -211,7 +214,7 @@ export function formArmy(state, id, inf, arch) {
   if (inf < 0 || arch < 0 || inf + arch <= 0 || inf > pl.inf || arch > pl.arch) return null;
   pl.inf -= inf;
   pl.arch -= arch;
-  const army = { id: state.nextArmy++, owner: pl.owner, at: id, inf, arch, moves: trait(pl.owner, "moves"), route: [] };
+  const army = { id: state.nextArmy++, owner: pl.owner, at: id, inf, arch, moves: trait(pl.owner, "moves"), route: [], general: null };
   state.armies.push(army);
   return army;
 }
@@ -233,6 +236,8 @@ export function merge(state, intoId, fromId) {
   a.inf += b.inf;
   a.arch += b.arch;
   a.moves = Math.min(a.moves, b.moves);
+  // İki general varsa daha tecrübelisi komutayı alır, öteki emekli olur (adı yine kullanılabilir).
+  if (b.general && (!a.general || b.general.xp > a.general.xp)) a.general = b.general;
   a.route = [];
   state.armies = state.armies.filter((x) => x !== b);
   return true;
@@ -247,7 +252,7 @@ export function split(state, armyId) {
   if (inf + arch <= 0) return null;
   a.inf -= inf;
   a.arch -= arch;
-  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, inf, arch, moves: a.moves, route: [] };
+  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, inf, arch, moves: a.moves, route: [], general: null };
   state.armies.push(b);
   return b;
 }

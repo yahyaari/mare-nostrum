@@ -475,6 +475,66 @@ section("Olaylar ve teklifler (bölüm 13)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Generaller (bölüm 14)");
+
+const GN = await import("../src/rules/generals.js");
+{
+  const s = S.newGame("saka", 7);
+  const a = S.formArmy(s, "neapolis", 30, 0);
+  const g = GN.appoint(s, a.id);
+  check("general atanıyor, 30 para", g && s.civs.saka.money === 0 && GN.NAMES.saka.includes(g.name));
+  check("ikinci general atanmaz", GN.appointInfo(s, a.id).why === "has");
+  check("1. seviye çarpanı 1", GN.might(g) === 1);
+  check("3. seviye çarpanı 1.12", Math.abs(GN.might({ level: 3, traits: [] }) - 1.12) < 1e-9);
+  check("taktisyen x1.1", Math.abs(GN.might({ level: 1, traits: ["tactician"] }) - 1.1) < 1e-9);
+  const up = GN.learn(s, g, true);
+  check("bir zafer: 2. seviye ve bir özellik", g.level === 2 && up.up === 2 && g.traits.length === 1 && GN.TRAITS.includes(up.trait));
+  GN.learn(s, g, true); GN.learn(s, g, true); GN.learn(s, g, true); GN.learn(s, g, true); GN.learn(s, g, true);
+  check("tecrübe biriktikçe 5. seviyede durur, iki özellik", g.level === 5 && g.traits.length === 2, `${g.level} ${g.traits}`);
+
+  // General savaşı çeviriyor: denk iki ordu, 5. seviye general kazandırır.
+  const F = (gen) => C.fight({ civ: null, inf: 100, arch: 0, gen }, { civ: null, inf: 105, arch: 0 }, null);
+  check("generalsiz denk savaş kaybedilir, 5. seviye general kazandırır", !F(null).attWins && F({ level: 5, traits: [] }).attWins);
+  const W = (gen) => C.fight({ civ: null, inf: 100, arch: 0, gen }, { civ: null, inf: 72, arch: 0 }, "castle");
+  check("kuşatma ustası kale surunu yarıya indirir", !W(null).attWins && W({ level: 1, traits: ["siege"] }).attWins);
+
+  // Ordu yenilirse general ölür ve adı bir daha verilmez.
+  const d = S.newGame("rome", 7);
+  const b = S.formArmy(d, "ariminum", 10, 0);
+  const gb = GN.appoint(d, b.id) ?? (d.civs.rome.money = 99, GN.appoint(d, b.id));
+  M.attack(d, b.id, "mediolanum", [1, 1]);
+  check("yenilen ordunun generali ölür", !S.armyById(d, b.id) && d.fallenGenerals.rome.includes(gb.name));
+  let reused = false;
+  for (let k = 0; k < 30; k++) {
+    d.civs.rome.money = 99;
+    const c = S.formArmy(d, "rome", 1, 0);
+    if (!c) break;
+    const gc = GN.appoint(d, c.id);
+    if (gc?.name === gb.name) reused = true;
+    S.station(d, c.id);
+  }
+  check("ölen generalin adı tekrar verilmez", !reused);
+
+  // Birleşmede tecrübeli olan kalır; hızlı general +1 yol; iaşeci ordu yarı yer.
+  const e = S.newGame("rome", 7);
+  e.civs.rome.money = 200;
+  const x = S.formArmy(e, "rome", 10, 0), y = S.formArmy(e, "rome", 10, 0);
+  GN.appoint(e, x.id); GN.appoint(e, y.id);
+  y.general.xp = 9; y.general.level = 3;
+  S.merge(e, x.id, y.id);
+  check("birleşmede tecrübeli general komutayı alır", x.general.level === 3);
+  x.general.traits = ["swift"];
+  M.refresh(e, "rome");
+  check("hızlı general: bir yol fazla", x.moves === 2);
+  const before = S.budget(e, "rome").upkeep;
+  x.inf = 100;
+  const fat = S.budget(e, "rome").upkeep;
+  x.general.traits = ["supply"];
+  // 100 askerlik ordunun yarısı 50 asker = 5 bölük daha az bakım.
+  check("iaşeci general: ordu yarı yiyecek yer", S.budget(e, "rome").upkeep === fat - 5 && fat > before, `${before} ${fat} ${S.budget(e, "rome").upkeep}`);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Bot: oyun boyunca değişmezler");
 
 {
@@ -499,6 +559,11 @@ section("Bot: oyun boyunca değişmezler");
       const k = M.access(s, a.owner, a.at);
       if (k !== "own" && k !== "ally") bad.push(`t${s.turn} ordu ${a.id} (${a.owner}) yabancı yerde: ${a.at} ${k}`);
       if (!s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);
+      const g = a.general;
+      if (g && !(g.level >= 1 && g.level <= 5 && g.xp >= 0 && g.traits.every((t) => GN.TRAITS.includes(t)) && g.traits.length <= 2)) {
+        bad.push(`t${s.turn} bozuk general ${JSON.stringify(g)}`);
+      }
+      if (g) generals++;
     }
     for (const e of events) if (!e || !e.type) bad.push(`t${s.turn} boş olay`);
     for (const it of s.inbox) {
@@ -507,11 +572,12 @@ section("Bot: oyun boyunca değişmezler");
     }
     seenInbox += s.inbox.length;
   };
-  let seenInbox = 0;
+  let seenInbox = 0, generals = 0;
   const games = [];
   for (let i = 0; i < 7; i++) games.push(play({ seed: 500 + i, player: CIVS[i].id, turns: 120, watch }));
   check("hiçbir turda bozuk sayı, bozuk ordu yok", !bad.length, bad.slice(0, 5).join(" | "));
   check("oyuncuya mektuplar geliyor", seenInbox > 0, seenInbox);
+  check("bilgisayar general atıyor", generals > 0, generals);
   const free25 = games.map((g) => g.freeLeft[24] ?? 0);
   check("25. tura kadar bağımsızların çoğu alınıyor", free25.every((n) => n <= 8), free25.join(" "));
   // Bilgisayarlar arası savaş eşiği 1.8 (sadakat gelince 1.5 erken yok ediyordu): ilk savaş geç olabilir.

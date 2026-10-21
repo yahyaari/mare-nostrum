@@ -82,6 +82,9 @@ export const N = {
   // Olaylar (bölüm 13): her medeniyete her tur bu ihtimalle bir olay; ilk birkaç tur yok.
   events: { chance: 0.16, from: 4 },
 
+  // Generaller (bölüm 14)
+  generals: { cost: 30, perLevel: 0.06, xpWin: 3, xpLoss: 1 },
+
   // Bilgisayarın oyuncuya teklifleri (bölüm 8)
   offers: { spacing: 6, truce: 8, tributeRatio: 1.8 },
 };

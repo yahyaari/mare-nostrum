@@ -5,14 +5,14 @@
 // döngü telefonun pilini yemekten başka bir şey yapmaz.
 
 import { CIVS, PLACES } from "./data/world.js";
-import { estimate } from "./rules/combat.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rules/diplomacy.js";
 import { neighbours } from "./rules/graph.js";
-import { access, attack, canAttack, defenders, hostile, menace, order, routeTo, wallsOf } from "./rules/moves.js";
+import { access, attack, canAttack, forecast, hostile, menace, order, routeTo } from "./rules/moves.js";
 import {
   VERSION, armyById, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, split, station, upgrade,
 } from "./rules/state.js";
 import { resolve as answer } from "./rules/events.js";
+import { appoint } from "./rules/generals.js";
 import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
@@ -150,7 +150,7 @@ function mapView() {
     .filter((id) => game.places[id].loyalty < N.loyalty.unrest).map((id) => [id, game.places[id].loyalty]));
   view.threats = Object.fromEntries(placesOf(game, game.player).map((id) => [id, menace(game, id)]).filter(([, n]) => n > 0));
   view.armies = game.armies.map((a) => ({
-    id: a.id, owner: a.owner, at: a.at, men: men(a),
+    id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0,
     selected: ui.sel?.kind === "army" && ui.sel.id === a.id,
     spent: a.owner === game.player && a.moves <= 0,
   }));
@@ -176,7 +176,7 @@ function mapView() {
     if (a.moves > 0) {
       for (const n of neighbours(a.at)) {
         if (!hostile(access(game, a.owner, n))) continue;
-        view.marks[n] = estimate({ civ: a.owner, inf: a.inf, arch: a.arch }, defenders(game, n), wallsOf(game, n)).odds;
+        view.marks[n] = forecast(game, a, a.owner, n).odds;
       }
     }
     if (a.route.length) view.route = [a.at, ...a.route];
@@ -321,6 +321,16 @@ function dispatch(act) {
       });
       blocking = true;
       pending = game.over ? { kind: "over" } : eventLines(game, ui.lang).length ? { kind: "report" } : next();
+      save();
+      break;
+    }
+    case "appoint": {
+      const g = appoint(game, act.army);
+      if (g) {
+        const a = armyById(game, act.army);
+        anim.rise(a.at, fill(T().general, g.name), INK.warn);
+        anim.pulse(a.at, INK.warn);
+      }
       save();
       break;
     }

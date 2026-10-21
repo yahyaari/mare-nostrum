@@ -358,6 +358,15 @@ function drawPlaces(ctx, cam, view, L) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(t.label, x + w / 2, y + h / 2 + 1);
+    if (army.gen) {
+      // Generalli ordu: sancağın sol üstünde altın bir yıldız.
+      ctx.font = `bold 12px ${SERIF}`;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = INK.ink;
+      ctx.strokeText("★", x - 1, y - 1);
+      ctx.fillStyle = "#e3b23c";
+      ctx.fillText("★", x - 1, y - 1);
+    }
     ctx.globalAlpha = 1;
   }
   // Parmak için kutuyu biraz büyüt. Yürüyen sancağa basılmaz: ordu zaten varacağı yerde.

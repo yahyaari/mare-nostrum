@@ -48,8 +48,10 @@ export function drift(state, id, starving = false, dist = null) {
     garrison: Math.min(L.garrisonCap, men(defenders(state, id)) / L.perGarrison),
     far: -Math.min(L.farCap, far * L.far),
     famine: starving ? -L.famine : 0,
+    // Sert bir generalin ordusu oradaysa halk hizaya gelir.
+    general: state.armies.some((a) => a.at === id && a.owner === pl.owner && a.general?.traits.includes("stern")) ? 4 : 0,
   };
-  return { total: parts.settle + parts.garrison + parts.far + parts.famine, parts };
+  return { total: parts.settle + parts.garrison + parts.far + parts.famine + parts.general, parts };
 }
 
 /** İsyancıların gücü: nüfusun dörtte biri. */

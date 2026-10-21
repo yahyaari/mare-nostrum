@@ -5,12 +5,12 @@
 // Kararlar basit önceliklerle (kurallar.md bölüm 11).
 
 import { CIVS } from "../data/world.js";
-import { estimate } from "./combat.js";
 import { canDeclare, canPropose, declareWar, proposeAlliance, proposePeace } from "./diplomacy.js";
 import { offer } from "./events.js";
+import { appoint, appointInfo } from "./generals.js";
 import { rebels } from "./loyalty.js";
 import { neighbours, path } from "./graph.js";
-import { access, advance, attack, defenders, hostile, order, refresh, wallsOf } from "./moves.js";
+import { access, advance, attack, defenders, forecast, hostile, order, refresh } from "./moves.js";
 import { LEVELS, N } from "./numbers.js";
 import { random } from "./rng.js";
 import {
@@ -185,7 +185,7 @@ function need(state, civ, id) {
   return Math.max(info(id).capital ? 20 : 10, unrest, Math.ceil(threat(state, civ, id) * 1.1));
 }
 
-const odds = (state, u, civ, id) => estimate({ civ, inf: u.inf, arch: u.arch }, defenders(state, id), wallsOf(state, id));
+const odds = (state, u, civ, id) => forecast(state, u, civ, id);
 
 /** Bir yerin değeri: başkent ve büyük şehir daha değerli, savunması zayıf olan daha cazip. */
 const worth = (state, id) => state.places[id].level * 10 + (info(id).capital ? 25 : 0) - men(defenders(state, id)) * 0.3;
@@ -206,6 +206,11 @@ function military(state, civ, events) {
         if (a.at === id) station(state, a.id);
       }
     }
+  }
+
+  // 1b. Büyük ordulara general (para varsa).
+  for (const a of armiesOf(state, civ)) {
+    if (men(a) >= 80 && !appointInfo(state, a.id).why && state.civs[civ].money >= N.generals.cost + 25) appoint(state, a.id);
   }
 
   // 2. Komşudaki kolay hedeflere ordularla saldır.

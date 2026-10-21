@@ -159,6 +159,15 @@ await shot("21_mektup_harac", `${D({ do: "decide", id: 900, choice: "bribe" })};
 await shot("22_sadakat", `${D({ do: "decide", id: 901, choice: "pay" })}; ${DONE}; M.ui.modal = null;
   M.game.places.mediolanum.loyalty = 18; M.game.places.ariminum.loyalty = 33; M.ui.sel = { kind: 'place', id: 'mediolanum' }; M.look('mediolanum', 2.2)`);
 await shot("23_sadakat_tr", `${D({ do: "lang", lang: "tr" })}`);
+// General: ata, sonra bir zaferde seviye atlasın.
+await shot("24_general_ata", `${D({ do: "lang", lang: "en" })}; M.game.civs.rome.money = 100;
+  const a = M.game.armies.find((x) => x.owner === 'rome' && x.at === 'mediolanum'); a.moves = 1; a.inf = 160;
+  M.ui.sel = { kind: 'army', id: a.id }; M.look('mediolanum', 2.4)`);
+await shot("25_general_atandi", `${D({ do: "appoint", army: 0 }).replace("0", "M.ui.sel.id")}; ${DONE}`);
+await shot("26_general_zafer", `const a = M.game.armies.find((x) => x.owner === 'rome' && x.at === 'mediolanum'); a.general.xp = 2;
+  ${TAP("massalia")}; ${D({ do: "attack" })}; ${DONE}`);
+await shot("27_general_kart", `${D({ do: "close" })}; const a = M.game.armies.find((x) => x.owner === 'rome' && x.general);
+  M.ui.sel = { kind: 'army', id: a.id }; M.redraw()`);
 await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "en" })}; return true; })()`);
 
 for (const line of log) console.log("  " + line);

@@ -264,6 +264,30 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
 | Huzursuzluk (sadakati 60'ın altında) | Oyunlar, 15 para: +20 · Görmezden gel: −15 |
 | Kervan (limanda) | +20 para |
 
+## 14. Generaller
+
+- Bir orduya **30 paraya** general atanır (ordu kartında "General ata"). Adlar tarihî ve
+  medeniyete göre: Roma'da Scipio, Fabius; Kartaca'da Hamilkar, Hasdrubal; Sakalarda Tomris,
+  Alp Er Tunga...
+- Savaş kazanınca +3, kaybettiği ama hayatta kaldığı savunmada +1 tecrübe. Seviye 1-5
+  (3, 7, 12, 18 tecrübede). **Her seviye ordunun gücüne +%6.**
+- **2. ve 4. seviyede bir yetenek:**
+
+| Yetenek | Etkisi |
+|---|---|
+| Kuşatma ustası | Düşman surunun bütün bonusları yarıya iner |
+| Hızlı | Ordu turda bir yol fazla yürür |
+| Taktisyen | Güç × 1.1 |
+| Okçu ustası | Ordunun ok yağmuru × 1.5 |
+| İaşeci | Ordu yarı yiyecek yer |
+| Sert | Durduğu yerin sadakatine her tur +4 |
+
+- Savunmada, o yerdeki en iyi general savunanlara katılır.
+- **Ordusu yenilen general ölür**; adı o medeniyette bir daha verilmez.
+- İki ordu birleşirse tecrübeli general komutayı alır; bölünen ordunun yeni yarısı generalsiz.
+- Bilgisayar 80+ askerlik ordularına parası varsa general atar.
+- Saldırı tahmini generalleri hesaba katar (iki taraf için de).
+
 ---
 
 ## 10. Tur sırası

@@ -124,7 +124,7 @@ window.PT = (() => {
     for (const a of [...g.armies.filter((x) => x.owner === me)]) {
       if (!g.armies.includes(a) || a.moves <= 0) continue;
       if (!(await tapArmy(a.id))) { stats.missed.push("ordu seçilemedi " + a.id); continue; }
-      const odds = (id) => combat.estimate({ civ: me, inf: a.inf, arch: a.arch }, moves.defenders(g, id), moves.wallsOf(g, id)).odds;
+      const odds = (id) => moves.forecast(g, a, me, id).odds;
       const near = graph.neighbours(a.at).filter((n) => moves.hostile(moves.access(g, me, n)) && odds(n) === "easy");
       if (near.length) {
         await tapPlace(near[0]);

@@ -19,8 +19,11 @@ Kamera zıplamıyor, kayıyor; telefonda seçilen yer kartın üstüne kayıyor,
 13). Oyuncunun kararları `state.inbox`ta "mektup" olarak bekler (`src/rules/events.js`), tur
 raporundan sonra kapatılamayan karar penceresi olarak sorulur. Kayıt sürümü 2 (`migrate`).
 
-Sıradakiler (kullanıcının onayladığı derinlik listesi): generaller, süvari ve kuşatma makinesi,
-donanma. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
+**Generaller** (kurallar.md 14): `src/rules/generals.js`. Savaş tahmini tek yerden:
+`moves.forecast` (generaller dahil) - arayüz, bilgisayar ve oyuncu testi bunu kullanıyor; eskiden
+üçü ayrı ayrı `estimate` çağırıyordu ve general gelince üçü de yanlış olurdu.
+
+Sıradakiler (kullanıcının onayladığı derinlik listesi): süvari ve kuşatma makinesi, donanma. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
 düşman ordularının nereye yürüdüğünü göstermek.
 
 ## Komutlar
