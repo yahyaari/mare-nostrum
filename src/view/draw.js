@@ -229,6 +229,25 @@ function drawPlaces(ctx, cam, view, L) {
     ctx.setLineDash([]);
   }
 
+  // Huzursuz (sadakati düşük) kendi yerin: kırmızı bir ünlem rozeti.
+  for (const { p, s } of shown) {
+    const lo = view.unrest?.[p.id];
+    if (lo === undefined) continue;
+    const x = s.x - 12, y = s.y - 13;
+    ctx.beginPath();
+    ctx.arc(x, y, 6.5, 0, TAU);
+    ctx.fillStyle = lo < 25 ? INK.bad : INK.warn;
+    ctx.fill();
+    ctx.strokeStyle = INK.card;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = INK.card;
+    ctx.font = `bold 10px ${SERIF}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("!", x, y + 0.5);
+  }
+
   // Seçimin işaretleri: yürünebilir yerler ince halka, saldırılabilirler tahmin renginde.
   for (const { p, s } of shown) {
     const m = view.marks?.[p.id];

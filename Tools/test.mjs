@@ -173,7 +173,7 @@ const { play } = await import("./bot.mjs");
   check("büyük bağımsız şehir: seviye 3, 40 piyade 20 okçu", ["syracuse", "athens", "antioch", "babylon"].every((id) => s.places[id].level === 3 && s.places[id].inf === 40 && s.places[id].arch === 20));
   check("büyük şehrin suru var", M.wallsOf(s, "athens") === "city" && M.wallsOf(s, "massalia") === null);
   check("bağımsız kale: 30 piyade 30 okçu", s.places.sparta.inf === 30 && s.places.sparta.arch === 30);
-  check("Makedonya nüfusu x0.8", s.places.pella.pop === 120, s.places.pella.pop);
+  check("Makedonya nüfusu x0.9", s.places.pella.pop === 135, s.places.pella.pop);
   check("bütün yapılar 1", Object.values(s.places).every((p) => p.industry === 1 && p.farms === 1 && p.barracks === 1));
   // Elle hesaplandı: para (150+75+38)/20 = 13.15; silah 1+1+0.5; yiyecek Roma 4 + Tarentum 4+1
   // balık + Ariminum 2 = 11, eksi 6 bölük = 5.
@@ -336,6 +336,145 @@ section("Hareket ve diplomasi (bölüm 6, 8)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Sadakat ve isyan (bölüm 12)");
+
+const LY = await import("../src/rules/loyalty.js");
+const EV = await import("../src/rules/events.js");
+{
+  const s = S.newGame("rome", 7);
+  check("başlangıçta herkes 100", Object.values(s.places).every((p) => p.loyalty === 100));
+  const a = S.formArmy(s, "ariminum", 10, 0);
+  a.inf = 300;
+  M.attack(s, a.id, "mediolanum", [1, 1]);
+  check("alınan yer 20 ile başlar", s.places.mediolanum.loyalty === N.loyalty.captured);
+  // Mediolanum Roma'ya 2 yol: uzaklık cezası yok. Ordu (300) orada: garnizon katkısı tavanda.
+  const d = LY.drift(s, "mediolanum");
+  check("yatışma +4, garnizon tavanı +8", d.parts.settle === 4 && d.parts.garrison === 8 && d.parts.far === 0, JSON.stringify(d.parts));
+  S.station(s, a.id);
+  s.places.mediolanum.inf = 0;
+  check("boş garnizon katkı vermez", LY.drift(s, "mediolanum").parts.garrison === 0);
+  // Uzak yer: Roma'dan Babil'e çok yol; ceza tavanda.
+  s.places.babylon.owner = "rome";
+  check("uzak yerin cezası tavanda (-8)", LY.drift(s, "babylon").parts.far === -8, LY.drift(s, "babylon").parts.far);
+  check("kıtlık -10", LY.drift(s, "rome", true).parts.famine === -10);
+
+  // İsyan: sadakat 0, garnizon yok -> kesin isyan ((25-0) x %4 = 1); bağımsızlığına döner.
+  const r = S.newGame("rome", 3);
+  r.places.tarentum.loyalty = 0;
+  r.places.tarentum.inf = 0;
+  r.places.tarentum.pop = 200;
+  const ev = [];
+  LY.tick(r, "rome", true, ev);
+  check("sadakat 0 ve boş garnizon: isyan", r.places.tarentum.owner === null && ev.some((e) => e.type === "revolt" && e.place === "tarentum"),
+    JSON.stringify(ev));
+  check("isyancılar nüfusun dörtte biri kadar garnizon olur", r.places.tarentum.inf === 50, r.places.tarentum.inf);
+
+  // Bastırma: garnizon güçlüyse yer gitmez, garnizon isyancıların yarısı kadar kayıp verir.
+  let riots = 0, lostPlace = 0, bled = 0;
+  for (let k = 0; k < 80; k++) {
+    const q = S.newGame("rome", 50 + k);
+    q.places.tarentum.loyalty = 0;
+    q.places.tarentum.pop = 200;
+    q.places.tarentum.inf = 200;
+    const evs = [];
+    LY.tick(q, "rome", true, evs);
+    if (evs.some((e) => e.type === "riot")) { riots++; if (q.places.tarentum.inf !== 200 - 25) bled++; }
+    if (q.places.tarentum.owner !== "rome") lostPlace++;
+  }
+  check("güçlü garnizon ayaklanmayı bastırır, yer gitmez", riots > 0 && lostPlace === 0, `ayaklanma ${riots} kayıp yer ${lostPlace}`);
+  check("bastırmanın bedeli isyancıların yarısı", bled === 0, bled);
+
+  // Oyunlar: 15 para, +20, turda bir.
+  const g = S.newGame("rome", 7);
+  g.places.tarentum.loyalty = 50;
+  check("oyunlar düzenleniyor", S.holdGames(g, "tarentum") && g.places.tarentum.loyalty === 70 && g.civs.rome.money === 15);
+  check("turda bir kere", S.gamesInfo(g, "tarentum").why === "done");
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Olaylar ve teklifler (bölüm 13)");
+
+{
+  const mk = (fields) => ({ id: 1, turn: 5, type: "event", civ: "rome", ...fields });
+  const s = S.newGame("rome", 7);
+  s.inbox.push(mk({ key: "plague", place: "rome" }));
+  const pop = s.places.rome.pop;
+  EV.resolve(s, s.inbox[0], "quarantine");
+  check("veba, karantina: 12 para, nüfusun %10'u", s.civs.rome.money === 18 && s.places.rome.pop === pop - Math.round(pop * 0.1));
+  check("karar verilen mektup kutudan çıkar", s.inbox.length === 0);
+  s.civs.rome.money = 5;
+  const it = mk({ key: "plague", place: "rome" });
+  s.inbox.push(it);
+  check("parası yetmeyen seçenek kapalı", EV.options(s, it)[0].off === true);
+  const pop2 = s.places.rome.pop;
+  EV.resolve(s, it, "quarantine");
+  check("kapalı seçenek seçilirse bedava olan uygulanır", s.civs.rome.money === 5 && s.places.rome.pop === pop2 - Math.round(pop2 * 0.3));
+
+  // Akın: güçlü garnizon tutar; zayıfsa yağma.
+  const a = S.newGame("rome", 7);
+  a.places.tarentum.inf = 200;
+  const held = EV.resolve(a, mk({ key: "raid", place: "tarentum", raiders: 40, bribe: 12 }), "fight");
+  check("akın: güçlü garnizon tutar", held.result.held === true && a.places.tarentum.owner === "rome");
+  a.places.tarentum.inf = 5;
+  a.places.tarentum.farms = 1;
+  const p0 = a.places.tarentum.pop;
+  const lost = EV.resolve(a, mk({ key: "raid", place: "tarentum", raiders: 80, bribe: 12 }), "fight");
+  check("akın: zayıf garnizon yağmalanır", lost.result.held === false && a.places.tarentum.pop === Math.round(p0 * 0.75) && a.places.tarentum.inf === 0);
+  const m0 = a.civs.rome.money;
+  EV.resolve(a, mk({ key: "raid", place: "tarentum", raiders: 80, bribe: 12 }), "bribe");
+  check("akın: rüşvet parayı alır, başka bir şey olmaz", a.civs.rome.money === m0 - 12);
+
+  // Haraç: öde -> ateşkes, bilgisayar savaş açmaz; reddet -> savaş.
+  const t = S.newGame("rome", 7);
+  t.turn = 20;
+  t.civs.rome.money = 100;
+  EV.resolve(t, { id: 9, turn: 20, type: "offer", key: "tribute", civ: "carthage", amount: 30 }, "pay");
+  check("haraç ödenince ateşkes", t.civs.rome.money === 70 && t.truce[S.key("carthage", "rome")] === 20 + N.offers.truce);
+  const { aiTurn: ai2 } = await import("../src/rules/ai.js");
+  let wars = 0, control = 0;
+  for (let k = 0; k < 40; k++) {
+    for (const truce of [true, false]) {
+      const q = S.newGame("rome", 300 + k);
+      q.turn = 15;
+      if (truce) q.truce[S.key("carthage", "rome")] = 30;
+      for (const id of ["rome", "tarentum", "ariminum"]) q.places[id].inf = 0;
+      q.places.syracuse.owner = "carthage";
+      q.places.carthage.inf = 400;
+      const ev = [];
+      ai2(q, "carthage", ev);
+      if (ev.some((e) => e.type === "war" && e.on === "rome")) { if (truce) wars++; else control++; }
+    }
+  }
+  check("ateşkeste bilgisayar savaş açmaz (ateşkessiz açıyor)", wars === 0 && control > 0, `ateşkesli ${wars}, ateşkessiz ${control}`);
+  const u = S.newGame("rome", 7);
+  u.turn = 20;
+  EV.resolve(u, { id: 9, turn: 20, type: "offer", key: "tribute", civ: "carthage", amount: 30 }, "refuse");
+  check("haracı reddetmek savaş", S.relation(u, "carthage", "rome") === "war");
+  const v = S.newGame("rome", 7);
+  EV.resolve(v, { id: 9, turn: 5, type: "offer", key: "ally", civ: "gaul" }, "accept");
+  check("ittifak teklifi kabul", S.relation(v, "gaul", "rome") === "ally");
+  v.relations[S.key("egypt", "rome")] = "war";
+  EV.resolve(v, { id: 9, turn: 5, type: "offer", key: "peace", civ: "egypt" }, "accept");
+  check("barış teklifi kabul", S.relation(v, "egypt", "rome") === "neutral");
+
+  // Karar verilmeden tur biterse bedava seçenek.
+  const w = S.newGame("rome", 7);
+  const merc = mk({ key: "mercs", place: "rome" });
+  w.inbox.push(merc);
+  const m1 = w.civs.rome.money;
+  T.endTurn(w);
+  check("karar verilmeden geçilen mektup bedava seçenekle kapanır", !w.inbox.includes(merc) && w.civs.rome.money >= m1);
+
+  // Eski kayıt (sürüm 1) yeni biçime gelir.
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 1;
+  for (const p of Object.values(old.places)) { delete p.loyalty; delete p.games; }
+  delete old.inbox; delete old.truce; delete old.offered;
+  const mig = S.migrate(old);
+  check("1. sürüm kayıt yükseltiliyor", mig.version === S.VERSION && mig.places.rome.loyalty === 100 && Array.isArray(mig.inbox));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Bot: oyun boyunca değişmezler");
 
 {
@@ -351,6 +490,8 @@ section("Bot: oyun boyunca değişmezler");
         if (!Number.isInteger(p[k]) || p[k] < 0) bad.push(`t${s.turn} ${id}.${k}=${p[k]}`);
       }
       for (const k of ["farms", "industry", "barracks"]) if (p[k] > p.level) bad.push(`t${s.turn} ${id}.${k} > seviye`);
+      if (!Number.isInteger(p.loyalty) || p.loyalty < 0 || p.loyalty > 100) bad.push(`t${s.turn} ${id}.loyalty=${p.loyalty}`);
+      for (const k of ["farms", "industry", "barracks", "level"]) if (p[k] < 1) bad.push(`t${s.turn} ${id}.${k} < 1`);
       if (p.pop > S.popCap(p, byId[id].kind) + 1e-9) bad.push(`t${s.turn} ${id} nüfusu tavanı aşıyor`);
     }
     for (const a of s.armies) {
@@ -360,13 +501,21 @@ section("Bot: oyun boyunca değişmezler");
       if (!s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);
     }
     for (const e of events) if (!e || !e.type) bad.push(`t${s.turn} boş olay`);
+    for (const it of s.inbox) {
+      if (it.type === "event" && it.civ !== s.player) bad.push(`t${s.turn} başkasının mektubu oyuncuda`);
+      if (!EV.options(s, it).length) bad.push(`t${s.turn} seçeneksiz mektup ${it.key}`);
+    }
+    seenInbox += s.inbox.length;
   };
+  let seenInbox = 0;
   const games = [];
   for (let i = 0; i < 7; i++) games.push(play({ seed: 500 + i, player: CIVS[i].id, turns: 120, watch }));
   check("hiçbir turda bozuk sayı, bozuk ordu yok", !bad.length, bad.slice(0, 5).join(" | "));
+  check("oyuncuya mektuplar geliyor", seenInbox > 0, seenInbox);
   const free25 = games.map((g) => g.freeLeft[24] ?? 0);
   check("25. tura kadar bağımsızların çoğu alınıyor", free25.every((n) => n <= 8), free25.join(" "));
-  check("her oyunda savaş çıkıyor", games.every((g) => g.firstWar !== null && g.firstWar <= 40), games.map((g) => g.firstWar).join(" "));
+  // Bilgisayarlar arası savaş eşiği 1.8 (sadakat gelince 1.5 erken yok ediyordu): ilk savaş geç olabilir.
+  check("her oyunda savaş çıkıyor", games.every((g) => g.firstWar !== null && g.firstWar <= 60), games.map((g) => g.firstWar).join(" "));
   check("barış döneminde kimse savaş açmıyor", games.every((g) => g.firstWar >= N.aiPeace));
 
   // Zorluk: kolayda bilgisayar oyuncuya 20. turdan önce savaş açmaz. Bot oyunlarında buna hiç

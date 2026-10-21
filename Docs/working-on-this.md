@@ -15,7 +15,12 @@ hamleleri sırayla oynanıyor (yürüyüş, kılıç çarpışması, el değişt
 kaynak artışları üst banttan yükseliyor, rapor animasyon bitince açılıyor; dokununca atlanıyor.
 Kamera zıplamıyor, kayıyor; telefonda seçilen yer kartın üstüne kayıyor, kartlarda × var.
 
-Sıradakiler: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
+**21.10.2026 — derinlik 1: sadakat/isyan, olaylar, bilgisayarın teklifleri** (kurallar.md 8, 12,
+13). Oyuncunun kararları `state.inbox`ta "mektup" olarak bekler (`src/rules/events.js`), tur
+raporundan sonra kapatılamayan karar penceresi olarak sorulur. Kayıt sürümü 2 (`migrate`).
+
+Sıradakiler (kullanıcının onayladığı derinlik listesi): generaller, süvari ve kuşatma makinesi,
+donanma. Sonra: oyuncu oynadıkça denge; bilgisayarın oyuncuya ittifak/barış teklif etmesi;
 düşman ordularının nereye yürüdüğünü göstermek.
 
 ## Komutlar
@@ -47,6 +52,14 @@ node Tools/route.mjs                                denize giren yol için ara n
 
 **Kural:** `src/rules/` DOM'a dokunmaz. Bilgisayar rakipler ve test botu aynı kodla, tarayıcısız
 oynayacak (HOTICE-Notes/tuzaklar.md, bölüm 6).
+
+## Denge: sadakat gelince (21.10)
+
+Sadakat ilk medeniyetin düşüşünü 47. turdan 34'e çekti - isyan yüzünden değil (bot oyunlarında
+neredeyse hiç isyan yok, bilgisayar garnizon bırakıyor), bilgisayarların fethettiği yerlerde asker
+tutması yüzünden. Bilgisayarlar arası savaş eşiği 1.5 -> 1.8 ve Makedonya'nın nüfus cezası 0.8 ->
+0.9 ile ilk düşüş ortalaması 56. tura çıktı, en erken 25. Ölçüm: `node Logs/sum.mjs 28` gibi bir
+özet (28 oyun, 7 medeniyet sırayla oyuncu).
 
 ## Animasyon tuzakları
 

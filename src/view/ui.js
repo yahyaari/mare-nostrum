@@ -13,10 +13,12 @@ import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import { access, canAttack, defenders, hostile, menace, wallsOf } from "../rules/moves.js";
 import { N, trait } from "../rules/numbers.js";
 import {
-  UPGRADES, armiesAt, armyById, budget, key, men, output, placesOf, popCap, recruitCost,
+  UPGRADES, armiesAt, armyById, budget, gamesInfo, key, men, output, placesOf, popCap, recruitCost,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
+import { drift } from "../rules/loyalty.js";
+import { options as letterOptions } from "../rules/events.js";
 import {
   INK, SERIF, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, panel, text, wrap,
 } from "./kit.js";
@@ -219,11 +221,12 @@ function troops(T, u) {
 
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const r = cardRect(cam, 418);
+  const r = cardRect(cam, 462);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   closeX(ctx, boxes, r);
   const x = r.x + 18, right = r.x + r.w - 18;
   let y = r.y;
+  const Y = 44; // sadakat satırı: altındaki her şey bu kadar aşağıda
 
   text(ctx, p.name[ui.lang], x, y + 32, { bold: true, size: 20 });
   text(ctx, kindLine(id, game, T), x, y + 52, { italic: true, size: 13, color: INK.soft });
@@ -239,9 +242,33 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
 
   rule(ctx, x, right, y + 116);
 
+  // Sadakat: çubuk, bu turki değişim, oyunlar düğmesi.
+  const lo = pl.loyalty, dr = drift(game, id).total;
+  const color = lo < N.loyalty.revolt ? INK.bad : lo < N.loyalty.unrest ? INK.warn : INK.good;
+  text(ctx, `${T.loyalty}  ${lo}`, x, y + 138, { bold: true, size: 13 });
+  text(ctx, delta(dr), x + measure(ctx, `${T.loyalty}  ${lo}`, { bold: true, size: 13 }) + 8, y + 138, { size: 12, bold: true, color: dr < 0 ? INK.bad : INK.good });
+  const bw0 = r.w - 36 - 110;
+  ctx.fillStyle = INK.paper;
+  ctx.fillRect(x, y + 146, bw0, 6);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y + 146, (bw0 * lo) / 100, 6);
+  ctx.strokeStyle = INK.faint;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 146.5, bw0 - 1, 5);
+  const gi = gamesInfo(game, id);
+  if (gi.why !== "max") {
+    const gx = right - 100, gy = y + 124;
+    button(ctx, boxes, { x: gx, y: gy, w: 100, h: 30, label: "", off: !!gi.why, act: { do: "games", id } });
+    const c = gi.why ? INK.faint : INK.ink;
+    const lw = measure(ctx, T.games, { bold: true, size: 12 });
+    text(ctx, T.games, gx + 8, gy + 20, { bold: true, size: 12, color: c });
+    amount(ctx, "money", gi.cost, gx + 14 + lw, gy + 20, { size: 12, bold: true, color: c });
+  }
+  rule(ctx, x, right, y + 116 + Y);
+
   // Dört yükseltme
   UPGRADES.forEach((what, i) => {
-    const ry = y + 122 + i * 42;
+    const ry = y + Y + 122 + i * 42;
     const u = upgradeInfo(game, id, what);
     const done = u.why === "max" || u.why === "needLevel";
     text(ctx, `${T[what]}  ${u.now}${done ? "" : " → " + (u.now + 1)}`, x, ry + 17, { bold: true, size: 13 });
@@ -257,6 +284,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
     }
   });
 
+  y += Y;
   rule(ctx, x, right, y + 292);
 
   // Asker basma
@@ -415,7 +443,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const m = ui.modal;
   const f = {
     attack: attackModal, form: formModal, diplo: diploModal, report: reportModal, battle: battleModal,
-    menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal,
+    menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -531,6 +559,9 @@ export function eventLines(game, lang) {
       else out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
     if (e.type === "battle" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
+    if (e.type === "riot" && e.civ === me) out.push([fill(T.evRiot, placeName(e.place, lang)), null]);
+    if (e.type === "revolt" && e.civ === me) out.push([fill(T.evRevolt, placeName(e.place, lang)), "bad"]);
+    if (e.type === "revolt" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
   }
   return out;
 }
@@ -598,6 +629,46 @@ function confirmModal(ctx, cam, game, ui, boxes, T, m) {
   const r = modalFrame(ctx, cam, boxes, 70 + lines.length * 24 + 80, 420);
   lines.forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 48 + i * 24, { bold: true, size: 16, align: "center" }));
   twoButtons(ctx, boxes, r, { label: T.yes, act: m.yes }, { label: T.cancel, act: { do: "close" } });
+}
+
+/** Bir mektubun yazıları: başlık, açıklama, seçeneklerin etiketleri. */
+export function letterText(game, it, lang) {
+  const T = TEXT[lang];
+  const L = T.letters[it.key];
+  const who = it.type === "offer" ? civName(it.civ, lang) : placeName(it.place, lang);
+  const a = it.type === "offer" ? it.amount ?? "" : it.raiders ?? "";
+  const b = it.type === "offer" ? N.offers.truce : it.bribe ?? "";
+  return {
+    title: fill(L.title, who, a, b),
+    body: fill(L.body, who, a, b),
+    options: letterOptions(game, it).map((o) => ({ ...o, label: fill(L[o.key], who, a, b) })),
+  };
+}
+
+/** Olay ya da teklif: bir karar, kapatılamaz; seçenekler alt alta. */
+function decideModal(ctx, cam, game, ui, boxes, T) {
+  const it = game.inbox[0];
+  if (!it) return;
+  const L = letterText(game, it, ui.lang);
+  const W = Math.min(cam.w - 24, 460);
+  const body = wrap(ctx, L.body, W - 48, { size: 14 });
+  const r = modalFrame(ctx, cam, boxes, 92 + body.length * 20 + L.options.length * 54 + 14, 460);
+  if (it.type === "offer") {
+    ctx.fillStyle = colorOf(it.civ);
+    ctx.fillRect(r.x + r.w / 2 - 9, r.y + 16, 18, 18);
+    ctx.strokeStyle = INK.ink;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(r.x + r.w / 2 - 8.5, r.y + 16.5, 17, 17);
+  }
+  text(ctx, L.title, r.x + r.w / 2, r.y + (it.type === "offer" ? 58 : 44), { bold: true, size: 19, align: "center" });
+  body.forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 84 + i * 20, { size: 14, align: "center", color: INK.soft, italic: true }));
+  const by = r.y + 96 + body.length * 20;
+  L.options.forEach((o, i) => {
+    button(ctx, boxes, {
+      x: r.x + 20, y: by + i * 54, w: r.w - 40, h: 44, label: o.label, size: 14, off: o.off, main: i === 0 && !o.off,
+      act: { do: "decide", id: it.id, choice: o.key },
+    });
+  });
 }
 
 function overModal(ctx, cam, game, ui, boxes, T) {

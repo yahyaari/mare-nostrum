@@ -10,8 +10,10 @@ import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rule
 import { neighbours } from "./rules/graph.js";
 import { access, attack, canAttack, defenders, hostile, menace, order, routeTo, wallsOf } from "./rules/moves.js";
 import {
-  VERSION, armyById, formArmy, merge, men, newGame, placesOf, recruit, split, station, upgrade,
+  VERSION, armyById, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, split, station, upgrade,
 } from "./rules/state.js";
+import { resolve as answer } from "./rules/events.js";
+import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
 import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.js";
@@ -50,6 +52,7 @@ function save() {
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE) ?? "null");
+    if (s && s.places && s.civs) migrate(s);
     if (s && s.version === VERSION && s.places && s.civs) return s;
   } catch { /* bozuk kayıt: yokmuş gibi */ }
   return null;
@@ -99,6 +102,14 @@ function redraw() {
   });
 }
 
+/** Sıradaki pencere: oyun bittiyse son, bekleyen mektup varsa karar, yoksa hiçbiri. */
+function next() {
+  if (!game) return null;
+  if (game.over) return { kind: "over" };
+  if (game.inbox?.length) return { kind: "decide" };
+  return null;
+}
+
 /** Animasyon bitti ya da atlandı: bekleyen pencereyi aç. */
 function settle() {
   blocking = false;
@@ -135,6 +146,8 @@ function mapView() {
   if (!game) return view;
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
+  view.unrest = Object.fromEntries(placesOf(game, game.player)
+    .filter((id) => game.places[id].loyalty < N.loyalty.unrest).map((id) => [id, game.places[id].loyalty]));
   view.threats = Object.fromEntries(placesOf(game, game.player).map((id) => [id, menace(game, id)]).filter(([, n]) => n > 0));
   view.armies = game.armies.map((a) => ({
     id: a.id, owner: a.owner, at: a.at, men: men(a),
@@ -266,7 +279,7 @@ function dispatch(act) {
       if (!game) { ui.saved = null; break; }
       ui.screen = "game";
       ui.sel = null;
-      ui.modal = game.over ? { kind: "over" } : null;
+      ui.modal = next();
       lookAtHome();
       break;
     case "newGame":
@@ -287,7 +300,7 @@ function dispatch(act) {
       ui.modal = { kind: act.modal };
       break;
     case "close":
-      ui.modal = game?.over ? { kind: "over" } : null;
+      ui.modal = next();
       break;
     case "deselect":
       ui.sel = null;
@@ -307,7 +320,27 @@ function dispatch(act) {
         if (d) anim.riseAt(chipRise(cam, k), (d > 0 ? "+" : "−") + Math.abs(d), d > 0 ? INK.good : INK.bad, 500 + i * 120);
       });
       blocking = true;
-      pending = game.over ? { kind: "over" } : eventLines(game, ui.lang).length ? { kind: "report" } : null;
+      pending = game.over ? { kind: "over" } : eventLines(game, ui.lang).length ? { kind: "report" } : next();
+      save();
+      break;
+    }
+    case "games":
+      if (holdGames(game, act.id)) {
+        anim.rise(act.id, `${T().loyalty} +${N.loyalty.gamesGain}`, INK.good);
+        anim.pulse(act.id, INK.good);
+      }
+      save();
+      break;
+    case "decide": {
+      const it = game.inbox.find((x) => x.id === act.id);
+      if (!it) { ui.modal = next(); break; }
+      const r = answer(game, it, act.choice);
+      // Sonuç: kısa bir haber, ve olay bir yere aitse orada bir halka.
+      if (it.key === "raid" && r.choice === "fight") toast(r.result.held ? T().raidHeld : fill(T().raidLost, PLACES.find((p) => p.id === it.place).name[ui.lang]));
+      if (it.key === "tribute" && r.choice === "refuse") toast(fill(T().tributeWar, civName(it.civ, ui.lang)));
+      if (it.place) anim.pulse(it.place, r.choice === "endure" || r.choice === "ignore" ? INK.bad : INK.good);
+      checkOver(game);
+      ui.modal = next();
       save();
       break;
     }

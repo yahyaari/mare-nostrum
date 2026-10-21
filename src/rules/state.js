@@ -8,7 +8,19 @@ import { CIVS, PLACES } from "../data/world.js";
 import { byId } from "./graph.js";
 import { LEVELS, N, trait } from "./numbers.js";
 
-export const VERSION = 1;
+export const VERSION = 2;
+
+/** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
+export function migrate(s) {
+  if (s.version === 1) {
+    for (const p of Object.values(s.places)) { p.loyalty ??= 100; p.games ??= false; }
+    s.inbox ??= [];
+    s.truce ??= {};
+    s.offered ??= {};
+    s.version = 2;
+  }
+  return s;
+}
 
 // ---- yeni oyun ----
 
@@ -19,10 +31,11 @@ export function newGame(player, seed = 1, level = "normal") {
   for (const p of PLACES) {
     const free = p.owner === null;
     const start = free ? N.start.free[p.big ? "big" : p.kind] : null;
-    const level = free ? start.level : p.capital ? 2 : 1;
+    const lv = free ? start.level : p.capital ? 2 : 1;
     const place = {
-      owner: p.owner, level, industry: 1, farms: 1, barracks: 1,
+      owner: p.owner, level: lv, industry: 1, farms: 1, barracks: 1,
       pop: 0, inf: 0, arch: 0, upgraded: false, recruited: 0,
+      loyalty: 100, games: false,
     };
     place.pop = Math.round(popCap(place, p.kind) * N.startPop);
     if (free) { place.inf = start.inf; place.arch = start.arch; }
@@ -35,6 +48,9 @@ export function newGame(player, seed = 1, level = "normal") {
     relations: {}, // "a|b" -> "ally" | "war"; yazılmayan tarafsız
     cooldown: {}, // "a|b" -> ittifakın bozulduğu tur: o tur savaş ilan edilemez
     asked: {}, // "a|b" -> ittifak teklif edilen tur: turda bir kere
+    truce: {}, // "a|b" -> bu tura kadar bilgisayar savaş açmaz (haraç ödendi)
+    offered: {}, // "a|b" -> bilgisayarın oyuncuya son teklif ettiği tur
+    inbox: [], // oyuncunun karar vermesi gereken olaylar ve teklifler
     events: [], over: null,
   };
 }
@@ -124,6 +140,27 @@ export function upgrade(state, id, what) {
   state.civs[pl.owner].money -= u.cost;
   pl[what] += 1;
   pl.upgraded = true;
+  return true;
+}
+
+// ---- sadakat: oyunlar ----
+
+/** Oyunlar düzenle: para karşılığı sadakat, yerleşim başına turda bir kere. */
+export function gamesInfo(state, id) {
+  const pl = state.places[id];
+  let why = null;
+  if (pl.games) why = "done";
+  else if (pl.loyalty >= 100) why = "max";
+  else if (state.civs[pl.owner].money < N.loyalty.gamesCost) why = "money";
+  return { cost: N.loyalty.gamesCost, gain: N.loyalty.gamesGain, why };
+}
+
+export function holdGames(state, id) {
+  if (gamesInfo(state, id).why) return false;
+  const pl = state.places[id];
+  state.civs[pl.owner].money -= N.loyalty.gamesCost;
+  pl.loyalty = Math.min(100, pl.loyalty + N.loyalty.gamesGain);
+  pl.games = true;
   return true;
 }
 

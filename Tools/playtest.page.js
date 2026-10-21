@@ -5,7 +5,7 @@
 window.PT = (() => {
   const M = window.MareNostrum;
   const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  const stats = { pressed: 0, missed: [], attacks: 0, won: 0, recruits: 0, upgrades: 0, armies: 0, marches: 0, wars: 0, allies: 0 };
+  const stats = { decided: 0, pressed: 0, missed: [], attacks: 0, won: 0, recruits: 0, upgrades: 0, armies: 0, marches: 0, wars: 0, allies: 0 };
   let R = null;
 
   async function load() {
@@ -75,7 +75,16 @@ window.PT = (() => {
 
   async function closeAll() {
     await skip();
-    for (let i = 0; i < 6 && M.ui.modal && M.ui.modal.kind !== "over"; i++) {
+    for (let i = 0; i < 12 && M.ui.modal && M.ui.modal.kind !== "over"; i++) {
+      // Karar penceresi kapatılamaz: açık seçeneklerden birini seç (sırayla değişsin).
+      if (M.ui.modal.kind === "decide") {
+        const opts = M.boxes().filter((b) => b.act?.do === "decide");
+        if (!opts.length) break;
+        const b = opts[stats.decided++ % opts.length];
+        M.tap(b.x + b.w / 2, b.y + b.h / 2);
+        await frame();
+        continue;
+      }
       if (!(await press((a) => a.do === "close"))) break;
     }
   }

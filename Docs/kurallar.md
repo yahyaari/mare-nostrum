@@ -185,7 +185,13 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 - Müttefikler birbirinin topraklarından geçebilir ama birbirine saldıramaz.
 - **Barış:** Savaştaki biriyle barış teklif edilebilir. Kaybeden taraf kabul etmeye yatkındır.
 - **Bağımsız yerleşimlere** herkes her zaman saldırabilir.
-- Bilgisayar 12. turdan önce kimseye savaş açmaz. Ancak 1.5 kat güçlüyken açar.
+- Bilgisayar 12. turdan önce kimseye savaş açmaz. Bilgisayarlar birbirine ancak 1.8 kat güçlüyken
+  açar (sana karşı eşik zorluğa bağlı, bölüm 9b).
+- **Bilgisayarın sana teklifleri** (birkaç turda bir, karar penceresi olarak gelir):
+  - *Barış:* seninle savaşta ve senden açıkça zayıfsa.
+  - *İttifak:* tarafsızsınız ve ortak bir düşmanınız var.
+  - *Haraç:* komşun, tarafsız ve senden 1.8 kat güçlü. Ödersen 8 tur sana savaş açmaz;
+    reddedersen hemen savaş açar.
 
 ---
 
@@ -196,7 +202,7 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 | **Roma** | Piyade × 1.25 | Bir bölük 1.5 para tutar |
 | **Kartaca** | Ticaret: para × 1.5 | Bütün askerler × 0.85 |
 | **Mısır** | Buğday × 1.15 (Nil) | Silah × 0.75 |
-| **Makedonya** | Savunan piyade × 1.5 (falanks) | Nüfus tavanı × 0.8 |
+| **Makedonya** | Savunan piyade × 1.5 (falanks) | Nüfus tavanı × 0.9 |
 | **Partlar** | Okçu × 1.5 | Piyade × 0.75 |
 | **Galyalılar** | Bölük para istemez, nüfus artışı × 1.5 | Okçu × 0.7 |
 | **Sakalar** | Ordular turda iki yol yürür (bozkır atlıları) | Surlu yere saldırı × 0.6 |
@@ -219,12 +225,54 @@ değiştirir; bilgisayarlar kendi aralarında her zorlukta aynı oynar.
 
 ---
 
+## 12. Sadakat ve isyan
+
+Her yerleşimin 0-100 arası sadakati var. Başlangıçta herkes 100; **alınan yer 20 ile başlar.**
+
+Her tur sadakat şöyle değişir:
+
+| | |
+|---|---|
+| Kendiliğinden yatışma | +4 |
+| Garnizon (ve orada duran kendi orduların) | her 10 asker +1, en fazla +8 |
+| Başkentten uzaklık | 2 yoldan sonraki her yol −1.5, en fazla −8 |
+| Kıtlık | −10 |
+
+- **Oyunlar düzenle:** 15 para, +20 sadakat, yerleşim başına turda bir kere.
+- **40'ın altı huzursuz:** haritada şehrin yanında ünlem rozeti.
+- **25'in altında isyan ihtimali:** her eksik puan için %4. İsyancılar nüfusun dörtte biridir.
+  Savunanlar onlardan güçlüyse ayaklanma bastırılır (isyancıların yarısı kadar asker kaybı,
+  +10 sadakat); değilse yer **bağımsızlığına döner** ve isyancılar garnizonu olur.
+
+Fethetmek böylece sadece "saldır" değil: aldığın yeri tutmak için asker bırakmak, uzağa
+yayılırken bedel ödemek gerekiyor. Bilgisayar huzursuz yerlerine isyancılardan güçlü garnizon
+bırakıyor ve parası varsa oyun düzenliyor.
+
+## 13. Olaylar
+
+4. turdan sonra her medeniyete her tur %16 ihtimalle bir olay düşer. Seninkiler tur raporundan
+sonra karar penceresi olarak gelir; karar vermeden turu bitirirsen bedava seçenek seçilir.
+Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
+
+| Olay | Seçenekler |
+|---|---|
+| Veba (nüfusu 100+ bir şehirde) | Karantina, 12 para: halkın %10'u ölür · Bırak: %30'u ölür |
+| Bereketli hasat | Ambara koy: +15 yiyecek · Sat: +12 para |
+| Akıncılar (başkent dışında) | Öde (10 + tur/2, en fazla 40) · Savaş: 25 + tur (en fazla 90) piyadeye karşı; kaybedersen garnizon ölür, nüfusun dörtte biri ve bir tarla gider |
+| Paralı askerler | 25 paraya 30 piyade · Gönder |
+| Yangın (sanayi ya da tarlası 2+) | Onar, 15 para · Bırak: sanayi ya da tarla bir seviye düşer |
+| Huzursuzluk (sadakati 60'ın altında) | Oyunlar, 15 para: +20 · Görmezden gel: −15 |
+| Kervan (limanda) | +20 para |
+
+---
+
 ## 10. Tur sırası
 
 1. **Sen oynarsın:** yükseltme, asker basma, ordu yürütme, diplomasi.
 2. **Turu bitir.**
 3. Bilgisayar medeniyetleri sırayla oynar.
-4. **Tur sonu hesabı:** Üretim ambara girer, askerler yer, nüfus artar.
+4. **Tur sonu hesabı:** Üretim ambara girer, askerler yer, nüfus artar, sadakat değişir (isyan
+   olabilir), olaylar düşer.
 5. Otomatik kayıt yapılır.
 
 **Kaybetme:** Son yerleşimin düşerse oyun biter. Bir medeniyet son yerleşimini kaybedince

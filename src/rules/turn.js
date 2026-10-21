@@ -7,6 +7,8 @@
 
 import { CIVS } from "../data/world.js";
 import { aiTurn } from "./ai.js";
+import { roll, settleInbox } from "./events.js";
+import { tick } from "./loyalty.js";
 import { advance, refresh } from "./moves.js";
 import { N, trait } from "./numbers.js";
 import { armiesOf, budget, info, placesOf, popCap } from "./state.js";
@@ -43,12 +45,15 @@ export function economy(state, events) {
       const grow = starving ? 0 : cap * N.growth * trait(c.id, "growth");
       pl.pop = Math.min(cap, Math.round(pl.pop + grow));
     }
+    tick(state, c.id, starving, events);
   }
 }
 
 /** Oyuncu "Turu bitir" dedi. Dönen: bu turun olayları (state.events'e de yazılır). */
 export function endTurn(state) {
   const events = [];
+  // Oyuncu karar vermeden geçtiyse bekleyen mektuplar bedava seçenekle kapanır.
+  settleInbox(state);
   for (const c of CIVS) {
     if (c.id !== state.player && state.civs[c.id].alive) aiTurn(state, c.id, events);
   }
@@ -57,7 +62,10 @@ export function endTurn(state) {
   for (const id in state.places) {
     state.places[id].upgraded = false;
     state.places[id].recruited = 0;
+    state.places[id].games = false;
   }
+  // Olaylar: oyuncununki gelen kutusuna, bilgisayarlarınki hemen çözülür.
+  for (const c of CIVS) if (state.civs[c.id].alive) roll(state, c.id);
   refresh(state, state.player);
   for (const a of armiesOf(state, state.player)) advance(state, a);
   checkOver(state);

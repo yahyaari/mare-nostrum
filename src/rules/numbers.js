@@ -59,8 +59,31 @@ export const N = {
   // Bilgisayarlar arası: bu turdan önce kimse kimseye savaş açmaz (önce bağımsızlar), ve ancak
   // bu kadar güçlüyken açar. 6. tur iken biri 15-25. turda yok oluyordu.
   aiPeace: 12,
-  aiWarRatio: 1.5,
+  aiWarRatio: 1.8,
   aiWarChance: 0.15,
+
+  // Sadakat (bölüm 12). 0-100. Başlangıçta herkes 100; alınan yer düşük başlar.
+  loyalty: {
+    captured: 20,
+    settle: 4, // her tur kendiliğinden
+    perGarrison: 10, // garnizonun her 10 askeri +1 ...
+    garrisonCap: 8, // ... en fazla +8
+    far: 1.5, // başkentten 2 yoldan uzaktaki her yol -1.5 ...
+    farCap: 8, // ... en fazla -8
+    famine: 10,
+    unrest: 40, // bunun altı haritada işaretli
+    revolt: 25, // bunun altında her puan %4 isyan ihtimali
+    revoltChance: 0.04,
+    rebels: 0.25, // isyancılar nüfusun dörtte biri kadar
+    gamesCost: 15,
+    gamesGain: 20,
+  },
+
+  // Olaylar (bölüm 13): her medeniyete her tur bu ihtimalle bir olay; ilk birkaç tur yok.
+  events: { chance: 0.16, from: 4 },
+
+  // Bilgisayarın oyuncuya teklifleri (bölüm 8)
+  offers: { spacing: 6, truce: 8, tributeRatio: 1.8 },
 };
 
 // Zorluk: bilgisayarın OYUNCUYA ne zaman savaş açtığı ve bilgisayarın üretimi. Bilgisayarlar
@@ -76,7 +99,7 @@ export const TRAITS = {
   rome: { inf: 1.25, recruitMoney: 1.5 },
   carthage: { money: 1.5, all: 0.85 },
   egypt: { wheat: 1.15, weapons: 0.75 },
-  macedon: { defInf: 1.5, popCap: 0.8 },
+  macedon: { defInf: 1.5, popCap: 0.9 },
   parthia: { arch: 1.5, inf: 0.75 },
   gaul: { recruitMoney: 0, growth: 1.5, arch: 0.7 },
   saka: { moves: 2, siege: 0.6 },

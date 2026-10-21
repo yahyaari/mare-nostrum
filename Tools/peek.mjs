@@ -150,6 +150,16 @@ await shot("19_rakip_yuruyor", `${D({ do: "endTurn" })}; ${AT(1150)}`);
 await shot("19b_rakip_carpisma", AT(1350));
 await shot("19c_el_degisti", AT(1900));
 await shot("19d_rapor", DONE);
+// Mektuplar: akın ve haraç; karar penceresi.
+await shot("20_mektup_akin", `M.ui.modal = null; M.game.inbox.push({ id: 900, turn: M.game.turn, type: 'event', key: 'raid', civ: 'rome',
+  place: 'ariminum', raiders: 45, bribe: 14 }); ${D({ do: "close" })}`);
+await shot("21_mektup_harac", `${D({ do: "decide", id: 900, choice: "bribe" })}; M.game.inbox.push({ id: 901, turn: M.game.turn,
+  type: 'offer', key: 'tribute', civ: 'gaul', amount: 32 }); ${D({ do: "close" })}`);
+// Sadakat: huzursuz Mediolanum, kartı ve haritadaki rozeti.
+await shot("22_sadakat", `${D({ do: "decide", id: 901, choice: "pay" })}; ${DONE}; M.ui.modal = null;
+  M.game.places.mediolanum.loyalty = 18; M.game.places.ariminum.loyalty = 33; M.ui.sel = { kind: 'place', id: 'mediolanum' }; M.look('mediolanum', 2.2)`);
+await shot("23_sadakat_tr", `${D({ do: "lang", lang: "tr" })}`);
+await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "en" })}; return true; })()`);
 
 for (const line of log) console.log("  " + line);
 console.log(bad ? `${bad} HATA` : "konsol temiz");

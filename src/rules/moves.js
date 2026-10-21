@@ -176,6 +176,8 @@ export function capture(state, id, civ) {
   pl.pop = Math.round(pl.pop * (1 - N.captureLoss));
   pl.upgraded = true; // alındığı tur yükseltilmez
   pl.recruited = pl.barracks;
+  // Yeni alınan yer huzursuz; bağımsızlığına dönen (isyan eden) yer ise kendi halkının.
+  pl.loyalty = civ ? N.loyalty.captured : 100;
   // Eski sahibin oradaki orduları savunurken öldü; başkalarının (müttefik) orduları en yakın
   // kendi yerlerine çekilir, yoksa dağılır.
   state.armies = state.armies.filter((a) => !(a.at === id && a.owner === loser));

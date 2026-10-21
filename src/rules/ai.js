@@ -7,13 +7,15 @@
 import { CIVS } from "../data/world.js";
 import { estimate } from "./combat.js";
 import { canDeclare, canPropose, declareWar, proposeAlliance, proposePeace } from "./diplomacy.js";
+import { offer } from "./events.js";
+import { rebels } from "./loyalty.js";
 import { neighbours, path } from "./graph.js";
 import { access, advance, attack, defenders, hostile, order, refresh, wallsOf } from "./moves.js";
 import { LEVELS, N } from "./numbers.js";
 import { random } from "./rng.js";
 import {
-  armiesAt, armiesOf, budget, enemiesOf, formArmy, info, merge, men, placesOf, popCap,
-  recruit, recruitInfo, relation, station, strength, upgrade, upgradeInfo,
+  armiesAt, armiesOf, budget, enemiesOf, formArmy, gamesInfo, holdGames, info, key, merge, men,
+  placesOf, popCap, recruit, recruitInfo, relation, station, strength, upgrade, upgradeInfo,
 } from "./state.js";
 
 // Okçu payı hedefi: güçlü okçusu olan daha çok, zayıf okçusu olan daha az basar.
@@ -24,6 +26,8 @@ export function aiTurn(state, civ, events) {
   refresh(state, civ);
   for (const a of armiesOf(state, civ)) advance(state, a);
   diplomacy(state, civ, events);
+  offers(state, civ);
+  calm(state, civ);
   build(state, civ);
   recruitAll(state, civ);
   military(state, civ, events);
@@ -53,8 +57,10 @@ function diplomacy(state, civ, events) {
 
   // Savaş: en fazla bir cephe, ve ancak açıkça güçlüyken.
   if (wars.length === 0 || (wars.length === 1 && random(state) < 0.1)) {
+    // Haraç alınmışsa oyuncuya ateşkes süresince dokunmaz.
+    const truce = (o) => o === state.player && (state.truce[key(civ, o)] ?? 0) > state.turn;
     const prey = neighbourCivs(state, civ)
-      .filter((o) => canDeclare(state, civ, o) && state.turn >= peace(o))
+      .filter((o) => canDeclare(state, civ, o) && state.turn >= peace(o) && !truce(o))
       .sort((a, b) => strength(state, a) - strength(state, b));
     for (const o of prey) {
       if (me >= ratio(o) * strength(state, o) && random(state) < N.aiWarChance) {
@@ -80,6 +86,37 @@ function diplomacy(state, civ, events) {
       const ev = proposeAlliance(state, civ, o);
       if (ev?.type === "ally") events.push(ev);
     }
+  }
+}
+
+/**
+ * Oyuncuya teklifler (gelen kutusuna gider, oyuncu karar verir): kaybediyorsa barış, ortak
+ * düşman varsa ittifak, çok güçlü bir komşuysa haraç. Aynı medeniyetten birkaç turda bir.
+ */
+function offers(state, civ) {
+  const P = state.player;
+  if (civ === P || !state.civs[P].alive) return;
+  const k = key(civ, P);
+  if (state.turn - (state.offered[k] ?? -99) < N.offers.spacing) return;
+  const rel = relation(state, civ, P);
+  const ratio = strength(state, civ) / Math.max(1, strength(state, P));
+  const level = LEVELS[state.level] ?? LEVELS.normal;
+  if (rel === "war" && ratio < 0.7 && random(state) < 0.35) offer(state, civ, "peace");
+  else if (rel === "neutral" && enemiesOf(state, civ).some((e) => enemiesOf(state, P).includes(e)) && random(state) < 0.3) {
+    offer(state, civ, "ally");
+  } else if (rel === "neutral" && state.turn >= level.peace && ratio >= N.offers.tributeRatio
+    && neighbourCivs(state, civ).includes(P) && (state.truce[k] ?? 0) <= state.turn && random(state) < 0.15) {
+    offer(state, civ, "tribute", { amount: Math.round(15 + state.turn * 0.8) });
+  }
+}
+
+// ---- sadakat ----
+
+/** Huzursuz yerde oyun düzenle (para varsa). Garnizon ihtiyacını `need` zaten büyütüyor. */
+function calm(state, civ) {
+  for (const id of placesOf(state, civ)) {
+    const pl = state.places[id];
+    if (pl.loyalty < 35 && !gamesInfo(state, id).why && state.civs[civ].money >= N.loyalty.gamesCost + 10) holdGames(state, id);
   }
 }
 
@@ -143,7 +180,9 @@ function threat(state, civ, id) {
 
 /** Bir yerde bırakılması gereken asker. */
 function need(state, civ, id) {
-  return Math.max(info(id).capital ? 20 : 10, Math.ceil(threat(state, civ, id) * 1.1));
+  // Huzursuz yer isyancılardan güçlü bir garnizon ister, yoksa elden çıkar.
+  const unrest = state.places[id].loyalty < 45 ? rebels(state, id) + 5 : 0;
+  return Math.max(info(id).capital ? 20 : 10, unrest, Math.ceil(threat(state, civ, id) * 1.1));
 }
 
 const odds = (state, u, civ, id) => estimate({ civ, inf: u.inf, arch: u.arch }, defenders(state, id), wallsOf(state, id));
