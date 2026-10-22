@@ -2,17 +2,18 @@
 // ve haritaya gerçek basışlarla yapar (MareNostrum.tap / rightTap -> kutular -> dispatch).
 // Kuralları sadece KARAR vermek için okur; hiçbir kuralı doğrudan çağırmaz.
 //
-// Kontroller (sade sürüm): sol tık seçer, sağ tık seçili orduyu yürütür ya da saldırtır.
+// Kontroller: sol tık seçer, sağ tık seçili orduyu yürütür ya da saldırtır.
 
 window.PT = (() => {
   const M = window.MareNostrum;
   const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  const stats = { ships: 0, pressed: 0, missed: [], attacks: 0, won: 0, recruits: 0, upgrades: 0, armies: 0, marches: 0, wars: 0, allies: 0, tips: 0, previews: 0, popups: 0 };
+  const stats = { port: 0, ships: 0, decided: 0, pressed: 0, missed: [], attacks: 0, won: 0, recruits: 0, upgrades: 0, armies: 0, marches: 0, wars: 0, allies: 0, tips: 0, previews: 0, popups: 0 };
   let R = null;
 
   async function load() {
     if (R) return R;
     R = {
+      combat: await import("./src/rules/combat.js"),
       moves: await import("./src/rules/moves.js"),
       state: await import("./src/rules/state.js"),
       graph: await import("./src/rules/graph.js"),
@@ -31,31 +32,30 @@ window.PT = (() => {
     return true;
   }
 
+  /** Seçimi kaldırır. */
   async function deselect() {
     M.ui.sel = null;
     M.redraw();
     await frame();
   }
 
-  /** Kamerayı yere getir, ekrandaki yerini döndür. */
-  async function lookAt(id) {
+  async function tapPlace(id) {
     await skip();
     M.look(id, 2.4);
     await frame();
     for (let i = 0; i < 120 && M.gliding; i++) await frame();
-    return M.where(id);
-  }
-
-  /** Sol tık: yeri seç. */
-  async function tapPlace(id) {
-    const p = await lookAt(id);
+    const p = M.where(id);
     M.tap(p.x, p.y);
     await frame();
   }
 
   /** Sağ tık: seçili orduyu oraya yürüt ya da saldırt. Önce fareyle üstüne gel: ipucu ve yol. */
   async function rightPlace(id) {
-    const p = await lookAt(id);
+    await skip();
+    M.look(id, 2.4);
+    await frame();
+    for (let i = 0; i < 120 && M.gliding; i++) await frame();
+    const p = M.where(id);
     M.hover(p.x, p.y);
     await frame();
     if (M.ui.tip?.lines?.length) stats.tips++;
@@ -67,7 +67,7 @@ window.PT = (() => {
   async function tapArmy(armyId) {
     const a = M.game.armies.find((x) => x.id === armyId);
     if (!a) return false;
-    // Açık bir kart sancağın üstünü örtebilir: önce kapat.
+    // Açık bir kart sancağın üstünü örtebilir (telefonda haritanın yarısı): önce kapat.
     if (M.ui.sel) await press((x) => x.do === "deselect");
     M.look(a.at, 2.4);
     await frame();
@@ -83,6 +83,9 @@ window.PT = (() => {
    * dokununca biter; ordu yürüyüşü kısa, onu bekle.) Sonra bekleyen pencere açılır.
    */
   async function skip() {
+    // Sadece bekletenler: tur arası gösterisi (dokunup atla) ve arkasında pencere bekleyen
+    // animasyon (savaş sonucu). Yükselen yazılar ve ordu yürüyüşü oyuncuyu bekletmez; onları
+    // beklemek turu 10-20 saniyeye çıkarıyordu.
     for (let i = 0; i < 400 && M.anim.busy() && (M.blocking || M.waiting); i++) {
       if (M.blocking) M.tap(6, M.cam.h / 2);
       await frame();
@@ -93,31 +96,63 @@ window.PT = (() => {
   async function closeAll() {
     await skip();
     for (let i = 0; i < 12 && M.ui.modal && M.ui.modal.kind !== "over"; i++) {
+      // Karar penceresi kapatılamaz: açık seçeneklerden birini seç (sırayla değişsin).
+      if (M.ui.modal.kind === "decide") {
+        const opts = M.boxes().filter((b) => b.act?.do === "decide");
+        if (!opts.length) break;
+        const b = opts[stats.decided++ % opts.length];
+        M.tap(b.x + b.w / 2, b.y + b.h / 2);
+        await frame();
+        continue;
+      }
+      // Görev: çoğunu kabul et, arada bir reddet.
+      if (M.ui.modal.kind === "mission") {
+        stats.missions = (stats.missions ?? 0) + 1;
+        const ok = stats.missions % 4 !== 0;
+        if (!(await press((a) => a.do === (ok ? "missionAccept" : "missionDecline"), "görev düğmesi"))) break;
+        continue;
+      }
       if (!(await press((a) => a.do === "close"))) break;
     }
   }
 
   async function turn() {
-    const { moves, state, graph } = await load();
+    const { combat, moves, state, graph } = await load();
     await closeAll();
     const g = M.game, me = g.player;
     if (g.over) return "over";
 
-    // Şehirler: geliştir, asker bas (sırayla üç tür), limanda arada bir gemi, büyük garnizondan ordu çıkar.
+    // Şehirler: yükselt, asker bas, büyük garnizondan ordu çıkar.
     for (const id of state.placesOf(g, me)) {
       await deselect();
       await tapPlace(id);
       if (M.ui.sel?.kind !== "place" || M.ui.sel.id !== id) { stats.missed.push("şehir seçilemedi " + id); continue; }
-      if (await press((a) => a.do === "upgrade" && a.id === id)) stats.upgrades++;
-      if (g.turn % 3 === 0 && (await press((a) => a.do === "buildShip" && a.id === id))) stats.ships++;
+      // Limanda önce Liman sekmesi: bir liman yapısı (sırayla) ve bir gemi; sonra Şehir sekmesine dön.
+      let upgraded = false;
+      if (await press((a) => a.do === "cardTab" && a.tab === "port")) {
+        const order = ["trade", "fishery", "shipyard", "fort"];
+        for (let j = 0; j < order.length && !upgraded; j++) {
+          const what = order[(j + g.turn) % order.length];
+          if (await press((a) => a.do === "upgrade" && a.id === id && a.what === what)) { stats.upgrades++; stats.port++; upgraded = true; }
+        }
+        if (g.turn % 3 === 0 && (await press((a) => a.do === "buildShip" && a.id === id))) stats.ships++;
+        await press((a) => a.do === "cardTab" && a.tab === "city", "şehir sekmesi");
+      }
+      for (const what of ["farms", "level", "barracks", "industry"]) {
+        if (upgraded) break;
+        if (await press((a) => a.do === "upgrade" && a.id === id && a.what === what)) { stats.upgrades++; break; }
+      }
       for (let k = 0; k < 3; k++) {
         if (state.budget(g, me).food < 1.5) break;
-        const type = ["inf", "arch", "cav"][(k + g.turn) % 3];
+        const pl = g.places[id];
+        // Sırayla: piyade, okçu, süvari (kışla 3), kuşatma (sanayi 3); açık değilse piyade.
+        const want = ["inf", "arch", "cav", "siege"][(k + g.turn) % 4];
+        const type = want === "arch" && pl.barracks >= 2 ? "arch" : want === "cav" && pl.barracks >= 3 ? "cav" : want === "siege" && pl.industry >= 3 ? "siege" : "inf";
         if (!(await press((a) => a.do === "recruit" && a.id === id && a.type === type))) break;
         stats.recruits++;
       }
       const pl = g.places[id];
-      if (pl.inf + pl.arch + pl.cav >= 60) {
+      if (pl.inf + pl.arch >= 60) {
         await press((a) => a.do === "formOpen" && a.id === id, "ordu çıkar düğmesi");
         // Garnizonda 20 piyade kalsın.
         await press((a) => a.do === "formStep" && a.type === "inf" && a.by < 0);
@@ -126,7 +161,7 @@ window.PT = (() => {
       }
     }
 
-    // Ordular: yanında kolay hedef varsa sağ tıkla saldır, yoksa en yakın alınabilir hedefe yürü.
+    // Ordular: yanında kolay hedef varsa saldır, yoksa en yakın alınabilir hedefe yürü.
     for (const a of [...g.armies.filter((x) => x.owner === me)]) {
       if (!g.armies.includes(a) || a.moves <= 0) continue;
       if (!(await tapArmy(a.id))) { stats.missed.push("ordu seçilemedi " + a.id); continue; }
@@ -177,11 +212,11 @@ window.PT = (() => {
     await press((a) => a.do === "endTurn", "turu bitir düğmesi");
     const ms = performance.now() - t0;
     await skip();
-    // Tur sonunda pencere açılmamalı (oyun bitmediyse): haberler sağ üstte.
-    const popup = M.ui.modal?.kind ?? null;
-    if (popup) stats.popups++;
+    // Tur sonunda rapor penceresi açılmamalı (haberler sağ üstte); karar ve görev açılabilir.
+    const report = M.ui.modal?.kind ?? null;
+    if (report && report !== "decide" && report !== "mission" && report !== "over") stats.popups++;
     const lines = (M.ui.news?.lines ?? []).map(([s]) => s);
-    return { lines, turn: M.game.turn, ms: Math.round(ms), report: popup, places: state.placesOf(M.game, me).length, men: state.strength(M.game, me) };
+    return { lines, turn: M.game.turn, ms: Math.round(ms), report, places: state.placesOf(M.game, me).length, men: state.strength(M.game, me) };
   }
 
   return { turn, stats, press, closeAll };

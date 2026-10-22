@@ -6,8 +6,10 @@
 // Düğmeler ui.js'teki gibi `boxes` listesine kutu bırakır; eylemleri main.js çalıştırır.
 
 import { menace } from "../rules/moves.js";
-import { armiesOf, budget, placesOf, strength } from "../rules/state.js";
+import { N } from "../rules/numbers.js";
+import { budget, placesOf } from "../rules/state.js";
 import { fill } from "../text.js";
+import { seasonOf, yearOf } from "../rules/season.js";
 import { drawMinimap } from "./draw.js";
 import { INK, SERIF, TAU, colorOf, delta, fmt, icon, over } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, TITLE, emblem, roundRect, shade } from "./pieces.js";
@@ -31,12 +33,8 @@ export function rightColumn(cam) {
 // ---------------------------------------------------------------------------------------------
 // Üst bant
 
-const CHIPS = ["money", "food", "men"];
-const chipX = (k) => 98 + CHIPS.indexOf(k) * 168;
-const ICON = { money: "money", food: "food", men: "pop" };
-
-/** Oyunun tarihi: MÖ 270'ten her tur bir yıl. */
-export const yearOf = (turn) => 270 - (turn - 1);
+const CHIPS = ["money", "food", "weapons", "pop"];
+const chipX = (k) => 98 + CHIPS.indexOf(k) * 158;
 
 /** Bir kaynağın değişimi yükselirken nereden çıksın: sayının hemen altı. */
 export const chipRise = (cam, k) => ({ x: chipX(k) + 62, y: TOP + 22 });
@@ -61,17 +59,18 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
   hanging(ctx, game.player, 18, 0, 58, 80);
   boxes.push({ x: 18, y: 0, w: 58, h: 80, act: null });
 
-  // Kaynaklar: ambardaki ve turluk değişim; asker: garnizonlar ve ordular.
+  // Kaynaklar: ambardaki ve turluk değişim. Nüfus: bütün yerlerin toplamı.
   const me = game.player, civ = game.civs[me], b = budget(game, me);
-  const have = { money: civ.money, food: civ.food, men: strength(game, me) };
-  const per = { money: b.money, food: b.food, men: null };
-  const income = b.food + b.upkeep;
+  const pop = placesOf(game, me).reduce((n, id) => n + game.places[id].pop, 0);
+  const have = { money: civ.money, food: civ.food, weapons: civ.weapons, pop };
+  const per = { money: b.money, food: b.food, weapons: b.weapons, pop: null };
+  // İpuçları: ne işe yarar, turda ne kadar gelir; yiyecek azalıyorsa kaç turda biteceği.
   const tips = {
-    money: [T.money, T.tipMoney, [`${T.perTurn}: ${delta(b.money)}`, "good"]],
-    food: [T.food, T.tipFood, [fill(T.tipIncome, delta(income), b.upkeep, delta(b.food)), b.food < 0 ? "bad" : "good"]],
-    men: [T.men, T.tipMen, fill(T.tipMenArmies, armiesOf(game, me).length)],
+    money: [T.money, T.tipMoney, [`${T.perTurn}: ${delta(b.money)}`, b.money < 0 ? "bad" : "good"]],
+    food: [T.food, T.tipFood, [fill(T.tipIncome, delta(b.food + b.upkeep), b.upkeep, delta(b.food)), b.food < 0 ? "bad" : "good"]],
+    weapons: [T.weapons, T.tipWeapons, [`${T.perTurn}: ${delta(b.weapons)}`, "good"]],
+    pop: [T.pop, T.tipPop],
   };
-  // Yemek azalıyorsa kaç turda biteceği: kıtlık sürpriz olmasın.
   if (b.food < 0) tips.food.push([fill(T.tipStarve, Math.max(0, Math.floor(civ.food / -b.food))), "bad"]);
   for (const k of CHIPS) {
     const x = chipX(k), cy = TOP / 2 - 1;
@@ -83,7 +82,7 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
     ctx.strokeStyle = GOLD_DARK;
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    icon(ctx, ICON[k], x + 6, cy - 8, 16, GOLD_LIGHT);
+    icon(ctx, k, x + 6, cy - 8, 16, GOLD_LIGHT);
     ctx.font = `600 18px ${TITLE}`;
     ctx.fillStyle = CREAM;
     ctx.textAlign = "left";
@@ -105,21 +104,23 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
   boxes[boxes.length - 1].tip = [T.menu, T.tipMenu];
   medal(ctx, boxes, mx - 44 + 19, TOP / 2 - 1, 17, "scroll", { do: "open", modal: "report" });
   boxes[boxes.length - 1].tip = [T.news, T.tipReport];
-  const dw = 150, dx = mx - 52 - dw;
+  const dw = 196, dx = mx - 52 - dw;
   roundRect(ctx, dx, 7, dw, TOP - 16, 4);
   ctx.fillStyle = "rgba(10,8,6,0.55)";
   ctx.fill();
   ctx.strokeStyle = "rgba(201,164,90,0.6)";
   ctx.lineWidth = 1;
   ctx.stroke();
-  ctx.textAlign = "center";
+  const season = seasonOf(game.turn);
+  seasonGlyph(ctx, season, dx + 18, TOP / 2 - 1, 7);
+  ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   ctx.font = `600 13px ${TITLE}`;
   ctx.fillStyle = CREAM;
-  ctx.fillText(fill(T.year, yearOf(game.turn)), dx + dw / 2, TOP / 2 - 8);
-  ctx.font = `italic 14px ${SERIF}`;
+  ctx.fillText(`${T.seasons[season]} · ${fill(T.year, yearOf(game.turn))}`, dx + 33, TOP / 2 - 8);
+  ctx.font = `italic 13px ${SERIF}`;
   ctx.fillStyle = GOLD_LIGHT;
-  ctx.fillText(fill(T.turn, game.turn), dx + dw / 2, TOP / 2 + 8);
+  ctx.fillText(fill(T.turn, game.turn), dx + 33, TOP / 2 + 8);
 }
 
 /** Bandın sol köşesinden sarkan büyük sancak: oyuncunun medeniyeti. */
@@ -169,12 +170,13 @@ function hanging(ctx, owner, x, y, w, h) {
 export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
   const me = game.player;
   const ready = game.armies.filter((a) => a.owner === me && a.moves > 0).length;
-  const trouble = placesOf(game, me).filter((id) => menace(game, id) > 0).length;
+  const trouble = placesOf(game, me).filter((id) => game.places[id].loyalty < N.loyalty.unrest || menace(game, id) > 0).length;
   const items = [
     ["helmet", T.hudArmies, { do: "open", modal: "armies" }, ready, GOLD, T.tipArmies],
     ["temple", T.hudCities, { do: "open", modal: "cities" }, trouble, INK.bad, T.tipCities],
     ["hands", T.hudDiplo, { do: "open", modal: "diplo" }, 0, null, T.tipDiplo],
     ["compass", T.hudMap, { do: "overview" }, 0, null, T.tipMap],
+    ["scroll", T.hudMissions, { do: "open", modal: "missions" }, game.missions?.length ?? 0, GOLD, T.tipMissions],
   ];
   const bw = 96, H = BOTTOM_H;
   const W = items.length * bw + 48;
@@ -450,6 +452,59 @@ function laurel(ctx, cx, cy, r) {
     }
   }
   ctx.restore();
+}
+
+/** Mevsimin işareti: ilkbaharda filiz, yazın güneş, sonbaharda yaprak, kışın kar tanesi. */
+function seasonGlyph(ctx, season, cx, cy, r) {
+  if (season === "summer") return sun(ctx, cx, cy, r);
+  ctx.save();
+  ctx.strokeStyle = GOLD_LIGHT;
+  ctx.fillStyle = GOLD_LIGHT;
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  if (season === "winter") {
+    for (let i = 0; i < 3; i++) {
+      const t = (i / 3) * Math.PI;
+      ctx.moveTo(cx - Math.cos(t) * r, cy - Math.sin(t) * r);
+      ctx.lineTo(cx + Math.cos(t) * r, cy + Math.sin(t) * r);
+    }
+    ctx.stroke();
+  } else if (season === "autumn") {
+    ctx.ellipse(cx, cy, r * 0.55, r, Math.PI / 4, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = DARK;
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.6, cy + r * 0.6);
+    ctx.lineTo(cx + r * 0.5, cy - r * 0.5);
+    ctx.stroke();
+  } else {
+    ctx.moveTo(cx, cy + r);
+    ctx.lineTo(cx, cy - r * 0.2);
+    ctx.stroke();
+    for (const d of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(cx + d * r * 0.45, cy - r * 0.35, r * 0.45, r * 0.25, d * -0.6, 0, TAU);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function sun(ctx, cx, cy, r) {
+  ctx.fillStyle = GOLD_LIGHT;
+  ctx.strokeStyle = GOLD_LIGHT;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.5, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const t = (i / 8) * TAU;
+    ctx.moveTo(cx + Math.cos(t) * r * 0.75, cy + Math.sin(t) * r * 0.75);
+    ctx.lineTo(cx + Math.cos(t) * r * 1.15, cy + Math.sin(t) * r * 1.15);
+  }
+  ctx.stroke();
 }
 
 function hline(ctx, x1, x2, y, color, w) {

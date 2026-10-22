@@ -6,6 +6,7 @@
 
 import { CIVS } from "../src/data/world.js";
 import { aiTurn } from "../src/rules/ai.js";
+import { aiChoice, settleInbox } from "../src/rules/events.js";
 import { endTurn } from "../src/rules/turn.js";
 import { newGame, placesOf, strength } from "../src/rules/state.js";
 
@@ -18,14 +19,15 @@ export function play({ seed = 1, player = "rome", turns = 200, level = "normal",
   const log = { seed, player, turns: 0, battles: 0, captures: 0, wars: 0, famines: 0, fallen: [], firstWar: null, freeLeft: [] };
   for (let t = 0; t < turns && !state.over; t++) {
     const mine = [];
+    settleInbox(state, aiChoice); // oyuncunun mektupları
     aiTurn(state, player, mine); // oyuncunun yerine
     const events = [...mine, ...endTurn(state)];
     for (const e of events) {
       if (e.type === "battle") { log.battles++; if (e.won) log.captures++; if (e.fallen) log.fallen.push([e.fallen, state.turn]); }
       if (e.type === "war") { log.wars++; log.firstWar ??= state.turn; }
       if (e.type === "famine") log.famines++;
-
-
+      if (e.type === "revolt") { log.revolts = (log.revolts ?? 0) + 1; if (e.fallen) log.fallen.push([e.fallen, state.turn]); }
+      if (e.type === "riot") log.riots = (log.riots ?? 0) + 1;
     }
     log.freeLeft.push(Object.values(state.places).filter((p) => p.owner === null).length);
     if (watch) watch(state, events);

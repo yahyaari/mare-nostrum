@@ -208,7 +208,7 @@ export function button(ctx, boxes, b) {
   boxes.push({ x, y: b.y, w, h, act: b.off ? null : b.act, tip: b.tip });
 }
 
-// ---- simgeler: altın, yemek, asker ----
+// ---- simgeler: para, silah, yiyecek, nüfus ----
 
 export function icon(ctx, kind, x, y, s = 14, color = INK.ink) {
   const k = s / 14;
@@ -226,6 +226,15 @@ export function icon(ctx, kind, x, y, s = 14, color = INK.ink) {
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(7, 7, 3, 0, TAU);
+    ctx.stroke();
+  } else if (kind === "weapons") {
+    ctx.moveTo(2, 12);
+    ctx.lineTo(12, 2);
+    ctx.moveTo(3.5, 7.5);
+    ctx.lineTo(6.5, 10.5);
+    ctx.moveTo(1.5, 12.5);
+    ctx.lineTo(3, 11);
+    ctx.lineWidth = 1.8;
     ctx.stroke();
   } else if (kind === "food") {
     ctx.moveTo(7, 13);
@@ -257,9 +266,9 @@ export function amount(ctx, kind, n, x, y, o = {}) {
   return s + 3 + text(ctx, String(n), x + s + 3, y, { bold: o.bold, size: s, color: o.color });
 }
 
-/** Bir maliyeti (altın/yemek) simgelerle, ortalanmış çizer. */
+/** Bir maliyeti (para/silah/yiyecek) simgelerle, ortalanmış çizer. */
 export function costLine(ctx, cost, cx, y, color, size = 11) {
-  const parts = ["money", "food"].filter((k) => cost[k] > 0);
+  const parts = ["money", "weapons", "food"].filter((k) => cost[k] > 0);
   const widths = parts.map((k) => size + 3 + measure(ctx, String(cost[k]), { size }));
   const total = widths.reduce((a, b) => a + b, 0) + (parts.length - 1) * 8;
   let x = cx - total / 2;
