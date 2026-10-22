@@ -21,7 +21,7 @@ açılsın, sadece şehirlere kalelere değil ordular etrafta gezebilsin, düşm
 2. **Gemi türleri** (926260f): kadırga (eski tek gemi, alanı yine `ships`; taşır 25, güç 1),
    trireme (tersane 2; taşır 10, güç 2.5), kinkerem (tersane 3; taşır 20, güç 4). Deniz savaşı ve
    abluka filo GÜCÜYLE. Liman sekmesinde üç düğme. Kayıt 9.
-3. **Serbest yürüyüş** (bu commit): harita 224x104 kare (0.25 birim, `src/data/grid.js`;
+3. **Serbest yürüyüş** (d0ea8f5): harita 224x104 kare (0.25 birim, `src/data/grid.js`;
    `node Tools/grid.mjs` üretir, ~7 sn; Çanakkale ve İstanbul boğazları elle açık). Yeni
    `src/rules/map.js`: kareler, komşular (boğaz/kıstak kesikleri), adım bedeli (yol 1, kara 2,
    deniz 1, biniş +0.5), toprak (en yakın yerleşim, 3.2'ye kadar - ekrandaki gibi), A* ve sınırlı
