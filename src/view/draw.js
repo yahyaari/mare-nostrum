@@ -89,7 +89,15 @@ export function drawMap(ctx, cam, view, dpr) {
   // olmadan telefon kare başına bütün kıyıları beş kez boyuyordu.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const S = still(cam, view, dpr, L);
-  ctx.drawImage(S.canvas, Math.round(-S.mx - (cam.x - S.cx) * k * dpr), Math.round(-S.my - (cam.y - S.cy) * k * dpr));
+  const T = placement(S, cam, dpr);
+  if (T.a === 1) ctx.drawImage(S.canvas, Math.round(T.x), Math.round(T.y));
+  else {
+    // Hareket sürerken: başka bir yakınlıkta çizilmiş katman ölçeklenir (bir an bulanık, sonra keskin).
+    ctx.imageSmoothingQuality = "low";
+    ctx.setTransform(T.a, 0, 0, T.a, T.x, T.y);
+    ctx.drawImage(S.canvas, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
   if (TERRAIN?.complete) drawClouds(ctx, cam, dpr, SIZE.x, performance.now() / 1000);
   if (view.winter) drawSnow(ctx, cam, dpr, performance.now() / 1000);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -135,7 +143,33 @@ export function drawMap(ctx, cam, view, dpr) {
 // Durağan katman ekrandan her yönde %30 büyük çizilir: kaydırırken sadece yeri değişir, ancak
 // kenara gelince, yakınlık ya da bir yerin sahibi değişince yeniden çizilir. (Her kaydırma
 // karesinde araziyi, ağaçları ve toprakları baştan boyamak kareyi 25-45 ms'ye çıkarıyordu.)
-let layer = null; // { canvas, key, cx, cy, mx, my }
+let layer = null; // { canvas, content, k, q, cx, cy, mx, my }
+// Kameranın en son kıpırdadığı an. Kamera kıpırdarken (kayma, yakınlaşma, sürükleme) katman her
+// karede yeniden çizilmez: eskisi ölçeklenip kaydırılır; ekranı örtmez olursa yarım çözünürlükte
+// (`q`) hızlıca yeniden çizilir. Kamera durunca bir kez keskin çizilir. (Kullanıcı 22.10:
+// "kamera hızlı hareket ederken fps düşüyor" - her karede 2.5 ekranlık tuval baştan boyanıyordu.)
+let lastCam = "", lastMoveAt = 0;
+const SETTLE_MS = 160, MOVING_Q = 0.5;
+
+/**
+ * Katmanın ekrana nasıl basılacağı (cihaz pikseli): ölçek `a` ve sol üst köşe. Katman `S.k`
+ * yakınlığında, `S.cx, S.cy` merkezli, `S.q` çözünürlükte çizildi; kamera şimdi `cam.scale`.
+ */
+function placement(S, cam, dpr) {
+  const r = cam.scale / S.k;
+  return {
+    a: r / S.q,
+    x: (dpr * cam.w) / 2 - r * (S.mx + (dpr * cam.w) / 2) + dpr * cam.scale * (S.cx - cam.x),
+    y: (dpr * cam.h) / 2 - r * (S.my + (dpr * cam.h) / 2) + dpr * cam.scale * (S.cy - cam.y),
+  };
+}
+
+/** Katman (ölçeklenmiş hâliyle) ekranın tamamını örtüyor mu. */
+function covers(S, cam, dpr) {
+  const T = placement(S, cam, dpr);
+  return T.x <= 0.5 && T.y <= 0.5 && T.x + T.a * S.canvas.width >= dpr * cam.w - 0.5 && T.y + T.a * S.canvas.height >= dpr * cam.h - 0.5;
+}
+
 
 // Boyalı arazi: Natural Earth II (Tools/terrain.py), görünen sınırların her yönde PAY derece
 // fazlası. Yüklenene kadar (açılışın ilk anı) eski çizgi harita çizilir.
@@ -410,12 +444,25 @@ function still(cam, view, dpr, L) {
   // Sis görülen yerlere bağlı; adlar yazı tiplerine (yüklenince yeniden çizilsin).
   const fog = view.fog ? [...view.seen].sort().join(",") + "/" + [...view.friends].sort().join(",") : "-";
   const fonts = typeof document !== "undefined" ? document.fonts?.status : "";
-  const key = [k, W, H, ready, fog, fonts, view.winter ? "W" : "", PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
-  if (layer && layer.key === key && Math.abs(cam.x - layer.cx) * k * dpr <= layer.mx && Math.abs(cam.y - layer.cy) * k * dpr <= layer.my) return layer;
+  const content = [W, H, ready, fog, fonts, view.winter ? "W" : "", PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
+  const now = performance.now();
+  const at = `${cam.x}|${cam.y}|${k}`;
+  if (at !== lastCam) { lastCam = at; lastMoveAt = now; }
+  const moving = now - lastMoveAt < SETTLE_MS;
+  if (layer && layer.content === content) {
+    // Keskin ve aynı yakınlıkta: kamera katmanın payı içinde kaldıkça aynı resim.
+    if (layer.q === 1 && layer.k === k && Math.abs(cam.x - layer.cx) * k * dpr <= layer.mx && Math.abs(cam.y - layer.cy) * k * dpr <= layer.my) return layer;
+    // Kamera kıpırdıyor: ekranı örttüğü sürece eski resim ölçeklenir, kaydırılır.
+    if (moving && covers(layer, cam, dpr)) return layer;
+  }
+  const q = moving ? MOVING_Q : 1;
   const mx = Math.round(W * 0.3), my = Math.round(H * 0.3);
+  const cw = Math.round((W + 2 * mx) * q), ch = Math.round((H + 2 * my) * q);
   const canvas = layer?.canvas ?? document.createElement("canvas");
-  if (canvas.width !== W + 2 * mx || canvas.height !== H + 2 * my) { canvas.width = W + 2 * mx; canvas.height = H + 2 * my; }
-  layer = { canvas, key, cx: cam.x, cy: cam.y, mx, my };
+  if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+  layer = { canvas, content, k, q, cx: cam.x, cy: cam.y, mx, my };
+  // Kaç kez yeniden çizildiği: Tools/fps.mjs ölçer (kamera kıpırdarken az olmalı).
+  if (typeof window !== "undefined") window.__rebuilds = (window.__rebuilds ?? 0) + 1;
   const ctx = canvas.getContext("2d");
   const px = (n) => n / k;
 
@@ -423,7 +470,7 @@ function still(cam, view, dpr, L) {
   ctx.fillStyle = INK.sea;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.setTransform(dpr * k, 0, 0, dpr * k, mx + dpr * (cam.w / 2 - cam.x * k), my + dpr * (cam.h / 2 - cam.y * k));
+  ctx.setTransform(q * dpr * k, 0, 0, q * dpr * k, q * (mx + dpr * (cam.w / 2 - cam.x * k)), q * (my + dpr * (cam.h / 2 - cam.y * k)));
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
@@ -431,11 +478,12 @@ function still(cam, view, dpr, L) {
   // içinde de okunur: haritalar herkesin elinde).
   if (ready) {
     paintTerrain(ctx, view, L, px, { ...cam, w: cam.w * 1.6, h: cam.h * 1.6 });
-    const ox = mx + dpr * (cam.w / 2 - cam.x * k), oy = my + dpr * (cam.h / 2 - cam.y * k);
-    if (view.fog) paintFog(ctx, canvas, L.cells, POS, view.seen, view.friends, ox, oy, k, dpr);
-    paintGround(ctx, ox, oy, k, dpr);
-    paintLabels(ctx, ox, oy, k, dpr);
-    paintCompass(ctx, ox, oy, k, dpr);
+    // Sis, arazi işaretleri, adlar ve pusula kendi dönüşümlerini kurar: katmanın çözünürlüğüyle.
+    const ox = q * (mx + dpr * (cam.w / 2 - cam.x * k)), oy = q * (my + dpr * (cam.h / 2 - cam.y * k));
+    if (view.fog) paintFog(ctx, canvas, L.cells, POS, view.seen, view.friends, ox, oy, k, q * dpr);
+    paintGround(ctx, ox, oy, k, q * dpr);
+    paintLabels(ctx, ox, oy, k, q * dpr);
+    paintCompass(ctx, ox, oy, k, q * dpr);
     return layer;
   }
 

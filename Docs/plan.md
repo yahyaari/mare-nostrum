@@ -141,6 +141,14 @@ klavyede ← → ve Enter. Harita arkada o medeniyetin topraklarına süzülür,
 kenardaki medeniyet (Partlar) için kamera panelin arkasına taşabilir (`camera.pad`), verinin
 bittiği yer koyu örtülür. Panel içeriği kadar uzun, büyük ekranda görsel büyür.
 
+**Kamera hareketinde kare kaybı düzeldi (22.10, kullanıcı: "kamera hızlı hareket ederken fps
+düşüyor, medeniyet değişince ve yakınlaştırırken"):** durağan katman (arazi, ağaçlar, topraklar,
+adlar; ekranın 2.5 katı tuval) yakınlık her değiştiğinde baştan boyanıyordu. Şimdi kamera
+kıpırdarken eski katman ölçeklenip kaydırılıyor; ekranı örtmez olursa yarım çözünürlükte
+çiziliyor; kamera durunca (160 ms) bir kez keskin. Ekran dışındaki deniz/bölge adları yazılmıyor
+(yeniden çizimin en pahalı parçasıydı). Başsız Edge, 1920x1080: medeniyet geçişi kare başına
+60-95 ms -> ~21 ms, tekerlekle yakınlaşma 60-80 -> ~17-22 ms. Ölçüm: `node Tools/fps.mjs`.
+
 **Sırada (plan sırası): kullanıcı oynasın; iki kişi (hotseat); en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
@@ -274,5 +282,6 @@ birkaç derece payla yap ya da dışını çerçeveyle kapat.
 | `node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720` | Ekran fotoğrafları (telefon: 390 844) |
 | `node Tools/playtest.mjs "http://localhost:8060/?seed=31" carthage 40 normal` | Tarayıcıda, düğmelere basarak oynayan test |
 | `node Tools/film.mjs` | Bir yürüyüşün film şeridi |
+| `node Tools/fps.mjs 1920 1080` | Kamera kıpırdarken kare süreleri ve katmanın yeniden çizim sayısı |
 
 Sunucu: `node Tools/serve.mjs . 8060`. Oyunda `?seed=123` aynı oyunu kurar.

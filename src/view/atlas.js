@@ -60,9 +60,14 @@ export function paintLabels(ctx, ox, oy, k, dpr) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  const W = ctx.canvas.width, H = ctx.canvas.height;
   const put = ([name, , , angle, scale], sea) => {
     const m = AT[name];
     const size = (sea ? Math.max(11, Math.min(26, 0.3 * k)) : Math.max(13, Math.min(34, 0.42 * k))) * scale * dpr;
+    // Katmanın dışına düşen ad hiç yazılmaz (yazı ayarı ve çizimi pahalı: yeniden çizimin en
+    // uzun parçasıydı). Payı adın kabaca boyu kadar.
+    const x = ox + m.x * k * dpr, y = oy + m.y * k * dpr, reach = size * (name.length * 1.1 + 1);
+    if (x < -reach || y < -reach || x > W + reach || y > H + reach) return;
     ctx.font = sea ? `italic 500 ${size}px "EB Garamond", Georgia, serif` : `600 ${size}px "Cinzel", Georgia, serif`;
     if ("letterSpacing" in ctx) ctx.letterSpacing = `${Math.round(size * (sea ? 0.3 : 0.45))}px`;
     ctx.save();
