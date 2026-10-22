@@ -1270,7 +1270,7 @@ section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
 }
 
 // ---------------------------------------------------------------------------------------------
-section("Tur gösterisi: kamera rakiplerin önemli hamlelerine gider");
+section("Tur gösterisi: kamera bütün dünyaya uzaklaşır, rakipler oynar, geri döner");
 
 {
   const A = await import("../src/view/anim.js");
@@ -1284,35 +1284,35 @@ section("Tur gösterisi: kamera rakiplerin önemli hamlelerine gider");
     { type: "move", army: 7, owner: "rome", men: 30, from: "rome", to: "tarentum" }, // oyuncunun kendi yürüyüşü
   ];
   const seen = new Set(["rome", "ariminum", "mediolanum", "tarentum"]);
-  const framed = [];
-  const end = A.timeline(trace, t0, () => false, "rome", {
+  const direct = {
     seen: (id) => seen.has(id),
-    frame: (ids) => { framed.push(ids); return { x: 1, y: 1, scale: 50 }; },
-    home: { x: 9, y: 9, scale: 20 },
-    caption: (s) => ({ title: s.owner, sub: "" }),
-  });
+    overview: { x: 28, y: 13, scale: 10 },
+    home: { x: 9, y: 9, scale: 40 },
+    caption: (p) => ({ title: p.owner, sub: "" }),
+  };
+  const end = A.timeline(trace, t0, () => false, "rome", direct);
   A.freeze(end + 1);
   const items = A.cues();
   const cams = items.filter((i) => i.kind === "camera").sort((a, b) => a.t0 - b.t0);
   const march = (id) => items.find((i) => i.kind === "march" && i.army === id);
-  check("görünmeyen yürüyüş beklemeden geçer (durak yok)", march(1).dur <= 1 && !framed.some((ids) => ids.includes("memphis") || ids.includes("alexandria")));
-  check("sisteki savaşa ve oyuncuya saldırıya kamera gider, sonra eve döner", cams.length === 3 && cams[2].x === 9 && cams[2].scale === 20, cams.length);
-  // Süre hesabı için çizelge önce bir kez deneme olarak kurulur: son iki çağrı asıl olanlar.
-  const real = framed.slice(-2);
-  check("duraklar sırayla: önce Kartaca, sonra Galya", framed.length === 4 && real[0].includes("syracuse") && real[1].includes("ariminum"), JSON.stringify(framed));
-  check("sisteki savaşın yerinde parıltı, savaş görünmez", items.some((i) => i.kind === "fogfight" && i.at === "syracuse") && march(2).dur <= 1);
+  check("önce bütün dünyaya uzaklaşır, sonunda oyuncunun yerine döner", cams.length === 2 && cams[0].t0 === t0 && cams[0].scale === 10 && cams[1].x === 9 && cams[1].scale === 40, JSON.stringify(cams.map((c) => [c.x, c.scale])));
+  check("rakipler uzaklaştıktan sonra, geri dönmeden önce oynar", march(3).t0 >= cams[0].t0 + cams[0].dur && march(3).t0 + march(3).dur <= cams[1].t0);
+  check("görünmeyen yürüyüş beklemeden geçer, şeridi yok", march(1).dur <= 1 && !items.some((i) => i.kind === "caption" && i.owner === "egypt"));
+  check("sisteki savaşın yerinde parıltı, savaşın kendisi görünmez", items.some((i) => i.kind === "fogfight" && i.at === "syracuse") && march(2).dur <= 1);
   check("oyuncuya saldırı görünür oynar", march(3).dur > 500 && items.some((i) => i.kind === "clash" && i.at === "ariminum" && i.dur > 0));
-  check("her durakta medeniyetin şeridi", items.filter((i) => i.kind === "caption").map((i) => i.owner).join() === "carthage,gaul");
-  check("oyuncunun kendi yürüyüşü kamera döndükten sonra, tam sürede", march(7).t0 >= cams[2].t0 + cams[2].dur && march(7).dur > 500);
-  // En çok beş durak: on medeniyet bölümü olsa da.
+  check("bir şey yapan medeniyetin şeridi, sırayla", items.filter((i) => i.kind === "caption").sort((a, b) => a.t0 - b.t0).map((i) => i.owner).join() === "carthage,gaul");
+  check("oyuncunun kendi yürüyüşü kamera döndükten sonra, tam sürede", march(7).t0 >= cams[1].t0 + cams[1].dur && march(7).dur > 500);
+  // Çok hamlede rakiplerin kısmı kısalır: on medeniyet bölümü, hepsi görünür uzun yürüyüş.
   A.finish();
   A.freeze(t0);
   const many = [];
   const civs = ["egypt", "carthage", "gaul", "macedon", "parthia", "saka", "egypt", "carthage", "gaul", "macedon"];
-  civs.forEach((c, i) => many.push({ type: "attack", army: 100 + i, owner: c, men: 50, from: "mediolanum", to: "ariminum", won: false, oldOwner: "rome" }));
-  const e2 = A.timeline(many, t0, () => false, "rome", { seen: () => true, frame: () => ({ x: 1, y: 1, scale: 50 }), home: { x: 9, y: 9, scale: 20 }, caption: () => ({ title: "", sub: "" }) });
+  civs.forEach((c, i) => many.push({ type: "attack", army: 100 + i, owner: c, men: 50, from: "antioch", to: "babylon", won: false, oldOwner: "rome" }));
+  const e2 = A.timeline(many, t0, () => false, "rome", { ...direct, seen: () => true });
   A.freeze(e2 + 1);
-  check("en çok beş durak (artı eve dönüş)", A.cues().filter((i) => i.kind === "camera").length === 6);
+  const c2 = A.cues().filter((i) => i.kind === "camera").sort((a, b) => a.t0 - b.t0);
+  const rivals = c2[1].t0 - (c2[0].t0 + c2[0].dur);
+  check("rakiplerin kısmı uzarsa hızlanır (8 sn civarı)", rivals <= 9800, rivals);
   A.finish();
   A.freeze(null);
 }

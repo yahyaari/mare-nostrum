@@ -77,7 +77,8 @@ export const legTime = (a, b) => Math.max(LEG_MIN, Math.min(LEG_MAX, roadLength(
  * Bir izden çizelge kur. Art arda gelen aynı medeniyetin hamleleri bir bölüm: bölümün bütün
  * orduları birlikte yürür, sonra sıradaki medeniyet. Ekranda görünmeyen bölüm beklemeden geçer.
  * `own`: oyuncunun medeniyeti - onun yürüyüşü hiç kısalmaz ve ekran dışında da oynar.
- * `direct` verilirse (tur sonu) kamera önemli bölümlere gider: aşağıda `directed`.
+ * `direct` verilirse (tur sonu) kamera bütün dünyaya uzaklaşır, rakipler oynar, kamera geri
+ * döner: aşağıda `directed`.
  * Dönen: çizelgenin bittiği an.
  */
 export function timeline(trace, start, visible, own = null, direct = null) {
@@ -118,51 +119,47 @@ export function timeline(trace, start, visible, own = null, direct = null) {
 }
 
 /**
- * Tur gösterisinin yönetmeni (kullanıcı 22.10: "turu atlayınca diğer medeniyetler ne yapıyor
- * göremiyoruz; önemli bir şey yapanlar varsa kamera oraya gitsin, ordu oynatırlarsa kamera
- * gitsin; sis yüzünden göremesek de bir şeyler olduğu anlaşılsın").
- *
- * Her rakibin bölümü puanlanır: oyuncuya saldırı > görülen savaş > sisteki savaş > görülen
- * yürüyüş. En önemli `MAX_STOPS` bölümde kamera oraya kayar, üstte medeniyetin şeridi çıkar,
- * görülen orduları yürür; sisteki savaşın yerinde kızıl bir parıltı ve çapraz kılıçlar belirir
- * (ne olduğu görünmez, olduğu anlaşılır). Ötekiler beklemeden geçer. Sonunda kamera oyuncunun
- * bıraktığı yere döner, sonra oyuncunun kendi ordularının yürüyüşü.
+ * Tur gösterisi (kullanıcı 22.10): "tura basınca kamera uzaktan tüm dünyayı görsün, bir şeyler
+ * olsun bitsin, sonra ana yerimize geri dönsün". Önceki hâlinde kamera önemli yerleri tek tek
+ * geziyordu; şimdi:
+ *   1. kamera bütün haritayı görecek kadar uzaklaşır,
+ *   2. rakipler sırayla oynar: görülen orduları yürür, savaşır; sisin içindeki savaşın yerinde
+ *      kızıl bir parıltı (ne olduğu görünmez, olduğu anlaşılır); bir şey yapan medeniyetin
+ *      şeridi üstte (kalkanı, "Ariminum şehrini aldı!"),
+ *   3. kamera oyuncunun bıraktığı yere döner, sonra oyuncunun kendi ordularının yürüyüşü.
+ * Rakiplerin kısmı en çok `SHOW_MAX`; aşarsa hızlanır.
  *
  * `direct`:
- *   seen(id)          - oyuncu orayı görüyor mu (savaş sisi)
- *   frame(ids, sim)   - o yerleri gösterecek kamera { x, y, scale }, ya da zaten görünüyorsa null;
- *                       `sim` o anki (tahmini) kamera, frame onu da günceller
- *   home              - gösteri bitince dönülecek kamera { x, y, scale }
- *   caption(stop)     - şeritteki yazı { title, sub }
+ *   seen(id)       - oyuncu orayı görüyor mu (savaş sisi)
+ *   overview       - bütün haritayı gösteren kamera { x, y, scale }
+ *   home           - gösteri bitince dönülecek kamera { x, y, scale }
+ *   caption(part)  - şeritteki yazı { title, sub }
  * Dönen: çizelgenin bittiği an.
  */
-const MAX_STOPS = 5;
-const GLIDE = 750; // kameranın bir yerden ötekine kayması
-const DWELL = 1600; // durakta en az bu kadar kalınır (şerit okunsun, sisteki parıltı görülsün)
-const SHOW_MAX = 15000; // rakiplerin gösterisi en fazla bu kadar; aşarsa yürüyüşler hızlanır
+const GLIDE = 800; // kameranın uzaklaşması ve geri dönmesi
+const DWELL = 1100; // şeridi olan bölüm en az bu kadar sürer (okunsun)
+const SHOW_MAX = 8000; // rakiplerin kısmı en fazla bu kadar; aşarsa yürüyüşler hızlanır
 
 function directed(trace, start, own, direct) {
   const last = (m) => m.path[m.path.length - 1];
-  const info = segments(trace).map((seg, i) => {
-    const mine = seg[0]?.owner === own;
+  const parts = segments(trace).map((seg) => {
     const walks = seg.filter((m) => m.path.some(direct.seen));
     const battles = seg.filter((m) => m.attack);
-    const seenBattles = battles.filter((m) => direct.seen(last(m)));
-    const fogBattles = battles.filter((m) => !direct.seen(last(m)));
-    const onMe = battles.filter((m) => m.attack.oldOwner === own);
-    const score = mine ? 0 : onMe.length * 1000 + seenBattles.length * 100 + fogBattles.length * 30 + walks.length * 10;
-    return { seg, i, mine, owner: seg[0]?.owner, walks, battles, seenBattles, fogBattles, onMe, score };
+    return {
+      seg, owner: seg[0]?.owner, mine: seg[0]?.owner === own, walks, battles,
+      seenBattles: battles.filter((m) => direct.seen(last(m))),
+      fogBattles: battles.filter((m) => !direct.seen(last(m))),
+      onMe: battles.filter((m) => m.attack.oldOwner === own),
+    };
   });
-  const stops = new Set(info.filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, MAX_STOPS).map((x) => x.i));
 
   const build = (scale, dry) => {
     const out = [];
-    const sim = { ...direct.home };
-    let cursor = start, moved = false;
+    let cursor = start;
     const play = (m, seen, k, at0) => {
       const legs = m.path.slice(1).map((to, j) => (seen ? legTime(m.path[j], to) * k : 0));
       const walk = legs.reduce((a, b) => a + b, 0);
-      const C = seen ? CLASH : 0;
+      const C = seen ? CLASH * Math.max(0.5, k) : 0;
       const dur = walk + (m.attack ? C : 0);
       out.push({ kind: "march", t0: at0, dur: Math.max(dur, 1), legs, army: m.army, owner: m.owner, men: m.men, ships: m.ships, path: m.path, attack: m.attack });
       if (m.attack) {
@@ -172,50 +169,41 @@ function directed(trace, start, own, direct) {
       }
       return at0 + dur;
     };
-    for (const x of info) {
-      if (x.mine) continue; // oyuncunun kendi yürüyüşü en sonda
-      if (!stops.has(x.i)) {
-        // Durak değil: bütün hamleler beklemeden (harita son hâline geçer).
-        for (const m of x.seg) play(m, false, 1, cursor);
-        continue;
-      }
-      const places = [...new Set([...x.walks.flatMap((m) => m.path.filter(direct.seen)), ...x.battles.map(last)])];
-      const cam = direct.frame(places, sim);
-      const capStart = cursor;
-      if (cam) {
-        out.push({ kind: "camera", t0: cursor, dur: GLIDE, ...cam });
-        cursor += GLIDE;
-        moved = true;
-      }
+    // 1. Uzaklaş: bütün dünya.
+    out.push({ kind: "camera", t0: cursor, dur: GLIDE, ...direct.overview });
+    cursor += GLIDE;
+    // 2. Rakipler sırayla.
+    const rivalsStart = cursor;
+    for (const x of parts) {
+      if (x.mine) continue;
+      const busy = x.walks.length > 0 || x.battles.length > 0;
       const segStart = cursor;
       let end = cursor;
       for (const m of x.seg) {
-        const seen = m.path.some(direct.seen);
-        end = Math.max(end, play(m, seen, scale, segStart));
+        end = Math.max(end, play(m, m.path.some(direct.seen), scale, segStart));
         // Sisteki savaş: yer görünmüyor, ama bir şey olduğu belli olsun.
-        if (m.attack && !direct.seen(last(m))) out.push({ kind: "fogfight", t0: segStart, dur: DWELL, at: last(m) });
+        if (m.attack && !direct.seen(last(m))) out.push({ kind: "fogfight", t0: segStart, dur: DWELL * Math.max(0.7, scale), at: last(m) });
       }
-      end = Math.max(end, segStart + DWELL);
-      out.push({ kind: "caption", t0: capStart, dur: end - capStart, owner: x.owner, ...direct.caption(x) });
-      cursor = end + 200;
+      if (!busy) continue; // görünür bir şey yapmayan medeniyet beklemeden geçer
+      end = Math.max(end, segStart + DWELL * Math.max(0.7, scale));
+      out.push({ kind: "caption", t0: segStart, dur: end - segStart, owner: x.owner, ...direct.caption(x) });
+      cursor = end + 150 * scale;
     }
-    if (moved) {
-      out.push({ kind: "camera", t0: cursor, dur: GLIDE, ...direct.home });
-      cursor += GLIDE;
-    }
-    const rivalsEnd = cursor;
-    // Oyuncunun kendi orduları: yürüyüşü hiç kısalmaz.
-    for (const x of info) {
+    const rivals = cursor - rivalsStart;
+    // 3. Geri dön; sonra oyuncunun kendi orduları (yürüyüşü hiç kısalmaz).
+    out.push({ kind: "camera", t0: cursor, dur: GLIDE, ...direct.home });
+    cursor += GLIDE;
+    for (const x of parts) {
       if (!x.mine) continue;
       let end = cursor;
       for (const m of x.seg) end = Math.max(end, play(m, true, 1, cursor));
       cursor = end;
     }
     if (!dry) add(...out);
-    return { end: cursor, rivals: rivalsEnd - start };
+    return { end: cursor, rivals };
   };
   const dry = build(1, true);
-  const scale = dry.rivals > SHOW_MAX ? Math.max(0.45, SHOW_MAX / dry.rivals) : 1;
+  const scale = dry.rivals > SHOW_MAX ? Math.max(0.3, SHOW_MAX / dry.rivals) : 1;
   return build(scale, false).end;
 }
 

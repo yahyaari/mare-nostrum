@@ -360,38 +360,15 @@ function keepVisible(id) {
   glide(cam.x, cam.y + (s.y - want) / cam.scale);
 }
 
-/**
- * Tur gösterisinde kameranın bir rakibin hamlesini göstereceği yer: o yerler üst bantla alt menü
- * arasındaki alana sığar. Hepsi zaten rahatça görünüyorsa null (kamera kıpırdamaz). `sim`:
- * gösterinin o anındaki kamera (önceki duraklardan sonra); burada güncellenir.
- */
-function frameOf(ids, sim) {
-  const pts = ids.map((id) => placeAt(id));
-  const top = TOP + 70, bottom = cam.h - 110, left = 40, right = cam.w - 300;
-  const onScreen = (m, c) => {
-    const x = (m.x - c.x) * c.scale + cam.w / 2, y = (m.y - c.y) * c.scale + cam.h / 2;
-    return x > left && x < right && y > top && y < bottom;
-  };
-  if (sim.scale >= cam.min * 1.4 && pts.every((m) => onScreen(m, sim))) return null;
-  const xs = pts.map((m) => m.x), ys = pts.map((m) => m.y);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const pad = 2.2;
-  const scale = Math.max(cam.min * 1.5, Math.min(cam.min * 3, (right - left) / (x1 - x0 + 2 * pad), (bottom - top) / (y1 - y0 + 2 * pad)));
-  const sx = (left + right) / 2, sy = (top + bottom) / 2;
-  const out = { x: (x0 + x1) / 2 - (sx - cam.w / 2) / scale, y: (y0 + y1) / 2 - (sy - cam.h / 2) / scale, scale };
-  Object.assign(sim, out);
-  return out;
-}
-
 /** Rakibin bölümünün şeridi: adı ve en önemli işi. */
-function captionOf(stop) {
-  const name = civName(stop.owner, ui.lang);
-  const b = stop.onMe[0] ?? stop.seenBattles[0];
+function captionOf(part) {
+  const name = civName(part.owner, ui.lang);
+  const b = part.onMe[0] ?? part.seenBattles[0];
   if (b) {
     const where = PLACES.find((p) => p.id === b.path[b.path.length - 1]).name[ui.lang];
     return { title: name, sub: fill(b.attack.won ? T().capTook : T().capHeld, where) };
   }
-  if (stop.fogBattles.length) return { title: name, sub: T().capFog };
+  if (part.fogBattles.length) return { title: name, sub: T().capFog };
   return { title: name, sub: T().capMarch };
 }
 
@@ -588,12 +565,12 @@ function dispatch(act) {
       // ordularının güzergâh adımları. Kaynakların artışı üst banttan yükselir.
       const t = anim.clock();
       anim.banner(fill(T().turn, game.turn), `${T().seasons[seasonOf(game.turn)]} · ${fill(T().year, yearOf(game.turn))}`);
-      // Rakiplerin önemli hamlelerine kamera gider; sisin içindekiler görünmez ama sisteki
-      // savaş bir parıltıyla belli olur. Sonunda kamera oyuncunun bıraktığı yere döner.
+      // Kamera bütün dünyaya uzaklaşır, rakipler oynar (sisin içindekiler görünmez ama sisteki
+      // savaş bir parıltıyla belli olur), sonra oyuncunun bıraktığı yere döner.
       showHome = { x: cam.x, y: cam.y, scale: cam.scale };
-      anim.timeline(trace, t + 900, visible, me, {
+      anim.timeline(trace, t + 300, visible, me, {
         seen: (id) => !ui.fog || sawBefore.has(id) || sawAfter.has(id),
-        frame: frameOf,
+        overview: { x: SIZE.x / 2, y: SIZE.y / 2, scale: cam.min },
         home: showHome,
         caption: captionOf,
       });

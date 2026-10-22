@@ -158,16 +158,15 @@ Tamam deyince geçer; görülenler tarayıcıda (`mn.coach`), "İpuçlarını ka
 aç/kapa (açınca baştan). Menüdeki Nasıl oynanır sekiz sayfa: madalyon, başlık, iki cümle, ‹ ›.
 Adımlar `ui.js COACH`. Bu, öğreticinin hafif bir hâli; asıl öğretici yine en sonda.
 
-**Tur gösterisinde kamera rakiplere gider (22.10, kullanıcı: "turu atlayınca diğer medeniyetler
-ne yapıyor göremiyoruz; önemli bir şey yapanlara kamera gitsin; sis yüzünden göremesek de bir
-şeyler olduğu anlaşılsın"):** `anim.js directed`. Rakibin bölümü puanlanır (oyuncuya saldırı
-1000, görülen savaş 100, sisteki savaş 30, görülen yürüyüş 10); en önemli 5 bölümde kamera oraya
-kayar (zaten görünüyorsa kıpırdamaz), üstte medeniyetin kalkanı ve ne yaptığı ("Ariminum
-şehrini aldı!", "sisin içinde bir savaş..."), görülen ordular yürür; sisteki savaşın yerinde
-kızıl parıltı, duman, çapraz kılıçlar ve soru işareti. Ötekiler beklemeden. Sonunda kamera
-oyuncunun bıraktığı yere döner, sonra oyuncunun kendi yürüyüşü. Rakiplerin gösterisi en çok
-~15 sn (aşarsa yürüyüşler hızlanır); dokunuş hızlandırır, ikinci dokunuş bitirir ve kamerayı
-geri getirir. 8 yeni kontrol (1905).
+**Tur gösterisi: kamera bütün dünyaya uzaklaşır (22.10).** İlk hâlinde kamera rakiplerin önemli
+hamlelerine tek tek gidiyordu; kullanıcı: "tura basınca kamera uzaktan tüm dünyayı görsün, bir
+şeyler olsun bitsin, sonra ana yerimize geri dönsün". Şimdi (`anim.js directed`): kamera bütün
+haritaya uzaklaşır (0.8 sn), rakipler sırayla oynar - görülen orduları yürür ve savaşır, sisin
+içindeki savaşın yerinde kızıl parıltı/duman/çapraz kılıç/soru işareti, bir şey yapan
+medeniyetin şeridi üstte ("Galyalılar: Ariminum şehrini aldı!"); görünür bir şey yapmayan
+beklemeden geçer; rakiplerin kısmı en çok ~8 sn (aşarsa hızlanır). Sonra kamera oyuncunun
+bıraktığı yere döner ve oyuncunun kendi yürüyüşü oynar. Dokunuş hızlandırır, ikinci dokunuş
+bitirir ve kamerayı geri getirir. 8 kontrol.
 
 **Sırada (plan sırası): kullanıcı oynasın; iki kişi (hotseat); en son öğretici.**
 
