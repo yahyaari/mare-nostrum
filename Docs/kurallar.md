@@ -506,3 +506,19 @@ Surlu bir yere (kale, başkent, 3. seviye ve üstü şehir) **hemen saldırmak y
 > yıpranması - hiçbiri değiştirmedi; bilgisayarın kuşatmasını kapatınca tam 61: sebep davranış,
 > kural değil). Sadece "zor" hedefleri kuşatınca 51 (en erken 24), donanma ve harikalardan önceki
 > uzun süreli dengeye denk. Partlar 150 turda ayakta 33/70 (önce 37), Sakalar 36/70 (38).
+
+---
+
+## 21. Kronik
+
+Oyunun tarihi (`src/rules/chronicle.js`). Menüden ve oyun sonu penceresinden açılır.
+
+- **Grafik:** her tur sonunda her medeniyetin yer sayısı ve asker sayısı not edilir; pencerede
+  "Yerler" ve "Asker" arasında geçilir, oyuncunun çizgisi kalın.
+- **Yıllık:** oyuncuyu ilgilendiren her şey (aldığı ve kaybettiği yerler, savaşları, ittifakları,
+  kuşatmaları, tamamlanan görevler) ve başkalarının arasındakilerden büyükleri (başkent ya da
+  harika şehrin el değiştirmesi, savaş ilanları, ittifaklar, barışlar, çöken medeniyetler). En
+  yenisi üstte, oyuncunun lehine olan yeşil, aleyhine olan kırmızı.
+- Kayıt küçük: tur başına iki kere yedi sayı; yıllık en fazla 300 satır, taşarsa önce
+  oyuncuyu ilgilendirmeyen en eski satır düşer. Kayıt sürümü 7 (eski oyunun kroniği
+  yükseltildiği turdan başlar).

@@ -1094,6 +1094,56 @@ const { roadBetween: roadBetweenT } = await import("../src/rules/graph.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Kronik (bölüm 21)");
+
+const CH = await import("../src/rules/chronicle.js");
+{
+  const s = S.newGame("rome", 5);
+  for (let i = 0; i < 12; i++) T.endTurn(s);
+  check("her tur bir fotoğraf (ilki oyunun başı)", s.chronicle.places.length === s.turn && s.chronicle.men.length === s.turn);
+  check("fotoğraf: her medeniyetin yer sayısı", s.chronicle.places.at(-1).every((n, j) => n === S.placesOf(s, CIVS[j].id).length));
+  check("ilk fotoğraf başlangıç: Roma'nın üç yeri", s.chronicle.places[0][CIVS.findIndex((c) => c.id === "rome")] === 3);
+
+  // Yıllık: oyuncuyu ilgilendiren her şey, başkalarının arasındakilerden sadece büyükleri.
+  const t = S.newGame("rome", 5);
+  CH.record(t, [
+    { type: "battle", won: true, attacker: "rome", defender: null, place: "mediolanum" },
+    { type: "battle", won: true, attacker: "gaul", defender: null, place: "numantia" },
+    { type: "battle", won: true, attacker: "gaul", defender: "egypt", place: "alexandria", fallen: null },
+    { type: "battle", won: false, attacker: "rome", defender: null, place: "massalia" },
+    { type: "war", by: "gaul", on: "carthage" },
+    { type: "revolt", civ: "egypt", place: "jerusalem" },
+    { type: "surrender", by: "saka", from: null, place: "athens" },
+  ]);
+  const ks = t.annals.map((a) => a.k + ":" + (a.place ?? a.on));
+  check("oyuncunun aldığı yer yazılır", ks.includes("took:mediolanum"));
+  check("başkalarının küçük fethi yazılmaz", !ks.includes("took:numantia"));
+  check("başkent el değiştirmesi yazılır", ks.includes("took:alexandria"));
+  check("kaybedilen savaş fetih sayılmaz", !ks.includes("took:massalia"));
+  check("savaş ilanı yazılır", ks.includes("war:carthage"));
+  check("başkalarının küçük isyanı yazılmaz", !ks.includes("revolt:jerusalem"));
+  check("harika şehrin teslimi yazılır", ks.includes("took:athens"));
+  check("satırda tur var", t.annals.every((a) => a.t === t.turn));
+
+  // Taşma: en fazla 300 satır, önce oyuncuyu ilgilendirmeyen eskiler düşer.
+  const u = S.newGame("rome", 5);
+  CH.record(u, [{ type: "war", by: "rome", on: "gaul" }]);
+  CH.record(u, Array.from({ length: 320 }, () => ({ type: "war", by: "egypt", on: "parthia" })));
+  check("yıllık 300 satırı geçmez", u.annals.length === 300);
+  check("taşınca oyuncunun satırı kalır", u.annals.some((a) => a.by === "rome"));
+
+  // Kayıt
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 6;
+  delete old.chronicle; delete old.annals;
+  S.migrate(old);
+  check("6. sürüm kayıt yükseltiliyor", old.version === S.VERSION && Array.isArray(old.annals) && Array.isArray(old.chronicle.places));
+  old.turn = 30;
+  T.endTurn(old);
+  check("eski kayıtta kronik yükseltildiği turdan başlar", old.chronicle.places.length === 2);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
 
 {

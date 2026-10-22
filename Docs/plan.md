@@ -20,7 +20,7 @@
   Pages `master`'dan, push'tan ~1 dakika sonra yayında.
 - **Dil:** Arayüz İngilizce asıl, Türkçe ikinci (sağ üst / menü). Belgeler ve kod yorumları
   Türkçe.
-- **Push'tan önce:** `node Tools/test.mjs` (1865 kontrol, hepsi geçmeli). Kurala dokunduysan
+- **Push'tan önce:** `node Tools/test.mjs` (1880 kontrol, hepsi geçmeli). Kurala dokunduysan
   `node Tools/balance.mjs 70`. Arayüze dokunduysan `node Tools/peek.mjs ...` ve
   `node Tools/playtest.mjs ...` (komutlar `working-on-this.md`'de).
 
@@ -42,7 +42,7 @@
 | 21.10 | Liman | Balıkçılık, tersane, ticaret, liman kalesi; liman kartı iki sekmeli; Roma liman oldu (Ostia). |
 | 21.10 | Yürüyüş | Ordular yol uzunluğuna göre yürüyor, iz bırakıyor; dokunuş önce hızlandırır, sonra bitirir. |
 
-**Şu anki durum (21.10 akşam):** kayıt sürümü 6 (eskiler kendiliğinden yükseltiliyor), 1865 kontrol geçiyor,
+**Şu anki durum (21.10 akşam):** kayıt sürümü 7 (eskiler kendiliğinden yükseltiliyor), 1880 kontrol geçiyor,
 70 bot oyununda ilk medeniyetin düşüşü ortalama 51. tur (en erken 25), her oyunda savaş çıkıyor,
 "en büyük" çıkan medeniyet oyundan oyuna değişiyor.
 
@@ -112,7 +112,9 @@ kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sa
 
 **Büyüyen şehirler YAPILDI (21.10):** maket seviyeyle büyür (`pieces.cityModel(…, level)`): 1 ahşap çit + iki ev, 2 taş sur + iki kule, 3 arka sıra evler + ortada yüksek kule, 4+ geniş sur + dört kule ve bir boy büyük; kale 2. seviyede ikinci kule. Kartın manzarası da seviyeyi gösterir.
 
-**Sırada (plan sırası): kronik, savaş sahnesi, arazi/mevsim, iki kişi; en son öğretici.**
+**Kronik YAPILDI (22.10):** `rules/chronicle.js`, kurallar.md 21. Tur tur yer/asker grafiği + yıllık (menüden ve oyun sonundan). Kayıt sürümü 7. 15 yeni kontrol (1880).
+
+**Sırada (plan sırası): savaş sahnesi, arazi/mevsim, iki kişi; en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`

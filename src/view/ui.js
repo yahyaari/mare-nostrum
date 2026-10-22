@@ -555,7 +555,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, form: formModal, diplo: diploModal, report: reportModal, battle: battleModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, mission: missionModal, missions: missionsModal,
+    armies: armiesModal, cities: citiesModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -752,19 +752,20 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
 }
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
-  const r = modalFrame(ctx, cam, boxes, 448, 360);
+  const r = modalFrame(ctx, cam, boxes, 500, 360);
   text(ctx, T.menu, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   const x = r.x + 20, w = r.w - 40;
   button(ctx, boxes, { x, y: r.y + 62, w, h: 42, label: T.resume, main: true, size: 15, act: { do: "close" } });
   button(ctx, boxes, { x, y: r.y + 114, w, h: 42, label: T.help, size: 15, act: { do: "open", modal: "help" } });
-  button(ctx, boxes, { x, y: r.y + 166, w, h: 42, label: T.newGame, size: 15, act: { do: "askNew" } });
-  text(ctx, T.language, x, r.y + 248, { bold: true, size: 14 });
+  button(ctx, boxes, { x, y: r.y + 166, w, h: 42, label: T.chronicle, size: 15, act: { do: "open", modal: "chronicle" } });
+  button(ctx, boxes, { x, y: r.y + 218, w, h: 42, label: T.newGame, size: 15, act: { do: "askNew" } });
+  text(ctx, T.language, x, r.y + 300, { bold: true, size: 14 });
   ["en", "tr"].forEach((l, i) => {
-    button(ctx, boxes, { x: x + w - 2 * 56 + i * 56, y: r.y + 226, w: 50, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
+    button(ctx, boxes, { x: x + w - 2 * 56 + i * 56, y: r.y + 278, w: 50, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
   });
   // Ses ve müzik: ayrı ayrı aç-kapa.
   [["sound", T.soundLabel, soundEnabled()], ["music", T.musicLabel, musicEnabled()], ["fog", T.fogLabel, ui.fog]].forEach(([k, label, on], j) => {
-    const yy = r.y + 270 + j * 44;
+    const yy = r.y + 322 + j * 44;
     text(ctx, label, x, yy + 22, { bold: true, size: 14 });
     [[true, T.sndOn], [false, T.sndOff]].forEach(([v, l], i) => {
       button(ctx, boxes, { x: x + w - 2 * 74 + i * 74, y: yy, w: 68, h: 34, label: l, main: on === v, size: 13, act: { do: k, on: v } });
@@ -961,11 +962,117 @@ function missionsModal(ctx, cam, game, ui, boxes, T) {
   oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
 }
 
+/** Yıllığın bir satırı: yazısı ve tonu (oyuncu için iyi mi kötü mü). */
+function annalLine(game, a, lang) {
+  const T = TEXT[lang], me = game.player;
+  const name = (c) => civName(c, lang, T.free);
+  const where = (id) => placeName(id, lang);
+  const tone = (good, bad) => (good ? "good" : bad ? "bad" : null);
+  switch (a.k) {
+    case "took": {
+      const w = wonderAt(a.place);
+      return [fill(T.evTook, name(a.by), where(a.place)) + (w ? `  ✦ ${T.wonders[w.id][0]}` : ""), tone(a.by === me, a.from === me)];
+    }
+    case "revolt": return [fill(T.evRevolt, where(a.place)), tone(false, a.from === me)];
+    case "fallen": return [fill(T.evFallen, name(a.civ)), tone(false, a.civ === me)];
+    case "war": return [fill(T.evWar, name(a.by), name(a.on)), tone(false, a.on === me || a.by === me)];
+    case "ally": return [fill(T.evAlly, name(a.by), name(a.to)), tone(a.by === me || a.to === me, false)];
+    case "peace": return [fill(T.evPeace, name(a.by), name(a.to)), tone(a.by === me || a.to === me, false)];
+    case "broke": return [fill(T.evBroke, name(a.by), name(a.with)), tone(false, a.with === me)];
+    case "siege": return [fill(T.evSiege, name(a.by), where(a.place)), tone(a.by === me, a.by !== me)];
+    case "mission": return [fill(T.evMissionOk, missionText(game, a.m, lang).title), "good"];
+    default: return [a.k, null];
+  }
+}
+
+/**
+ * Kronik: üstte medeniyetlerin tur tur yer (ya da asker) sayısı, oyuncunun çizgisi kalın;
+ * altında önemli olayların yıllığı, en yenisi üstte.
+ */
+function chronicleModal(ctx, cam, game, ui, boxes, T, m) {
+  const H = Math.min(cam.h - 30, 660);
+  const r = modalFrame(ctx, cam, boxes, H, 860);
+  text(ctx, T.chronicle, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 22, align: "center" });
+  const mode = m.mode ?? "places";
+  [["places", T.chrPlaces], ["men", T.chrMen]].forEach(([k, l], i) => {
+    button(ctx, boxes, { x: r.x + r.w - 26 - (2 - i) * 104 + 6, y: r.y + 20, w: 98, h: 30, label: l, size: 13, main: mode === k, act: { do: "chronicleMode", mode: k } });
+  });
+  // Grafik
+  const series = game.chronicle?.[mode] ?? [];
+  const gx = r.x + 62, gy = r.y + 70, gw = r.w - 96, gh = Math.max(140, Math.min(240, H * 0.36));
+  ctx.fillStyle = "rgba(90,70,40,0.08)";
+  ctx.fillRect(gx, gy, gw, gh);
+  ctx.strokeStyle = INK.border;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(gx + 0.5, gy + 0.5, gw - 1, gh - 1);
+  if (series.length < 2) {
+    text(ctx, T.chrEmpty, gx + gw / 2, gy + gh / 2, { italic: true, size: 14, color: INK.soft, align: "center", base: "middle" });
+  } else {
+    const n = series.length, first = game.turn - n + 1;
+    const top = Math.max(1, ...series.flat());
+    const step = top > 400 ? 200 : top > 100 ? 50 : top > 20 ? 5 : top > 8 ? 2 : 1;
+    const maxV = Math.ceil(top / step) * step;
+    const X = (i) => gx + (i / (n - 1)) * gw, Y = (v) => gy + gh - (v / maxV) * gh;
+    // Izgara ve etiketler
+    for (let v = 0; v <= maxV; v += step * Math.max(1, Math.round(maxV / step / 5))) {
+      ctx.strokeStyle = "rgba(90,70,40,0.15)";
+      ctx.beginPath();
+      ctx.moveTo(gx, Y(v) + 0.5);
+      ctx.lineTo(gx + gw, Y(v) + 0.5);
+      ctx.stroke();
+      text(ctx, String(v), gx - 8, Y(v), { size: 11, color: INK.soft, align: "right", base: "middle" });
+    }
+    const every = Math.max(1, Math.ceil(n / 10));
+    for (let i = 0; i < n; i += every) text(ctx, String(first + i), X(i), gy + gh + 16, { size: 11, color: INK.soft, align: "center" });
+    // Çizgiler: önce ötekiler, en son oyuncu (kalın, koyu kenarlı).
+    const order = CIVS.map((c, j) => j).sort((a, b) => (CIVS[a].id === game.player) - (CIVS[b].id === game.player));
+    for (const j of order) {
+      const mine = CIVS[j].id === game.player;
+      ctx.beginPath();
+      series.forEach((row, i) => (i ? ctx.lineTo(X(i), Y(row[j])) : ctx.moveTo(X(i), Y(row[j]))));
+      ctx.lineJoin = "round";
+      if (mine) {
+        ctx.strokeStyle = "rgba(28,23,18,0.55)";
+        ctx.lineWidth = 5.5;
+        ctx.stroke();
+      }
+      ctx.strokeStyle = CIVS[j].color;
+      ctx.lineWidth = mine ? 3.2 : 1.8;
+      ctx.stroke();
+    }
+  }
+  // Açıklama: kalkan, ad, bugünkü sayı.
+  const last = series[series.length - 1];
+  const ly = gy + gh + 30, cw = gw / CIVS.length;
+  CIVS.forEach((c, j) => {
+    const lx = gx + j * cw;
+    shield(ctx, c.id, lx, ly, 13);
+    const alive = game.civs[c.id].alive;
+    text(ctx, c.name[ui.lang] + (last ? ` ${last[j]}` : ""), lx + 18, ly + 12, { size: 12, bold: c.id === game.player, color: alive ? INK.ink : INK.faint });
+  });
+  // Yıllık
+  const list = [...(game.annals ?? [])].reverse();
+  const top = ly + 34, rowH = 21;
+  rule(ctx, r.x + 22, r.x + r.w - 22, top - 10);
+  const per = Math.max(3, Math.floor((r.y + r.h - 70 - 44 - top) / rowH));
+  const pg = paged(list, per, m);
+  if (!list.length) text(ctx, T.chrNone, r.x + r.w / 2, top + 20, { italic: true, size: 14, color: INK.soft, align: "center" });
+  pg.rows.forEach((a, i) => {
+    const y = top + 14 + i * rowH;
+    const [s, tone] = annalLine(game, a, ui.lang);
+    text(ctx, fill(T.chrTurn, a.t), r.x + 26, y, { bold: true, size: 12, color: INK.soft });
+    const color = tone === "good" ? INK.good : tone === "bad" ? INK.bad : INK.ink;
+    text(ctx, s, r.x + 100, y, { size: 13, color });
+  });
+  pager(ctx, boxes, r, r.y + r.h - 108, pg);
+  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+}
+
 function overModal(ctx, cam, game, ui, boxes, T) {
   const won = game.over.result === "won";
   const r = modalFrame(ctx, cam, boxes, 210);
   text(ctx, won ? T.victory : T.defeat, r.x + r.w / 2, r.y + 56, { title: true, bold: true, size: 28, align: "center", color: won ? INK.good : INK.bad });
   text(ctx, fill(won ? T.victoryText : T.defeatText, game.over.turn), r.x + r.w / 2, r.y + 94, { size: 14, align: "center" });
-  oneButton(ctx, boxes, r, { label: T.newGame, act: { do: "newGame" } });
+  twoButtons(ctx, boxes, r, { label: T.newGame, act: { do: "newGame" } }, { label: T.chronicle, act: { do: "open", modal: "chronicle" } });
 }
 

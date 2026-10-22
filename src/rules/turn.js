@@ -15,6 +15,7 @@ import { N, UNITS, trait } from "./numbers.js";
 import { armiesOf, budget, empty, info, placesOf, popCap } from "./state.js";
 import { holds } from "./wonders.js";
 import { tickSieges } from "./siege.js";
+import { record, snapshot } from "./chronicle.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -56,6 +57,8 @@ export function economy(state, events) {
 /** Oyuncu "Turu bitir" dedi. Dönen: bu turun olayları (state.events'e de yazılır). */
 export function endTurn(state) {
   const events = [];
+  // Kroniğin ilk fotoğrafı: oyunun başı (eski kayıtta yükseltildiği tur).
+  if (!state.chronicle?.places.length) snapshot(state);
   // Oyuncu karar vermeden geçtiyse bekleyen mektuplar bedava seçenekle kapanır.
   settleInbox(state);
   for (const c of CIVS) {
@@ -79,6 +82,8 @@ export function endTurn(state) {
   checkMissions(state, events);
   issue(state, events);
   checkOver(state);
+  record(state, events);
+  snapshot(state);
   state.events = events;
   return events;
 }

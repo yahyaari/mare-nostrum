@@ -9,7 +9,7 @@ import { byId } from "./graph.js";
 import { LEVELS, N, UNITS, trait } from "./numbers.js";
 import { holds } from "./wonders.js";
 
-export const VERSION = 6;
+export const VERSION = 7;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -40,6 +40,12 @@ export function migrate(s) {
     s.missions ??= [];
     s.lastMission ??= 0;
     s.version = 6;
+  }
+  if (s.version === 6) {
+    // Kronik: eski oyunun grafiği yükseltildiği turdan başlar.
+    s.chronicle ??= { places: [], men: [] };
+    s.annals ??= [];
+    s.version = 7;
   }
   return s;
 }
@@ -78,6 +84,7 @@ export function newGame(player, seed = 1, level = "normal") {
     offered: {}, // "a|b" -> bilgisayarın oyuncuya son teklif ettiği tur
     inbox: [], // oyuncunun karar vermesi gereken olaylar ve teklifler
     missions: [], lastMission: 0, // oyuncunun görevleri (missions.js); kendi zarı mrng
+    chronicle: { places: [], men: [] }, annals: [], // kronik (chronicle.js)
     mrng: Math.imul(seed | 0 || 1, 0x9e3779b1) | 0 || 7,
     events: [], over: null,
   };

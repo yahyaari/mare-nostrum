@@ -24,6 +24,7 @@ import * as sound from "./view/sound.js";
 import { relation } from "./rules/state.js";
 import { sight } from "./rules/sight.js";
 import { besiege, lift } from "./rules/siege.js";
+import { record } from "./rules/chronicle.js";
 import { alongRoad, drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
 import { drawUI, eventLines, missionText } from "./view/ui.js";
@@ -401,6 +402,9 @@ function dispatch(act) {
       } else if (mi?.other) ui.modal = { kind: "diplo" };
       break;
     }
+    case "chronicleMode":
+      if (m) { m.mode = act.mode; m.page = 0; }
+      break;
     case "modalPage":
       if (m) m.page = act.page;
       break;
@@ -567,7 +571,9 @@ function dispatch(act) {
       // Saldırı penceresinden: hemen saldırmak yerine kuşat.
       if (m?.kind !== "attack") break;
       ui.modal = null;
-      if (besiege(game, m.army, m.id)) {
+      const sev = [];
+      if (besiege(game, m.army, m.id, sev)) {
+        record(game, sev);
         sound.war();
         anim.pulse(m.id, INK.bad);
         ui.sel = { kind: "army", id: m.army };
@@ -583,6 +589,7 @@ function dispatch(act) {
       if (m?.kind !== "attack") break;
       // Ordu kapıya kadar yürür, kılıçlar çarpışır, sonra sonuç penceresi.
       const [ev, trace] = traced(() => attack(game, m.army, m.id));
+      record(game, [ev]);
       ui.modal = null;
       anim.timeline(trace, anim.clock(), () => true, me);
       pending = ev ? { kind: "battle", ev } : null;
@@ -596,12 +603,13 @@ function dispatch(act) {
       break;
     case "war":
       sound.war();
-      declareWar(game, me, act.civ);
+      record(game, [declareWar(game, me, act.civ)]);
       ui.modal = { kind: "diplo" };
       save();
       break;
     case "ally": {
       const ev = proposeAlliance(game, me, act.civ);
+      record(game, [ev]);
       if (ev) toast(fill(ev.type === "ally" ? T().accepted : T().refused, civName(act.civ, ui.lang)));
       save();
       break;
@@ -610,12 +618,13 @@ function dispatch(act) {
       ui.modal = { kind: "confirm", text: fill(T().breakQ, civName(act.civ, ui.lang)), yes: { do: "break", civ: act.civ } };
       break;
     case "break":
-      breakAlliance(game, me, act.civ);
+      record(game, [breakAlliance(game, me, act.civ)]);
       ui.modal = { kind: "diplo" };
       save();
       break;
     case "peace": {
       const ev = proposePeace(game, me, act.civ);
+      record(game, [ev]);
       if (ev) toast(fill(ev.type === "peace" ? T().accepted : T().refused, civName(act.civ, ui.lang)));
       save();
       break;
@@ -624,6 +633,7 @@ function dispatch(act) {
   // Görev yapıldığı anda tamamlanır: ödül ambara, haber ekrana.
   if (game && !game.over && ui.screen === "game" && act.do !== "endTurn") {
     const r = checkMissions(game);
+    record(game, r.done.map((mission) => ({ type: "mission", ok: true, mission })));
     if (r.done.length) sound.chime();
     r.done.forEach((mi, i) => {
       toast(fill(T().missionDone, missionText(game, mi, ui.lang).title));
