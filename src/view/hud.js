@@ -9,6 +9,7 @@ import { menace } from "../rules/moves.js";
 import { N } from "../rules/numbers.js";
 import { budget, placesOf } from "../rules/state.js";
 import { fill } from "../text.js";
+import { seasonOf, yearOf } from "../rules/season.js";
 import { drawMinimap } from "./draw.js";
 import { INK, SERIF, TAU, colorOf, delta, fmt, icon, over } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, TITLE, emblem, roundRect, shade } from "./pieces.js";
@@ -92,19 +93,20 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
   const mx = W - 14 - 38;
   medal(ctx, boxes, mx + 19, TOP / 2 - 1, 17, "menu", { do: "open", modal: "menu" });
   medal(ctx, boxes, mx - 44 + 19, TOP / 2 - 1, 17, "scroll", { do: "open", modal: "report" });
-  const dw = 150, dx = mx - 52 - dw;
+  const dw = 196, dx = mx - 52 - dw;
   roundRect(ctx, dx, 7, dw, TOP - 16, 4);
   ctx.fillStyle = "rgba(10,8,6,0.55)";
   ctx.fill();
   ctx.strokeStyle = "rgba(201,164,90,0.6)";
   ctx.lineWidth = 1;
   ctx.stroke();
-  sun(ctx, dx + 18, TOP / 2 - 1, 7);
+  const season = seasonOf(game.turn);
+  seasonGlyph(ctx, season, dx + 18, TOP / 2 - 1, 7);
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.font = `600 14px ${TITLE}`;
+  ctx.font = `600 13px ${TITLE}`;
   ctx.fillStyle = CREAM;
-  ctx.fillText(fill(T.year, Math.max(1, 271 - game.turn)), dx + 33, TOP / 2 - 8);
+  ctx.fillText(`${T.seasons[season]} · ${fill(T.year, yearOf(game.turn))}`, dx + 33, TOP / 2 - 8);
   ctx.font = `italic 13px ${SERIF}`;
   ctx.fillStyle = GOLD_LIGHT;
   ctx.fillText(fill(T.turn, game.turn), dx + 33, TOP / 2 + 8);
@@ -435,6 +437,43 @@ function laurel(ctx, cx, cy, r) {
       const x = cx + Math.cos(t) * r, y = cy + Math.sin(t) * r * 0.95;
       ctx.beginPath();
       ctx.ellipse(x, y, 4.2, 1.8, t + d * 1.1, 0, TAU);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/** Mevsimin işareti: ilkbaharda filiz, yazın güneş, sonbaharda yaprak, kışın kar tanesi. */
+function seasonGlyph(ctx, season, cx, cy, r) {
+  if (season === "summer") return sun(ctx, cx, cy, r);
+  ctx.save();
+  ctx.strokeStyle = GOLD_LIGHT;
+  ctx.fillStyle = GOLD_LIGHT;
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  if (season === "winter") {
+    for (let i = 0; i < 3; i++) {
+      const t = (i / 3) * Math.PI;
+      ctx.moveTo(cx - Math.cos(t) * r, cy - Math.sin(t) * r);
+      ctx.lineTo(cx + Math.cos(t) * r, cy + Math.sin(t) * r);
+    }
+    ctx.stroke();
+  } else if (season === "autumn") {
+    ctx.ellipse(cx, cy, r * 0.55, r, Math.PI / 4, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = DARK;
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.6, cy + r * 0.6);
+    ctx.lineTo(cx + r * 0.5, cy - r * 0.5);
+    ctx.stroke();
+  } else {
+    ctx.moveTo(cx, cy + r);
+    ctx.lineTo(cx, cy - r * 0.2);
+    ctx.stroke();
+    for (const d of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(cx + d * r * 0.45, cy - r * 0.35, r * 0.45, r * 0.25, d * -0.6, 0, TAU);
       ctx.fill();
     }
   }

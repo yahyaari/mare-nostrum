@@ -26,6 +26,7 @@ import { sight } from "./rules/sight.js";
 import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
 import { SCENE_MS } from "./view/battle.js";
+import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { alongRoad, drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
 import { drawUI, eventLines, missionText } from "./view/ui.js";
@@ -211,6 +212,7 @@ function mapView() {
   view.fog = ui.fog;
   view.seen = sight(game, game.player);
   view.friends = new Set(PLACES.filter((p) => { const o = game.places[p.id].owner; return o === game.player || (o && relation(game, game.player, o) === "ally"); }).map((p) => p.id));
+  view.winter = isWinter(game.turn);
   view.levels = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.level]));
   view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place).map((x) => [x.place, true]));
   view.docked = Object.fromEntries(PLACES.filter((p) => p.port && game.places[p.id].ships > 0).map((p) => [p.id, game.places[p.id].ships]));
@@ -457,7 +459,7 @@ function dispatch(act) {
       // Gösteri: önce tur şeridi, sonra rakiplerin hamleleri sırayla, en son kendi
       // ordularının güzergâh adımları. Kaynakların artışı üst banttan yükselir.
       const t = anim.clock();
-      anim.banner(fill(T().turn, game.turn), fill(T().year, Math.max(1, 271 - game.turn)));
+      anim.banner(fill(T().turn, game.turn), `${T().seasons[seasonOf(game.turn)]} · ${fill(T().year, yearOf(game.turn))}`);
       // Sisin içindeki hamleler gösterilmez (oyuncu onları göremez): beklemeden geçer.
       anim.timeline(trace, t + 900, (id) => visible(id) && (!ui.fog || sawBefore.has(id) || sawAfter.has(id)), me);
       ["money", "weapons", "food"].forEach((k, i) => {
@@ -703,6 +705,9 @@ function tapPlace(id) {
   }
   if (routeTo(game, a, id) === null) { toast(needsShips(game, a, id) ? T().needShips : T().noPath); return; }
   const [, trace] = traced(() => order(game, a.id, id));
+  // Kışın denizde fırtına: oyuncuya hemen söyle (raporda da çıkar).
+  const caught = (game.storms ?? []).filter((s) => s.army === a.id && s.turn === game.turn && !s.told);
+  for (const s of caught) { s.told = true; toast(fill(T().stormToast, s.lost, s.sunk)); }
   const t0 = anim.clock();
   const arrive = anim.timeline(trace, t0, () => true, game.player) - t0;
   if (a.route.length) {

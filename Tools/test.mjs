@@ -1144,6 +1144,86 @@ const CH = await import("../src/rules/chronicle.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Arazi ve mevsim (bölüm 22)");
+
+const GR = await import("../src/rules/ground.js");
+const SE = await import("../src/rules/season.js");
+const C2 = await import("../src/rules/combat.js");
+{
+  // Nehirler harita verisinden: Po, Mediolanum-Ariminum yolunu keser; Roma-Tarentum yolu nehir geçmez.
+  check("Po: Mediolanum-Ariminum nehir geçişi", GR.groundOf("mediolanum", "ariminum").river && GR.groundOf("ariminum", "mediolanum").river);
+  check("Roma-Tarentum nehir geçmez", !GR.groundOf("rome", "tarentum").river);
+  check("Tuna: Odessos-Olbia nehir geçişi", GR.groundOf("odessos", "olbia").river);
+  check("Thermopylai dağ geçidi", GR.groundOf("demetrias", "athens").pass && !GR.groundOf("athens", "corinth").pass);
+  check("geçitlerin hepsi gerçek kara yolu", [...GR.PASSES].every((k) => { const [a, b] = k.split("|"); const r = ROADS.find((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a)); return r && !r.sea; }));
+
+  // Çarpanlar savaşa gider.
+  const att = { civ: "rome", inf: 100, arch: 0, cav: 0, siege: 0 }, def = { civ: null, inf: 100, arch: 0, cav: 0, siege: 0 };
+  const plain = C2.fight(att, def, null);
+  const river = C2.fight({ ...att, terrain: N.ground.river }, def, null);
+  const pass = C2.fight(att, { ...def, terrain: N.ground.pass }, null);
+  check("nehir geçen saldıran x0.85", Math.abs(river.attPow / plain.attPow - N.ground.river) < 1e-9);
+  check("geçidi tutan savunan x1.25", Math.abs(pass.defPow / plain.defPow - N.ground.pass) < 1e-9);
+  check("terrainOf: Ariminum'dan Mediolanum'a nehir, Demetrias'tan Atina'ya geçit",
+    M.terrainOf("ariminum", "mediolanum").att === N.ground.river && M.terrainOf("demetrias", "athens").def === N.ground.pass && M.terrainOf("rome", "tarentum").att === 1);
+  // Tahmin araziyi sayar: eşik bir orduda nehir sonucu değiştirir.
+  const s = S.newGame("rome", 7);
+  s.places.mediolanum.inf = 100; s.places.mediolanum.arch = 0;
+  let flip = null;
+  for (let n = 60; n <= 200 && !flip; n += 5) {
+    const u = { at: "ariminum", inf: n, arch: 0 };
+    const withRiver = M.forecast(s, u, "rome", "mediolanum").odds;
+    const plainOdds = C2.estimate({ civ: "rome", inf: n, arch: 0 }, { ...M.defenders(s, "mediolanum") }, M.wallsOf(s, "mediolanum")).odds;
+    if (withRiver !== plainOdds) flip = n;
+  }
+  check("tahmin nehri sayar (bir ordu büyüklüğünde sonucu değiştirir)", !!flip);
+
+  // Mevsimler
+  check("1. tur ilkbahar, 4. tur kış, 5. tur yine ilkbahar", SE.seasonOf(1) === "spring" && SE.seasonOf(4) === "winter" && SE.seasonOf(5) === "spring");
+  check("dört tur bir yıl: MÖ 270, 269", SE.yearOf(1) === 270 && SE.yearOf(4) === 270 && SE.yearOf(5) === 269);
+
+  // Fırtına: kışın deniz yolu, yazın asla.
+  const sail = (turn, seed) => {
+    const g = S.newGame("rome", seed);
+    g.turn = turn;
+    const a = S.formArmy(g, "tarentum", 10, 0);
+    a.inf = 50; a.ships = 3;
+    M.order(g, a.id, "syracuse") ; // bağımsız: düşman, yürümez
+    M.order(g, a.id, "epidamnos"); // deniz yolu, bağımsız: yine yürümez
+    g.places.epidamnos.owner = "rome";
+    M.order(g, a.id, "epidamnos");
+    return { g, a };
+  };
+  let caught = null;
+  for (let seed = 1; seed < 80 && !caught; seed++) {
+    const r = sail(4, seed);
+    if (r.g.storms?.length) caught = r;
+  }
+  check("kışın deniz yolunda fırtına olur", !!caught && caught.a.at === "epidamnos");
+  check("fırtına: askerin %10'u ve bir gemi", caught && caught.a.inf === 45 && caught.a.ships === 2 && caught.g.storms[0].lost === 5 && caught.g.storms[0].sunk === 1);
+  let summer = 0;
+  for (let seed = 1; seed < 80; seed++) summer += sail(2, seed).g.storms?.length ?? 0;
+  check("yazın fırtına olmaz", summer === 0);
+
+  // Kış yıpratması: turun sonu kışsa ordular %3 erir, olay rapora yazılır.
+  const w = S.newGame("rome", 7);
+  w.turn = 4;
+  w.civs.rome.food = 1000; // kıtlık karışmasın
+  const wa = S.formArmy(w, "rome", 10, 0);
+  wa.inf = 200;
+  const evs = T.endTurn(w);
+  check("kış: ordu %3 erir", S.armyById(w, wa.id)?.inf === 194);
+  check("kış yıpratması raporda", evs.some((e) => e.type === "winter" && e.lost >= 6));
+  const v = S.newGame("rome", 7);
+  v.turn = 2;
+  v.civs.rome.food = 1000;
+  const va = S.formArmy(v, "rome", 10, 0);
+  va.inf = 200;
+  T.endTurn(v);
+  check("yazın ordu erimez", S.armyById(v, va.id)?.inf === 200);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
 
 {

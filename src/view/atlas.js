@@ -6,6 +6,9 @@
 
 import { project } from "../geo.js";
 import { TAU } from "./kit.js";
+import { ROADS } from "../data/world.js";
+import { roadLine } from "../rules/graph.js";
+import { PASSES, crossings } from "../rules/ground.js";
 
 // [ad, boylam, enlem, açı (derece, saat yönü), büyüklük]
 const SEAS = [
@@ -76,6 +79,66 @@ export function paintLabels(ctx, ox, oy, k, dpr) {
   for (const l of LANDS) put(l, false);
   for (const s of SEAS) put(s, true);
   if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  ctx.restore();
+}
+
+/**
+ * Arazi işaretleri: dağ geçidi olan yolun ortasında iki tepe, nehir geçişinde küçük bir köprü
+ * (kurallar.md 22). Uzaktan bakınca çizilmez.
+ */
+export function paintGround(ctx, ox, oy, k, dpr) {
+  if (k < 40) return;
+  const s = Math.min(1.3, k / 70) * dpr;
+  const at = (lon, lat) => { const m = project(lon, lat); return [ox + m.x * k * dpr, oy + m.y * k * dpr]; };
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const r of ROADS) {
+    if (r.sea || !PASSES.has(r.a < r.b ? r.a + "|" + r.b : r.b + "|" + r.a)) continue;
+    // Yolun gerçek ortası (uzunluğunun yarısı): iki noktalı yolda ortadaki nokta bir uçtu.
+    const pts = roadLine(r);
+    const seg = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+    let half = seg.reduce((n, d) => n + d, 0) / 2, i = 0;
+    while (i < seg.length - 1 && half > seg[i]) half -= seg[i++];
+    const f = seg[i] ? half / seg[i] : 0;
+    const [x, y] = at(pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f);
+    ctx.beginPath();
+    ctx.moveTo(x - 9 * s, y + 4 * s);
+    ctx.lineTo(x - 3 * s, y - 6 * s);
+    ctx.lineTo(x + 1 * s, y - 1 * s);
+    ctx.lineTo(x + 4 * s, y - 5 * s);
+    ctx.lineTo(x + 9 * s, y + 4 * s);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(92,72,48,0.92)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(245,236,214,0.9)";
+    ctx.lineWidth = 1.2 * dpr;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 4.6 * s, y - 3.6 * s);
+    ctx.lineTo(x - 3 * s, y - 6 * s);
+    ctx.lineTo(x - 1.6 * s, y - 4 * s);
+    ctx.strokeStyle = "rgba(250,250,250,0.95)";
+    ctx.stroke();
+  }
+  for (const p of Object.values(crossings())) {
+    const [x, y] = at(p[0], p[1]);
+    ctx.beginPath();
+    ctx.moveTo(x - 7 * s, y + 2 * s);
+    ctx.quadraticCurveTo(x, y - 6 * s, x + 7 * s, y + 2 * s);
+    ctx.strokeStyle = "rgba(40,28,16,0.85)";
+    ctx.lineWidth = 3.2 * dpr;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(226,206,160,0.95)";
+    ctx.lineWidth = 1.6 * dpr;
+    ctx.stroke();
+    ctx.beginPath();
+    for (const dx of [-5, 0, 5]) { ctx.moveTo(x + dx * s, y - (dx === 0 ? 2 : 0) * s); ctx.lineTo(x + dx * s, y + 3 * s); }
+    ctx.strokeStyle = "rgba(40,28,16,0.85)";
+    ctx.lineWidth = 1 * dpr;
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -230,6 +293,23 @@ export function clear(m, seen, pos) {
 const CLOUDS = Array.from({ length: 11 }, (_, i) => ({
   x: (i * 7.31) % 66, y: 1.5 + ((i * 11.7) % 24), rx: 3 + (i % 3) * 1.6, ry: 1.5 + (i % 2) * 1.0, v: 0.05 + (i % 4) * 0.014,
 }));
+
+/** Kışın kar: ekranda ağır ağır inen taneler (her karede, zamana bağlı; rastgelelik yok). */
+export function drawSnow(ctx, cam, dpr, t) {
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  for (let i = 0; i < 90; i++) {
+    const sx = (i * 137.5) % cam.w, speed = 14 + (i % 7) * 4;
+    const y = ((i * 71.3 + t * speed) % (cam.h + 20)) - 10;
+    const x = (sx + Math.sin(t * 0.8 + i) * 14 + t * 6) % cam.w;
+    ctx.globalAlpha = 0.45 + (i % 5) * 0.1;
+    ctx.beginPath();
+    ctx.arc(x, y, 1 + (i % 3) * 0.6, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
 
 let cloudSprites = null;
 /** Bulut gölgesi ve beyaz bulut: bir kere küçük tuvallere çizilir, her karede sadece kopyalanır. */

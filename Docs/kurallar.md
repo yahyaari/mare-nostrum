@@ -522,3 +522,30 @@ Oyunun tarihi (`src/rules/chronicle.js`). Menüden ve oyun sonu penceresinden a�
 - Kayıt küçük: tur başına iki kere yedi sayı; yıllık en fazla 300 satır, taşarsa önce
   oyuncuyu ilgilendirmeyen en eski satır düşer. Kayıt sürümü 7 (eski oyunun kroniği
   yükseltildiği turdan başlar).
+
+---
+
+## 22. Arazi ve mevsim
+
+**Arazi** (`src/rules/ground.js`):
+- **Nehir geçişi:** kara yolunun çizgisi bir nehri kesiyorsa (Natural Earth nehirleri, yolun iki
+  ucuna 0.3 dereceden yakın kesişmeler sayılmaz - kıyıdaki şehirlerin yolları) o yoldan
+  saldıranın gücü **× 0.85**. 14 yol: Ebro, Duero, Seine, Rhone, Po, Tuna (Odessos–Olbia),
+  Dinyeper, Fırat (Mazaka–Artaşat), Dicle (Babil–Ekbatana)...
+- **Dağ geçidi:** o yoldan gelen saldırıya karşı savunanın gücü **× 1.25**. 12 geçit, elle:
+  Pireneler, Alpler (iki yol), Apeninler, Pindos, Thermopylai, Kilikya Kapıları, Zagroslar,
+  Ermeni yaylası (iki yol), Kafkaslar, Hazar Kapıları.
+- Haritada: geçidin ortasında karlı iki tepe, nehir geçişinde küçük bir köprü (yakından
+  bakınca). Saldırı penceresi araziyi yazar; tahmin araziyi sayar.
+
+**Mevsim** (`src/rules/season.js`): her tur bir mevsim (ilkbahar, yaz, sonbahar, kış), dört tur
+bir yıl; oyun MÖ 270 ilkbaharında başlar. Üst bantta "Kış · MÖ 268".
+- **Kışın denizde fırtına:** deniz yolunda yürüyen ya da denizden saldıran ordu %25 ihtimalle
+  fırtınaya yakalanır: her birliğinden %10 ve (birden çoksa) bir gemisi gider.
+- **Kış yıpratması:** kış turunun sonunda bütün ordular (garnizon değil) %3 erir, aşağı
+  yuvarlanarak (küçük birlik erimez).
+- Haritada kışın kara soğuk beyaz bir örtüyle kaplanır ve kar yağar.
+
+> Denge (70 oyun, önceki sürümle aynı anda): ilk düşüş 51 → 50, en erken 24 → 23; Partlar
+> 150 turda ayakta 33 → 37/70, Sakalar 36 → 27/70 (dışarı açılan yolları Tuna ve Dinyeper'i
+> geçiyor; önceki ölçümlerde Sakalar 30-38 arası oynadı - gürültünün alt ucu, izlenecek).

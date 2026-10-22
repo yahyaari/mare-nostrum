@@ -9,9 +9,11 @@ import { estimate, fight, naval, navalOdds } from "./combat.js";
 import { byId, neighbours, path, roadBetween } from "./graph.js";
 import { bestAt, bury, has, learn } from "./generals.js";
 import { N, UNITS, trait } from "./numbers.js";
-import { between } from "./rng.js";
+import { between, random } from "./rng.js";
 import { armiesAt, armyById, canSail, empty, info, men, placesOf, relation } from "./state.js";
 import { holds } from "./wonders.js";
+import { groundOf } from "./ground.js";
+import { isWinter } from "./season.js";
 
 /**
  * `civ` buraya girebilir mi, girerse ne olur:
@@ -87,6 +89,29 @@ export function routeTo(state, army, dest, sail = canSail(army)) {
 /** Bu orduyu bir yere götürmek gemi istiyor mu: karadan yol yok ama denizden var. */
 export const needsShips = (state, army, dest) => routeTo(state, army, dest) === null && routeTo(state, army, dest, true) !== null;
 
+/**
+ * Kışın deniz yolu: ordu %25 ihtimalle fırtınaya yakalanır, her birliğinden %10 ve bir gemisi
+ * gider. Olay state.storms'a yazılır (tur raporu ve ekran oradan okur).
+ */
+function storm(state, army, at) {
+  if (!isWinter(state.turn) || random(state) >= N.season.storm) return;
+  let lost = 0;
+  for (const k of UNITS) {
+    const n = Math.floor(army[k] * N.season.stormLoss);
+    army[k] -= n;
+    lost += n;
+  }
+  const sunk = army.ships > 1 ? 1 : 0;
+  army.ships -= sunk;
+  (state.storms ??= []).push({ type: "storm", turn: state.turn, civ: army.owner, army: army.id, at, lost, sunk });
+}
+
+/** Saldırıda arazi: nehir geçen saldıran ve dağ geçidini tutan savunanın çarpanları. */
+export function terrainOf(from, id) {
+  const g = from ? groundOf(from, id) : { river: false, pass: false };
+  return { att: g.river ? N.ground.river : 1, def: g.pass ? N.ground.pass : 1, river: g.river, pass: g.pass };
+}
+
 /** Güzergâhı koy ve hareketi kalan kadar yürü. Dönen: yürünen adım sayısı. */
 export function order(state, armyId, dest) {
   const army = armyById(state, armyId);
@@ -117,6 +142,7 @@ export function advance(state, army) {
     delete army.besieging;
     delete army.besiegedSince;
     army.at = next;
+    if (road.sea) storm(state, army, next);
     army.moves -= 1;
     army.route.shift();
     steps++;
@@ -143,9 +169,10 @@ export function forecast(state, unit, civ, id) {
   const from = unit.at ?? null;
   const bySea = from && roadBetween(from, id)?.sea;
   const sea = bySea ? navalOdds({ civ, ships: unit.ships ?? 0 }, { civ: pl.owner, ships: shipsAt(state, id), fort: fortOf(state, id) }) : "easy";
+  const ter = terrainOf(from, id);
   const land = estimate(
-    { civ, inf: unit.inf, arch: unit.arch, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null },
-    { ...defenders(state, id), gen: bestAt(state, id, pl.owner) },
+    { civ, inf: unit.inf, arch: unit.arch, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null, terrain: ter.att },
+    { ...defenders(state, id), gen: bestAt(state, id, pl.owner), terrain: ter.def },
     wallsOf(state, id),
   );
   // Denizde batılırsa karaya çıkılmaz: tahmin ikisinin kötüsü.
@@ -186,6 +213,8 @@ export function attack(state, armyId, id, luck = null) {
   delete army.besieging;
   delete army.besiegedSince;
   const pl = state.places[id];
+  // Kışın denizden saldıran önce fırtınaya yakalanabilir.
+  if (roadBetween(army.at, id).sea) storm(state, army, army.at);
   // Denizden saldırı: önce limandaki gemilerle deniz savaşı. Filo batarsa ordu denizde kaybolur.
   let navalEv = null;
   if (roadBetween(army.at, id).sea && shipsAt(state, id) > 0) {
@@ -207,7 +236,8 @@ export function attack(state, armyId, id, luck = null) {
   const def = defenders(state, id);
   const walls = wallsOf(state, id);
   const defGen = bestAt(state, id, pl.owner);
-  const r = fight({ civ: army.owner, ...pickUnits(army), gen: army.general }, { ...def, gen: defGen }, walls, luck ?? rollLuck(state));
+  const ter = terrainOf(army.at, id);
+  const r = fight({ civ: army.owner, ...pickUnits(army), gen: army.general, terrain: ter.att }, { ...def, gen: defGen, terrain: ter.def }, walls, luck ?? rollLuck(state));
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
     won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },

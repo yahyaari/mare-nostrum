@@ -125,6 +125,11 @@ export const N = {
   // Kuşatma (bölüm 20): garnizon turda %10 erir, her 10 kuşatma makinesi +%2, en fazla %25;
   // kuşatılan yerin sadakati turda 5 düşer; kamptaki ordu da salgından turda %3 erir.
   siege: { starve: 0.1, perEngines: 0.02, max: 0.25, loyalty: 5, camp: 0.03 },
+  // Arazi ve mevsim (bölüm 22): nehir geçen yoldan saldıran x0.85, dağ geçidini savunan x1.25.
+  // Kışın deniz yolunda yürüyen ya da denizden saldıran ordu %25 ihtimalle fırtınaya yakalanır
+  // (askerinin %10'u ve bir gemisi gider); kışın bütün ordular %3 yıpranır.
+  ground: { river: 0.85, pass: 1.25 },
+  season: { storm: 0.25, stormLoss: 0.1, winterArmy: 0.03 },
   // Dünya harikaları (bölüm 18): şehri tutanın bütün ülkesine.
   wonders: { pharosFort: 1, pyramidsLoyalty: 2, gardensGrowth: 1.25, artemisMoney: 1.1, colossusTrade: 1.5, parthenonXp: 2 },
 };

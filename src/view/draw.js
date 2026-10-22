@@ -15,7 +15,7 @@ import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
 import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, ship, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
-import { clear, drawClouds, paintCompass, paintFog, paintLabels } from "./atlas.js";
+import { clear, drawClouds, drawSnow, paintCompass, paintFog, paintGround, paintLabels } from "./atlas.js";
 import { regions } from "./regions.js";
 import { TREES } from "../data/trees.js";
 
@@ -90,6 +90,7 @@ export function drawMap(ctx, cam, view, dpr) {
   const S = still(cam, view, dpr, L);
   ctx.drawImage(S.canvas, Math.round(-S.mx - (cam.x - S.cx) * k * dpr), Math.round(-S.my - (cam.y - S.cy) * k * dpr));
   if (TERRAIN?.complete) drawClouds(ctx, cam, dpr, SIZE.x, performance.now() / 1000);
+  if (view.winter) drawSnow(ctx, cam, dpr, performance.now() / 1000);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(vignette(Math.round(cam.w * dpr), Math.round(cam.h * dpr)), 0, 0);
 
@@ -319,6 +320,14 @@ function paintTerrain(ctx, view, L, px, cam) {
   ctx.drawImage(TERRAIN, a.x, a.y, b.x - a.x, b.y - a.y);
   paintTrees(ctx, cam);
 
+  // Kış: kara soğuk, beyazımsı bir örtü altında.
+  if (view.winter) {
+    ctx.save();
+    ctx.fillStyle = "rgba(236,242,247,0.34)";
+    ctx.fill(L.dry, "evenodd");
+    ctx.restore();
+  }
+
   // Topraklar: sahibinin renginde ince bir boya, kenarlarında içe doğru aynı renkte bir parıltı
   // (iki medeniyetin sınırı iki renkli görünür). Sadece karada.
   ctx.save();
@@ -392,7 +401,7 @@ function still(cam, view, dpr, L) {
   // Sis görülen yerlere bağlı; adlar yazı tiplerine (yüklenince yeniden çizilsin).
   const fog = view.fog ? [...view.seen].sort().join(",") + "/" + [...view.friends].sort().join(",") : "-";
   const fonts = typeof document !== "undefined" ? document.fonts?.status : "";
-  const key = [k, W, H, ready, fog, fonts, PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
+  const key = [k, W, H, ready, fog, fonts, view.winter ? "W" : "", PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
   if (layer && layer.key === key && Math.abs(cam.x - layer.cx) * k * dpr <= layer.mx && Math.abs(cam.y - layer.cy) * k * dpr <= layer.my) return layer;
   const mx = Math.round(W * 0.3), my = Math.round(H * 0.3);
   const canvas = layer?.canvas ?? document.createElement("canvas");
@@ -415,6 +424,7 @@ function still(cam, view, dpr, L) {
     paintTerrain(ctx, view, L, px, { ...cam, w: cam.w * 1.6, h: cam.h * 1.6 });
     const ox = mx + dpr * (cam.w / 2 - cam.x * k), oy = my + dpr * (cam.h / 2 - cam.y * k);
     if (view.fog) paintFog(ctx, canvas, L.cells, POS, view.seen, view.friends, ox, oy, k, dpr);
+    paintGround(ctx, ox, oy, k, dpr);
     paintLabels(ctx, ox, oy, k, dpr);
     paintCompass(ctx, ox, oy, k, dpr);
     return layer;

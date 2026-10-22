@@ -16,6 +16,7 @@ import { armiesOf, budget, empty, info, placesOf, popCap } from "./state.js";
 import { holds } from "./wonders.js";
 import { tickSieges } from "./siege.js";
 import { record, snapshot } from "./chronicle.js";
+import { isWinter } from "./season.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -66,6 +67,19 @@ export function endTurn(state) {
   }
   // Kuşatmalar bir tur ilerler (üretimden önce: kuşatılan yer bu tur bir şey üretmez).
   tickSieges(state, events);
+  // Kış: garnizonun dışındaki bütün ordular yıpranır (aşağı yuvarlanır: küçük birlik erimez).
+  if (isWinter(state.turn)) {
+    const lost = {};
+    for (const a of state.armies) {
+      for (const k of UNITS) {
+        const n = Math.floor(a[k] * N.season.winterArmy);
+        a[k] -= n;
+        lost[a.owner] = (lost[a.owner] ?? 0) + n;
+      }
+    }
+    state.armies = state.armies.filter((a) => !empty(a));
+    if (lost[state.player]) events.push({ type: "winter", turn: state.turn, civ: state.player, lost: lost[state.player] });
+  }
   economy(state, events);
   state.turn += 1;
   for (const id in state.places) {
@@ -82,6 +96,9 @@ export function endTurn(state) {
   checkMissions(state, events);
   issue(state, events);
   checkOver(state);
+  // Bu tur denizde yakalanan fırtınalar (bilgisayarın ve oyuncunun yürüyüşleri) rapora.
+  events.push(...(state.storms ?? []));
+  delete state.storms;
   record(state, events);
   snapshot(state);
   state.events = events;

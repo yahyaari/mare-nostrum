@@ -20,7 +20,7 @@
   Pages `master`'dan, push'tan ~1 dakika sonra yayında.
 - **Dil:** Arayüz İngilizce asıl, Türkçe ikinci (sağ üst / menü). Belgeler ve kod yorumları
   Türkçe.
-- **Push'tan önce:** `node Tools/test.mjs` (1880 kontrol, hepsi geçmeli). Kurala dokunduysan
+- **Push'tan önce:** `node Tools/test.mjs` (1897 kontrol, hepsi geçmeli). Kurala dokunduysan
   `node Tools/balance.mjs 70`. Arayüze dokunduysan `node Tools/peek.mjs ...` ve
   `node Tools/playtest.mjs ...` (komutlar `working-on-this.md`'de).
 
@@ -42,7 +42,7 @@
 | 21.10 | Liman | Balıkçılık, tersane, ticaret, liman kalesi; liman kartı iki sekmeli; Roma liman oldu (Ostia). |
 | 21.10 | Yürüyüş | Ordular yol uzunluğuna göre yürüyor, iz bırakıyor; dokunuş önce hızlandırır, sonra bitirir. |
 
-**Şu anki durum (21.10 akşam):** kayıt sürümü 7 (eskiler kendiliğinden yükseltiliyor), 1880 kontrol geçiyor,
+**Şu anki durum (21.10 akşam):** kayıt sürümü 7 (eskiler kendiliğinden yükseltiliyor), 1897 kontrol geçiyor,
 70 bot oyununda ilk medeniyetin düşüşü ortalama 51. tur (en erken 25), her oyunda savaş çıkıyor,
 "en büyük" çıkan medeniyet oyundan oyuna değişiyor.
 
@@ -116,7 +116,9 @@ kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sa
 
 **Savaş sahnesi YAPILDI (22.10):** `view/battle.js`. Savaş sonucu penceresinin üstünde 2.9 sn: okçular ok yağdırır, süvari hücum eder, saflar çarpışır, kayıp oranında figür düşer, kaybeden çekilir, kazananın sancağı yükselir; surlu yerde savunanlar mazgallı burcun ardında; ordu battıysa denizde kadırgalar batar. Sesler sahneyle senkron (ok vızıltısı, kılıç, sonuç). Rastgele değil: aynı savaş hep aynı oynar.
 
-**Sırada (plan sırası): arazi/mevsim, iki kişi; en son öğretici.**
+**Arazi ve mevsim YAPILDI (22.10):** `rules/ground.js` (nehir geçişleri harita verisinden hesaplanır, 14 yol; 12 dağ geçidi elle), `rules/season.js` (tur = mevsim, 4 tur = yıl; kışın denizde %25 fırtına, ordular %3 yıpranır), kurallar.md 22. Haritada geçit tepeleri, köprüler, kışın beyaz örtü ve kar; üst bantta mevsim. 17 yeni kontrol (1897). Denge: ilk düşüş 50; Sakalar 27/70 ayakta (izlenecek).
+
+**Sırada (plan sırası): iki kişi (hotseat); en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`

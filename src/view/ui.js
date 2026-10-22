@@ -9,7 +9,7 @@
 import { CIVS } from "../data/world.js";
 import { canDeclare, canPropose } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
-import { access, canAttack, defenders, forecast, fortOf, hostile, menace, shipsAt, wallsOf } from "../rules/moves.js";
+import { access, canAttack, defenders, forecast, fortOf, hostile, menace, shipsAt, terrainOf, wallsOf } from "../rules/moves.js";
 import { N, UNITS, trait } from "../rules/numbers.js";
 import {
   PORT_UPGRADES, UPGRADES, armiesAt, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
@@ -580,7 +580,9 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   // Surlu yer: hemen saldırmak yerine kuşatılabilir.
   const sg = canBesiege(game, a, m.id);
   const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id)), 396, { size: 12, italic: true }) : [];
-  const r = modalFrame(ctx, cam, boxes, 290 + (bySea ? 22 : 0) + hint.length * 17 + (sg ? 8 : 0));
+  const ter = terrainOf(a.at, m.id);
+  const tl = (ter.river ? 1 : 0) + (ter.pass ? 1 : 0);
+  const r = modalFrame(ctx, cam, boxes, 290 + (bySea ? 22 : 0) + tl * 18 + hint.length * 17 + (sg ? 8 : 0));
   const x = r.x + 22;
   text(ctx, fill(T.attackQ, placeName(m.id, ui.lang)), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   text(ctx, T.yours, x, r.y + 76, { bold: true, size: 13 });
@@ -589,11 +591,16 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   text(ctx, men(d) ? troops(T, d) : T.undefended, x, r.y + 144, { size: 13 });
   text(ctx, `${T.walls}: ${walls === "castle" ? T.wallsCastle : walls === "city" ? T.wallsCity : T.wallsNone}`, x, r.y + 166, { size: 13, color: INK.soft });
   let oy = r.y + 196;
+  // Arazi: nehir geçişi ve dağ geçidi.
+  [[ter.river, T.riverLine], [ter.pass, T.passLine]].filter(([on]) => on).forEach(([, l], i) => {
+    text(ctx, l, x, r.y + 186 + i * 18, { size: 13, italic: true, color: INK.warn });
+  });
+  oy += tl * 18;
   if (bySea) {
     // Önce deniz savaşı: kaybedilirse ordu batar.
     const [sl, sc] = oddsLabel(e.sea, T);
-    const sw = text(ctx, fill(T.navalOdds, a.ships, shipsAt(game, m.id)) + " · ", x, r.y + 190, { size: 13 });
-    text(ctx, sl, x + sw, r.y + 190, { size: 13, bold: true, color: sc });
+    const sw = text(ctx, fill(T.navalOdds, a.ships, shipsAt(game, m.id)) + " · ", x, r.y + 190 + tl * 18, { size: 13 });
+    text(ctx, sl, x + sw, r.y + 190 + tl * 18, { size: 13, bold: true, color: sc });
     oy += 18;
   }
   const [label, color] = oddsLabel(e.odds, T);
@@ -700,6 +707,8 @@ export function eventLines(game, lang) {
     if (e.type === "battle" && e.won && wonderAt(e.place)) {
       out.push([fill(T.evWonder, name(e.attacker), T.wonders[wonderAt(e.place).id][0]), e.attacker === me ? "good" : e.defender === me ? "bad" : null]);
     }
+    if (e.type === "storm" && e.civ === me) out.push([fill(T.evStorm, e.lost, e.sunk), "bad"]);
+    if (e.type === "winter" && e.civ === me) out.push([fill(T.evWinter, e.lost), "bad"]);
     if (e.type === "missionNew") out.push([fill(T.evMissionNew, missionText(game, e.mission, lang).title), null]);
     if (e.type === "mission") out.push([fill(e.ok ? T.evMissionOk : T.evMissionFail, missionText(game, e.mission, lang).title), e.ok ? "good" : "bad"]);
     if (e.type === "siege" && (e.by === me || e.defender === me)) out.push([fill(T.evSiege, name(e.by), placeName(e.place, lang)), e.defender === me ? "bad" : null]);

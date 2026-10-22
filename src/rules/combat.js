@@ -41,8 +41,9 @@ export function fight(att, def, walls, luck = [1, 1]) {
 
   // 2. Göğüs göğüse
   const wall = breach(walls === "castle" ? N.castleWall : walls === "city" ? N.cityWall : 1);
-  const attPow = power(a, att.civ, false, !!walls) * siege * might(att.gen) * luck[0];
-  const defPow = power(d, def.civ, true, false) * wall * might(def.gen) * luck[1];
+  // Arazi (ground.js): nehir geçen saldıran, dağ geçidini tutan savunan (çarpan dışarıdan gelir).
+  const attPow = power(a, att.civ, false, !!walls) * siege * might(att.gen) * (att.terrain ?? 1) * luck[0];
+  const defPow = power(d, def.civ, true, false) * wall * might(def.gen) * (def.terrain ?? 1) * luck[1];
 
   // 3. Sonuç. Savunan kimse kalmadıysa saldıran kayıpsız girer; eşitlikte savunan kazanır.
   // Kuşatma makinesinin mürettebatı tek başına bir yeri alamaz ve savunamaz.
