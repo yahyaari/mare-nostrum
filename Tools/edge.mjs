@@ -1,21 +1,37 @@
 // Başsız Edge'i açıp oyunla konuşan küçük kapı (Chrome DevTools Protocol). peek.mjs ve
 // playtest.mjs bunu kullanır. Paket yok: Node'un kendi fetch ve WebSocket'i.
 
-import { spawn } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const EDGE = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Edge'i süreç ağacıyla kapat: browser.kill() sadece ana süreci öldürüyordu, alt süreçler
+// (çizici, GPU, yardımcılar) ortada kalıyordu - bir gün 81 tane birikti ve bilgisayarı
+// yavaşlattı (kullanıcı 22.10). Betik hatayla çıksa da çıkışta kapatılır.
+// Edge'in ilk süreci hemen çıkıp tarayıcıyı ayrı bırakıyor (süreç ağacı kopuk): o yüzden bu
+// aracın kendine ait profil klasörünü taşıyan bütün Edge süreçleri kapatılır.
+function killTree(browser, profile) {
+  if (!browser || browser.done) return;
+  browser.done = true;
+  try { browser.kill(); } catch { /* */ }
+  const ps = `Get-CimInstance Win32_Process -Filter "name='msedge.exe'" | Where-Object { $_.CommandLine -like '*${profile}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+  try { spawnSync("powershell", ["-NoProfile", "-Command", ps], { stdio: "ignore" }); } catch { /* */ }
+  try { rmSync(profile, { recursive: true, force: true }); } catch { /* geçici klasör: kalırsa da zararsız */ }
+}
+
 export async function open(url, W = 1280, H = 720) {
   const phone = H > W;
   const port = 9500 + (process.pid % 300);
+  const profile = join(tmpdir(), "mn-edge-" + Date.now() + "-" + process.pid);
   const browser = spawn(EDGE, [
-    "--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), "mn-edge-" + Date.now())}`,
+    "--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
     `--window-size=${W},${H}`, "--no-first-run", "about:blank",
   ], { stdio: "ignore" });
+  process.on("exit", () => killTree(browser, profile));
 
   let target;
   for (let i = 0; i < 60 && !target; i++) {
@@ -25,7 +41,7 @@ export async function open(url, W = 1280, H = 720) {
     } catch { /* hazır değil */ }
     if (!target) await sleep(200);
   }
-  if (!target) { browser.kill(); throw new Error("Edge açılmadı"); }
+  if (!target) { killTree(browser, profile); throw new Error("Edge açılmadı"); }
 
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r) => ws.addEventListener("open", r, { once: true }));
@@ -68,7 +84,7 @@ export async function open(url, W = 1280, H = 720) {
   await send("Page.navigate", { url });
   const ready = () => log.some((l) => l.includes("[MareNostrum] ready"));
   for (let t = Date.now(); Date.now() - t < 20000 && !ready();) await sleep(150);
-  if (!ready()) { browser.kill(); throw new Error("OYUN AÇILMADI: " + url + "\n" + log.join("\n")); }
+  if (!ready()) { killTree(browser, profile); throw new Error("OYUN AÇILMADI: " + url + "\n" + log.join("\n")); }
 
   return {
     log, evaluate,
@@ -88,6 +104,6 @@ export async function open(url, W = 1280, H = 720) {
       }
       throw new Error("yeniden yükleme açılmadı");
     },
-    close() { try { ws.close(); } catch { /* */ } browser.kill(); },
+    close() { try { ws.close(); } catch { /* */ } killTree(browser, profile); },
   };
 }

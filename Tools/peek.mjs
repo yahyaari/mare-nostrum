@@ -11,10 +11,24 @@
 // fotoğraflanır ve bembeyaz kareler bakmadan "temiz" diye geçer. Konsolda bir hata ya da
 // istisna varsa sıfır olmayan kodla çıkar.
 
-import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+
+// Edge'i süreç ağacıyla kapat: browser.kill() sadece ana süreci öldürüyordu, alt süreçler
+// (çizici, GPU, yardımcılar) ortada kalıyordu - bir gün 81 tane birikti ve bilgisayarı
+// yavaşlattı (kullanıcı 22.10). Betik hatayla çıksa da çıkışta kapatılır.
+// Edge'in ilk süreci hemen çıkıp tarayıcıyı ayrı bırakıyor (süreç ağacı kopuk): o yüzden bu
+// aracın kendine ait profil klasörünü taşıyan bütün Edge süreçleri kapatılır.
+function killTree(browser, profile) {
+  if (!browser || browser.done) return;
+  browser.done = true;
+  try { browser.kill(); } catch { /* */ }
+  const ps = `Get-CimInstance Win32_Process -Filter "name='msedge.exe'" | Where-Object { $_.CommandLine -like '*${profile}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+  try { spawnSync("powershell", ["-NoProfile", "-Command", ps], { stdio: "ignore" }); } catch { /* */ }
+  try { rmSync(profile, { recursive: true, force: true }); } catch { /* geçici klasör: kalırsa da zararsız */ }
+}
 
 const args = process.argv.slice(2);
 if (args.some((a) => a.startsWith("--"))) {
@@ -29,15 +43,17 @@ const EDGE = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
 const PORT = 9700 + (process.pid % 200);
 mkdirSync(outDir, { recursive: true });
 
+const profile = join(tmpdir(), "mn-peek-" + Date.now() + "-" + process.pid);
 const browser = spawn(EDGE, [
-  "--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${join(tmpdir(), "mn-peek-" + Date.now())}`,
+  "--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`,
   `--window-size=${W},${H}`, "--no-first-run", "about:blank",
 ], { stdio: "ignore" });
+process.on("exit", () => killTree(browser, profile));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = [];
 let bad = 0;
-const watchdog = setTimeout(() => { console.log("ZAMAN AŞIMI"); browser.kill(); process.exit(2); }, 90000);
+const watchdog = setTimeout(() => { console.log("ZAMAN AŞIMI"); killTree(browser, profile); process.exit(2); }, 90000);
 
 let target;
 for (let i = 0; i < 60 && !target; i++) {
@@ -47,7 +63,7 @@ for (let i = 0; i < 60 && !target; i++) {
   } catch { /* hazır değil */ }
   if (!target) await sleep(200);
 }
-if (!target) { console.log("EDGE AÇILMADI"); browser.kill(); process.exit(2); }
+if (!target) { console.log("EDGE AÇILMADI"); killTree(browser, profile); process.exit(2); }
 
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => ws.addEventListener("open", r, { once: true }));
@@ -107,7 +123,7 @@ if (!ready()) {
   for (const line of log) console.log("  " + line);
   if (!log.length) console.log("  konsolda tek satır yok - sunucu açık mı? node Tools/serve.mjs . 8060");
   clearTimeout(watchdog);
-  browser.kill();
+  killTree(browser, profile);
   process.exit(3);
 }
 
@@ -197,5 +213,5 @@ await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "
 for (const line of log) console.log("  " + line);
 console.log(bad ? `${bad} HATA` : "konsol temiz");
 clearTimeout(watchdog);
-browser.kill();
+killTree(browser, profile);
 process.exit(bad ? 1 : 0);
