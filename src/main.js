@@ -40,7 +40,7 @@ const ctx = canvas.getContext("2d");
 const cam = makeCamera();
 
 let game = null;
-const ui = { screen: "start", lang: pickLang(), level: pickLevel(), pick: null, saved: null, sel: null, army: null, modal: null, toast: null, news: null, tip: null, fog: pickFog() };
+const ui = { screen: "start", lang: pickLang(), level: pickLevel(), pick: null, saved: null, sel: null, army: null, modal: null, toast: null, news: null, tip: null, fog: pickFog(), coach: pickCoach() };
 const startOwners = Object.fromEntries(PLACES.map((p) => [p.id, p.owner]));
 
 let dpr = 1;
@@ -80,6 +80,27 @@ function pickLevel() {
     if (saved === "easy" || saved === "normal" || saved === "hard") return saved;
   } catch { /* varsayılan */ }
   return "normal";
+}
+
+/** İpucu balonları: görülenler ve kapalı mı (tarayıcıda saklanır; ui.js COACH). */
+function pickCoach() {
+  try {
+    return { off: localStorage.getItem("mn.coachOff") === "1", done: new Set(JSON.parse(localStorage.getItem("mn.coach") ?? "[]")) };
+  } catch { return { off: false, done: new Set() }; }
+}
+
+function saveCoach() {
+  try {
+    localStorage.setItem("mn.coach", JSON.stringify([...ui.coach.done]));
+    localStorage.setItem("mn.coachOff", ui.coach.off ? "1" : "0");
+  } catch { /* saklanamadı: bu oturumda yine geçerli */ }
+}
+
+/** Oyuncu bir ipucunun gösterdiği şeyi yaptı: o ipucu bir daha çıkmaz. */
+function coachDone(id) {
+  if (ui.coach.done.has(id)) return;
+  ui.coach.done.add(id);
+  saveCoach();
 }
 
 /** Savaş sisi açık mı (menüden; tarayıcıda saklanır). Varsayılan açık. */
@@ -399,7 +420,7 @@ function dispatch(act) {
       ui.sel = null;
       ui.army = null;
       ui.news = null;
-      ui.modal = { kind: "help" };
+      ui.modal = null;
       lookAtHome();
       save();
       break;
@@ -432,7 +453,22 @@ function dispatch(act) {
       break;
     case "open":
       ui.modal = { kind: act.modal };
-      if (act.modal === "report") ui.news = null;
+      if (act.modal === "report") { ui.news = null; coachDone("news"); }
+      if (act.modal === "diplo") coachDone("diplo");
+      break;
+    case "coach":
+      coachDone(act.id);
+      break;
+    case "coachOff":
+      ui.coach.off = true;
+      saveCoach();
+      toast(T().coachOffToast);
+      break;
+    case "coachSet":
+      // Menüden açılınca ipuçları baştan gösterilir.
+      ui.coach.off = !act.on;
+      if (act.on) ui.coach.done.clear();
+      saveCoach();
       break;
     case "close":
       ui.modal = next();
@@ -500,6 +536,7 @@ function dispatch(act) {
       ui.army = null;
       break;
     case "endTurn": {
+      coachDone("endturn");
       ui.modal = null;
       ui.news = null;
       const before = { ...game.civs[me] };
@@ -569,6 +606,7 @@ function dispatch(act) {
     }
     case "upgrade":
       if (upgrade(game, act.id, act.what)) {
+        coachDone("upgrade");
         sound.build();
         anim.rise(act.id, T()[act.what] + " " + game.places[act.id][act.what], INK.good);
         anim.pulse(act.id, INK.good);
@@ -577,6 +615,7 @@ function dispatch(act) {
       break;
     case "recruit":
       if (recruit(game, act.id, act.type)) {
+        coachDone("recruit");
         sound.recruit();
         anim.rise(act.id, T()["add" + act.type[0].toUpperCase() + act.type.slice(1)], INK.ink);
       }
@@ -596,10 +635,10 @@ function dispatch(act) {
       const a = formArmy(game, m.id, m.inf, m.arch, m.cav ?? 0, m.siege ?? 0, m.ships ?? 0);
       ui.modal = null;
       if (a) {
+        coachDone("form");
         sound.muster();
         ui.sel = { kind: "army", id: a.id };
         ui.army = a.id;
-        toast(T().armyHint);
         anim.pulse(a.at, colorOf(a.owner));
       }
       save();
@@ -659,6 +698,7 @@ function dispatch(act) {
     case "attack": {
       if (m?.kind !== "attack") break;
       // Ordu kapıya kadar yürür, kılıçlar çarpışır, sonra sonuç penceresi.
+      coachDone("attack");
       const [ev, trace] = traced(() => attack(game, m.army, m.id));
       record(game, [ev]);
       ui.modal = null;
@@ -735,6 +775,7 @@ function tapMap(x, y) {
   const p = nearest(x, y);
   // Yer seçilince son seçilen kendi ordu hatırlanır: yerin kartında saldırı tahmini çıkar.
   ui.sel = p ? { kind: "place", id: p.id } : null;
+  if (p && game.places[p.id].owner === game.player) coachDone("city");
   if (p) keepVisible(p.id);
   else ui.army = null;
   redraw();
@@ -789,6 +830,7 @@ function command(id) {
   if (go.kind === "ships") return toast(T().needShips);
   if (go.kind === "none") return toast(T().noPath);
   sound.click();
+  coachDone("move");
   const [, trace] = traced(() => order(game, a.id, id));
   // Kışın denizde fırtına: oyuncuya hemen söyle (raporda da çıkar).
   const caught = (game.storms ?? []).filter((s) => s.army === a.id && s.turn === game.turn && !s.told);

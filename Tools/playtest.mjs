@@ -23,6 +23,7 @@ try {
     await PT.press((a) => a.do === "pick" && a.civ === "${civ}", "medeniyet");
     await PT.press((a) => a.do === "level" && a.level === "${level}", "zorluk");
     await PT.press((a) => a.do === "start", "başla");
+    M.dispatch({ do: "coachOff" }); // ipucu balonları haritaya basışları örtmesin
     return M.ui.screen;
   })()`);
   await page.shot(dir, "00_basladi");

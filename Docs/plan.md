@@ -149,6 +149,15 @@ kıpırdarken eski katman ölçeklenip kaydırılıyor; ekranı örtmez olursa y
 (yeniden çizimin en pahalı parçasıydı). Başsız Edge, 1920x1080: medeniyet geçişi kare başına
 60-95 ms -> ~21 ms, tekerlekle yakınlaşma 60-80 -> ~17-22 ms. Ölçüm: `node Tools/fps.mjs`.
 
+**Yardım duvarı yerine ipucu balonları (22.10, kullanıcı: "nasıl oynanır diyor ama okumuyorum,
+çok sıkıcı, bütün yazılar aynı anda geliyor, beni boğuyor"):** oyunun başında pencere yok. O an
+ne yapılacaksa onu gösteren TEK balon, gösterdiği yer atan altın çerçeveli: başkentine tıkla →
+yükselt → asker bas → ordu çıkar → (yanında bağımsız varsa) saldır / sağ tıkla yürü → turu bitir
+→ haberler → (yiyecek eksideyse) yiyecek → (4. turdan) diplomasi. Oyuncu o şeyi yapınca ya da
+Tamam deyince geçer; görülenler tarayıcıda (`mn.coach`), "İpuçlarını kapat" ve menüde İpuçları
+aç/kapa (açınca baştan). Menüdeki Nasıl oynanır sekiz sayfa: madalyon, başlık, iki cümle, ‹ ›.
+Adımlar `ui.js COACH`. Bu, öğreticinin hafif bir hâli; asıl öğretici yine en sonda.
+
 **Sırada (plan sırası): kullanıcı oynasın; iki kişi (hotseat); en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi

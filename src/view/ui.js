@@ -26,14 +26,14 @@ import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
 import {
   INK, SERIF, TAU, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, over, panel, pointer, text, wrap,
 } from "./kit.js";
-import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging } from "./hud.js";
+import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal } from "./hud.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shield, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { sight } from "../rules/sight.js";
 import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
 import { drawBattle, trooper } from "./battle.js";
-import { drawVignette } from "./draw.js";
+import { drawVignette, placeOnScreen } from "./draw.js";
 import { toScreen } from "./camera.js";
 import { SIZE } from "../geo.js";
 
@@ -58,6 +58,7 @@ export function drawUI(ctx, cam, game, ui, boxes, view) {
     }
     if (!game.over && !card) drawBottomBar(ctx, cam, game, ui, boxes, T);
     if (ui.news && !ui.modal) drawNews(ctx, cam, ui, boxes, T);
+    drawCoach(ctx, cam, game, ui, boxes, T);
   }
   if (ui.toast && ui.toast.until > performance.now()) drawToast(ctx, cam, ui.toast.text, card ? card.y - 56 : cam.h - BOTTOM_H - 58);
   if (ui.modal) {
@@ -820,6 +821,104 @@ export function armyTip(game, a, lang) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// İpucu balonları
+//
+// Kullanıcı 22.10: "nasıl oynanır diyor ama okumuyorum, çok sıkıcı, bütün yazılar aynı anda
+// geliyor, beni boğuyor". Oyunun başında yazı penceresi yok: o an ne yapılacaksa onu gösteren
+// TEK bir balon, gösterdiği yer altın bir çerçeveyle atar. Oyuncu o şeyi yapınca (main.js
+// coachDone) ya da Tamam deyince sıradakine geçer. Görülenler tarayıcıda saklanır; menüden
+// kapatılıp yeniden açılabilir.
+
+const capitalOf = (g) => PLACES.find((p) => p.capital && g.places[p.id].owner === g.player)?.id ?? placesOf(g, g.player)[0];
+/** Ekrandaki bir düğmenin kutusu: önce basılabilir olanı, yoksa kapalısını (`want`: niyet ettiği eylem). */
+const findBox = (boxes, pred) => boxes.find((b) => b.act && pred(b.act)) ?? boxes.find((b) => b.want && pred(b.want));
+const boxSpot = (b) => b && { x: b.x, y: b.y, w: b.w, h: b.h };
+const placeSpot = (cam, id) => {
+  if (!id) return null;
+  const s = placeOnScreen(cam, id);
+  return { x: s.x - 24, y: s.y - 44, w: 48, h: 58, ring: true };
+};
+const ownPlace = (g, ui) => ui.sel?.kind === "place" && g.places[ui.sel.id]?.owner === g.player;
+const ownArmy = (g, ui) => {
+  if (ui.sel?.kind !== "army") return null;
+  const a = armyById(g, ui.sel.id);
+  return a && a.owner === g.player && a.moves > 0 ? a : null;
+};
+/** Seçili ordunun yanında saldırılabilecek, umutsuz olmayan bir yer. */
+const prey = (g, a) => neighbours(a.at).find((n) => canAttack(g, a, n) && forecast(g, a, a.owner, n).odds !== "hopeless");
+
+/** Adımlar, öncelik sırasıyla: ne zaman gösterilir, neyi gösterir. */
+const COACH = [
+  { id: "city", when: (g, ui) => !ui.sel, at: (g, ui, boxes, cam) => placeSpot(cam, capitalOf(g)) },
+  { id: "food", when: (g) => budget(g, g.player).food < 0, at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.food)) },
+  { id: "upgrade", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "upgrade")) },
+  { id: "recruit", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "recruit")) },
+  { id: "form", when: (g, ui) => ownPlace(g, ui) && men(g.places[ui.sel.id]) >= 40, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "formOpen")) },
+  { id: "attack", when: (g, ui) => { const a = ownArmy(g, ui); return !!(a && prey(g, a)); }, at: (g, ui, boxes, cam) => placeSpot(cam, prey(g, ownArmy(g, ui))) },
+  { id: "move", when: (g, ui) => !!ownArmy(g, ui), at: (g, ui, boxes, cam) => placeSpot(cam, ownArmy(g, ui).at) },
+  { id: "endturn", when: (g, ui, done) => !ui.sel && (done.has("upgrade") || done.has("recruit") || g.turn > 1), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "endTurn")) },
+  { id: "news", when: (g, ui) => !!ui.news, at: (g, ui, boxes) => boxSpot(boxes.find((b) => b.act?.do === "open" && b.act.modal === "report" && b.w > 100)) },
+  { id: "diplo", when: (g, ui) => !ui.sel && g.turn >= 4, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "open" && a.modal === "diplo")) },
+];
+
+function drawCoach(ctx, cam, game, ui, boxes, T) {
+  if (!ui.coach || ui.coach.off || ui.modal || game.over) return;
+  for (const step of COACH) {
+    if (ui.coach.done.has(step.id) || !step.when(game, ui, ui.coach.done)) continue;
+    const spot = step.at(game, ui, boxes, cam, T);
+    if (!spot || spot.x + spot.w < 0 || spot.y + spot.h < 0 || spot.x > cam.w || spot.y > cam.h) continue;
+    bubble(ctx, cam, boxes, T, step.id, spot);
+    return;
+  }
+}
+
+/** Gösterilen yerin çevresinde atan altın çerçeve, yanında kısa yazılı balon. */
+function bubble(ctx, cam, boxes, T, id, spot) {
+  // Hem açık kâğıtta hem koyu haritada görünsün: koyu bir alt çizgi, üstünde atan parlak altın.
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 250);
+  const shape = () => {
+    if (spot.ring) {
+      ctx.beginPath();
+      ctx.ellipse(spot.x + spot.w / 2, spot.y + spot.h - 12, 31 + pulse * 5, 14 + pulse * 2.5, 0, 0, TAU);
+    } else roundRect(ctx, spot.x - 4 - pulse * 2, spot.y - 4 - pulse * 2, spot.w + 8 + pulse * 4, spot.h + 8 + pulse * 4, 6);
+  };
+  ctx.save();
+  shape();
+  ctx.strokeStyle = "rgba(28,20,10,0.75)";
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  shape();
+  ctx.shadowColor = "rgba(255,190,60,0.95)";
+  ctx.shadowBlur = 10 + pulse * 8;
+  ctx.strokeStyle = "#ffc94a";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+
+  const W = 300;
+  const rows = wrap(ctx, T.coach[id], W - 32, { size: 14 });
+  const h = 24 + rows.length * 19 + 44;
+  const ax = spot.x + spot.w / 2;
+  const above = spot.y - h - 18 > TOP + 6;
+  const y = above ? spot.y - h - 18 : spot.y + spot.h + 18;
+  const x = Math.max(10, Math.min(cam.w - W - 10, ax - W / 2));
+  darkPanel(ctx, x, y, W, h);
+  // Gösterdiği yere doğru küçük bir sivri uç.
+  const tx = Math.max(x + 18, Math.min(x + W - 18, ax));
+  ctx.beginPath();
+  if (above) { ctx.moveTo(tx - 9, y + h - 1); ctx.lineTo(tx, y + h + 10); ctx.lineTo(tx + 9, y + h - 1); }
+  else { ctx.moveTo(tx - 9, y + 1); ctx.lineTo(tx, y - 10); ctx.lineTo(tx + 9, y + 1); }
+  ctx.closePath();
+  ctx.fillStyle = "rgba(22,18,14,0.95)";
+  ctx.fill();
+  boxes.push({ x, y, w: W, h, act: null });
+  rows.forEach((l, i) => text(ctx, l, x + 16, y + 28 + i * 19, { size: 14, color: CREAM }));
+  button(ctx, boxes, { x: x + W - 16 - 86, y: y + h - 40, w: 86, h: 28, label: T.coachOk, size: 12, act: { do: "coach", id } });
+  const lw = text(ctx, T.coachOff, x + 16, y + h - 21, { size: 12, italic: true, color: GOLD_LIGHT });
+  boxes.push({ x: x + 10, y: y + h - 38, w: lw + 12, h: 26, act: { do: "coachOff" } });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Pencereler
 
 function modalFrame(ctx, cam, boxes, h, wMax = 440) {
@@ -1047,7 +1146,7 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
 }
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
-  const r = modalFrame(ctx, cam, boxes, 500, 360);
+  const r = modalFrame(ctx, cam, boxes, 544, 360);
   text(ctx, T.menu, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   const x = r.x + 20, w = r.w - 40;
   button(ctx, boxes, { x, y: r.y + 62, w, h: 42, label: T.resume, main: true, size: 15, act: { do: "close" } });
@@ -1059,7 +1158,7 @@ function menuModal(ctx, cam, game, ui, boxes, T) {
     button(ctx, boxes, { x: x + w - 2 * 56 + i * 56, y: r.y + 278, w: 50, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
   });
   // Ses ve müzik: ayrı ayrı aç-kapa.
-  [["sound", T.soundLabel, soundEnabled()], ["music", T.musicLabel, musicEnabled()], ["fog", T.fogLabel, ui.fog]].forEach(([k, label, on], j) => {
+  [["sound", T.soundLabel, soundEnabled()], ["music", T.musicLabel, musicEnabled()], ["fog", T.fogLabel, ui.fog], ["coachSet", T.tipsLabel, !ui.coach?.off]].forEach(([k, label, on], j) => {
     const yy = r.y + 322 + j * 44;
     text(ctx, label, x, yy + 22, { bold: true, size: 14 });
     [[true, T.sndOn], [false, T.sndOff]].forEach(([v, l], i) => {
@@ -1069,17 +1168,36 @@ function menuModal(ctx, cam, game, ui, boxes, T) {
   text(ctx, "Natural Earth · github.com/yahyaari/mare-nostrum", r.x + r.w / 2, r.y + r.h - 22, { size: 10, color: INK.faint, align: "center" });
 }
 
-function helpModal(ctx, cam, game, ui, boxes, T) {
-  const W = Math.min(cam.w - 24, 520) - 64;
-  const rows = T.helpLines.flatMap((s, n) => wrap(ctx, s, W, { size: 14 }).map((l, i) => [l, i === 0 ? n + 1 : null]));
-  const r = modalFrame(ctx, cam, boxes, 90 + rows.length * 21 + 76, 520);
-  text(ctx, T.help, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
-  rows.forEach(([l, n], i) => {
-    const y = r.y + 82 + i * 21;
-    if (n) text(ctx, n + ".", r.x + 24, y, { bold: true, size: 14 });
-    text(ctx, l, r.x + 44, y, { size: 14 });
+/**
+ * Nasıl oynanır: her sayfada tek konu - madalyon, başlık, bir iki cümle (kullanıcı 22.10: bütün
+ * yazılar aynı anda gelince okunmuyor). ‹ › ile sayfa, noktalar nerede olunduğunu gösterir.
+ */
+function helpModal(ctx, cam, game, ui, boxes, T, m) {
+  const pages = T.helpPages, n = pages.length;
+  const i = Math.max(0, Math.min(n - 1, m.page ?? 0));
+  const [kind, title, body] = pages[i];
+  const W = Math.min(cam.w - 24, 470);
+  const rows = wrap(ctx, body, W - 72, { size: 15 });
+  const r = modalFrame(ctx, cam, boxes, 186 + rows.length * 23 + 70, 470);
+  const cx = r.x + r.w / 2;
+  medal(ctx, null, cx, r.y + 52, 28, kind, null);
+  text(ctx, title, cx, r.y + 112, { title: true, bold: true, size: 20, align: "center" });
+  ornament(ctx, cx, r.y + 126, 150);
+  rows.forEach((l, k) => text(ctx, l, cx, r.y + 156 + k * 23, { size: 15, align: "center" }));
+  // Sayfa noktaları
+  const dy = r.y + r.h - 86;
+  pages.forEach((_, k) => {
+    ctx.beginPath();
+    ctx.arc(cx + (k - (n - 1) / 2) * 16, dy, k === i ? 5 : 3.5, 0, TAU);
+    ctx.fillStyle = k === i ? GOLD_DARK : "rgba(43,33,24,0.35)";
+    ctx.fill();
   });
-  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+  const by = r.y + r.h - 62, bw = (r.w - 48) / 2;
+  button(ctx, boxes, { x: r.x + 20, y: by, w: bw, h: 44, size: 15, label: "‹  " + T.back, off: i === 0, act: { do: "modalPage", page: i - 1 } });
+  button(ctx, boxes, i < n - 1
+    ? { x: r.x + 28 + bw, y: by, w: bw, h: 44, size: 15, main: true, label: T.next + "  ›", act: { do: "modalPage", page: i + 1 } }
+    : { x: r.x + 28 + bw, y: by, w: bw, h: 44, size: 15, main: true, label: T.ok, act: { do: "close" } });
+  button(ctx, boxes, { x: r.x + r.w - 40, y: r.y + 10, w: 30, h: 30, label: "×", size: 18, act: { do: "close" } });
 }
 
 function confirmModal(ctx, cam, game, ui, boxes, T, m) {

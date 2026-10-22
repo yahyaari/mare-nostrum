@@ -205,7 +205,7 @@ export function button(ctx, boxes, b) {
   } else {
     text(ctx, b.label, x + w / 2, y + h / 2 + 1, { bold: true, size, color, align: "center", base: "middle" });
   }
-  boxes.push({ x, y: b.y, w, h, act: b.off ? null : b.act, tip: b.tip });
+  boxes.push({ x, y: b.y, w, h, act: b.off ? null : b.act, tip: b.tip, want: b.act });
 }
 
 // ---- simgeler: para, silah, yiyecek, nüfus ----

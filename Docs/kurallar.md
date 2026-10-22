@@ -401,6 +401,8 @@ oyundan çıkar.
 - **Tur sonu:** olanlar sağ üstte haber olarak belirir (rapor penceresi araya girmez; basınca
   açılır). Kararlar (mektuplar) ve yeni görevler yine pencere olarak sorulur.
 - **Klavye:** Enter turu bitirir, Tab sıradaki ordu, Esc kapatır.
+- **İpucu balonları:** oyunun başında yazı penceresi yok; o an ne yapılacaksa onu gösteren tek
+  bir balon (kapatılabilir, menüden yeniden açılır). Nasıl oynanır menüde, sayfa sayfa.
 - **Sağ alt:** *Turu bitir* butonu.
 - **Diplomasi paneli:** Her medeniyetin durumu ve butonları.
 - **Savaş sonucu kartı:** Kim kazandı, kim kaç asker kaybetti.
