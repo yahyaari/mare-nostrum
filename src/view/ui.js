@@ -17,7 +17,8 @@ import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import {
   access, bySea, canAttack, canStrike, defenders, forecast, forecastField, fortOf, hostile, menace, mpMax, nearestPlace, shipsAt, terrainOf, wallsOf,
 } from "../rules/moves.js";
-import { POS, cellOf, centre, isLand, placeAtCell } from "../rules/map.js";
+import { POS, cellOf, centre, dist, isLand, placeAtCell } from "../rules/map.js";
+import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
   PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
@@ -31,7 +32,7 @@ import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
 import {
   INK, SERIF, TAU, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, over, panel, pointer, text, wrap,
 } from "./kit.js";
-import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal } from "./hud.js";
+import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal, rightColumn } from "./hud.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, galley, roundRect, shade, shield, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
@@ -56,13 +57,16 @@ export function drawUI(ctx, cam, game, ui, boxes, view) {
     drawTopBar(ctx, cam, game, ui, boxes, T);
     if (!game.over) drawRightColumn(ctx, cam, game, ui, boxes, T, view);
     // Seçim kartı altta ortada; açıkken alttaki menünün yerini alır.
+    let side = null;
     if (ui.sel?.kind === "place") {
-      card = game.places[ui.sel.id].owner === game.player ? cityCard(ctx, cam, game, ui, boxes, T) : placeCard(ctx, cam, game, ui, boxes, T);
+      // Sağda şehrin kartı (her yer için); kendi şehrinse altta yükseltme ve asker paneli.
+      card = game.places[ui.sel.id].owner === game.player ? cityCard(ctx, cam, game, ui, boxes, T) : null;
+      side = sideCard(ctx, cam, game, ui, boxes, T, card?.y);
     } else if (ui.sel?.kind === "army" && armyById(game, ui.sel.id)) {
       card = armyCard(ctx, cam, game, ui, boxes, T);
     }
     if (!game.over && !card) drawBottomBar(ctx, cam, game, ui, boxes, T);
-    if (ui.news && !ui.modal) drawNews(ctx, cam, ui, boxes, T);
+    if (ui.news && !ui.modal) drawNews(ctx, cam, ui, boxes, T, !!side);
     drawCoach(ctx, cam, game, ui, boxes, T);
   }
   if (ui.toast && ui.toast.until > performance.now()) drawToast(ctx, cam, ui.toast.text, card ? card.y - 56 : cam.h - BOTTOM_H - 58);
@@ -304,8 +308,6 @@ function cardRect(cam, w, h) {
   return { x, y: cam.h - 12 - h, w, h };
 }
 
-/** Manzara (yerin resmi) kartın ortada kalmasını bozmuyorsa eklenir: genişliği, yoksa 0. */
-const vignetteWidth = (cam, w, v) => (cam.w - 2 * (RIGHT_W + 24) >= w + v + 10 ? v : 0);
 
 /** Kartın sağ üst köşesine oturan kapatma düğmesi. */
 function closeX(ctx, boxes, r) {
@@ -507,13 +509,11 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const wonder = wonderAt(id);
   const A = 214, B = 300, C = 230, BC = B + GAP + C;
   const body = A + GAP + BC + PAD;
-  const V = vignetteWidth(cam, PAD + body, 128);
-  const left = V ? 8 + V + GAP : PAD;
-  const r = cardRect(cam, left + body, 252 + (wonder ? 18 : 0));
+  // Görsel, garnizon ve içeridekiler sağdaki kartta (sideCard); burada ne yapılacağı.
+  const r = cardRect(cam, PAD + body, 252 + (wonder ? 18 : 0));
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
-  if (V) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: V, h: r.h - 16 }, pl.level);
   const y = r.y, H = r.h;
-  let x = r.x + left;
+  let x = r.x + PAD;
   const of = "p:" + id;
 
   // Şehir: ad, türü, (harika), nüfus, garnizon, turluk üretim, sadakat.
@@ -527,9 +527,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const pw = amount(ctx, "pop", `${pl.pop} / ${Math.round(popCap(pl, p.kind))}`, x, ay, { size: 13 });
   const note = besieged(game, id) ? T.besiegedNote : blockaded(game, id) ? T.blockadeNote : null;
   if (note) fit(ctx, note, x + pw + 10, ay, A - pw - 10, { italic: true, bold: true, size: 11, color: INK.bad });
-  // Garnizon sekmesinde askerler zaten kart kart görünüyor: satırın yerine iki düğme.
-  const gl = tab === "garrison" ? 0 : lines(ctx, `${T.garrison}: ${troops(T, pl)}`, x, ay + 20, A, { size: 13 }, 2, 16);
-  ay += 20 + gl * 16 + 4;
+  ay += 24;
   const o = output(game, id);
   let cx = x;
   for (const k of ["money", "weapons", "food"]) cx += amount(ctx, k, delta(o[k]), cx, ay, { size: 13 }) + 12;
@@ -801,79 +799,6 @@ function ornament(ctx, cx, y, w) {
 
 const wallsText = (walls, T) => (walls === "castle" ? T.wallsCastle : walls === "city" ? T.wallsCity : T.wallsNone);
 
-/**
- * Başkasının ya da bağımsız bir yerin kartı: yer (ad, sahibi, tür, harika, sur) | savunanlar ve
- * yollar | eylem (yanında ordun varsa saldırı tahmini, tarafsızsa savaş ilanı).
- */
-function placeCard(ctx, cam, game, ui, boxes, T) {
-  const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const me = game.player;
-  const army = ui.army ? armyById(game, ui.army) : null;
-  const can = army && canAttack(game, army, id);
-  const rel = pl.owner ? relation(game, me, pl.owner) : "free";
-  const declare = !can && rel === "neutral";
-  const A = 230, B = 250, C = can || declare ? 170 : 0;
-  const body = A + GAP + B + (C ? GAP + C : 0) + PAD;
-  const V = vignetteWidth(cam, PAD + body, 112);
-  const left = V ? 8 + V + GAP : PAD;
-  const r = cardRect(cam, left + body, 156);
-  panel(ctx, r.x, r.y, r.w, r.h, boxes);
-  if (V) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: V, h: r.h - 16 }, pl.level);
-  const y = r.y, H = r.h;
-  let x = r.x + left;
-
-  // Yer
-  text(ctx, p.name[ui.lang], x, y + 32, { title: true, bold: true, size: 19 });
-  shield(ctx, pl.owner, x, y + 41, 13);
-  const w = text(ctx, civName(pl.owner, ui.lang, T.free), x + 20, y + 55, { size: 14 });
-  if (pl.owner) {
-    const [label, color] = rel === "war" ? [T.war, INK.bad] : rel === "ally" ? [T.ally, INK.good] : [T.neutral, INK.soft];
-    text(ctx, "· " + label, x + 26 + w, y + 55, { size: 13, italic: true, color });
-  }
-  // Sisin içindeki yerin garnizonu ve gemileri bilinmez.
-  const hid = ui.fog && !sight(game, me).has(id);
-  fit(ctx, kindLine(id, game, T, hid), x, y + 76, A, { italic: true, size: 12, color: INK.soft });
-  let ly = y + 96;
-  if (wonderAt(id)) {
-    wonderLine(ctx, id, T, x, ly + 2, A);
-    ly += 20;
-  }
-  text(ctx, `${T.walls}: ${wallsText(wallsOf(game, id), T)}`, x, ly + 2, { size: 13, color: INK.soft });
-
-  // Savunanlar ve yollar
-  x += A + GAP;
-  vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-  const d = defenders(game, id);
-  text(ctx, T.defenders.toLocaleUpperCase(ui.lang), x, y + 28, { bold: true, size: 11 });
-  lines(ctx, hid ? T.fogUnknown : men(d) ? troops(T, d) : T.undefended, x, y + 46, B, { size: 13, italic: hid, color: hid ? INK.soft : INK.ink }, 2, 17);
-  const roads = neighbours(id).map((n) => placeName(n, ui.lang) + (roadBetween(id, n).sea ? ` (${T.bySea})` : "")).join(", ");
-  text(ctx, T.roads.toLocaleUpperCase(ui.lang), x, y + 88, { bold: true, size: 11 });
-  lines(ctx, roads, x, y + 106, B, { size: 12 }, 3, 15);
-
-  // Eylem
-  if (C) {
-    x += B + GAP;
-    vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-    if (can) {
-      const e = forecast(game, army, me, id);
-      const [label, color] = oddsLabel(e.odds, T);
-      text(ctx, T.odds, x, y + 32, { size: 13, color: INK.soft });
-      text(ctx, label, x, y + 56, { size: 18, bold: true, color });
-      lines(ctx, fill(T.expect, e.lost, e.killed), x, y + 76, C, { italic: true, size: 11, color: INK.soft }, 2, 13);
-      button(ctx, boxes, { x, y: y + H - 50, w: C, h: 36, label: T.attack, main: true, size: 15, act: { do: "attackAsk", army: army.id, id } });
-    } else {
-      // Tarafsız bir medeniyet: saldırmak için önce savaş ilan edilir - düğmesi burada.
-      lines(ctx, fill(T.neutralBlock, civName(pl.owner, ui.lang)), x, y + 32, C, { italic: true, size: 12, color: INK.soft }, 3, 15);
-      button(ctx, boxes, {
-        x, y: y + H - 50, w: C, h: 36, label: T.declareLong, size: 13, off: !canDeclare(game, me, pl.owner),
-        act: { do: "askWar", civ: pl.owner }, tip: [T.declareLong, fill(T.neutralBlock, civName(pl.owner, ui.lang))],
-      });
-    }
-  }
-  closeX(ctx, boxes, r);
-  return r;
-}
-
 const oddsLabel = (odds, T) => (odds === "easy" ? [T.easy, INK.good] : odds === "risky" ? [T.risky, INK.warn] : [T.hopeless, INK.bad]);
 
 /**
@@ -964,6 +889,191 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   return r;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Sağdaki şehir kartı
+//
+// Kullanıcı 22.10: "şehre tıkladığımızda ekranın sağında kart çıksın: şehir bilgileri, güzel bir
+// şehir görseli, hangi millet, garnizon kaç kişi, şehir seviyeleri, içeride kim var; aşağıdaki
+// panelde yine yükseltme, asker oluşturma; diğer şehirlerde de sağda kim var kim yok". Yabancı
+// yerin içi ancak görülüyorsa (sis) ya da casusu oradaysa bilinir; yoksa son casus raporu
+// (kaç tur önceki olduğuyla). Casus buradan gönderilir (rules/spies.js).
+
+export const SIDE_W = 284;
+
+/** Sağ kartın yeri: sağ sütunun (sıradaki ordu, mini harita) üstünde; altta kart varsa onun üstünde biter. */
+export function sideRect(cam, bottomTop = Infinity) {
+  const { next } = rightColumn(cam);
+  const y = TOP + 10;
+  return { x: cam.w - 12 - SIDE_W, y, w: SIDE_W, h: Math.max(240, Math.min(next.y, bottomTop) - 10 - y) };
+}
+
+/** Bir yer hakkında oyuncunun bildikleri: canlı (kendi, müttefik, casus içeride), görülen (sis), ya da eski rapor. */
+function factsOf(game, ui, id) {
+  const me = game.player, pl = game.places[id];
+  const ally = pl.owner === me || (pl.owner && relation(game, me, pl.owner) === "ally");
+  const spy = spyAt(game, me, id);
+  const live = ally || !!spy?.at;
+  const seen = live || !ui.fog || sight(game, me).has(id);
+  const army = (a) => ({ owner: a.owner, men: men(a), ships: fleetOf(a), general: a.general?.name ?? null });
+  if (seen) {
+    return {
+      live, seen, spy, age: 0,
+      pop: pl.pop, loyalty: live ? pl.loyalty : null,
+      garrison: pl, inside: armiesAt(game, id).map(army),
+      gate: game.armies.filter((a) => !a.at && dist(a, POS[id]) <= N.reach.strike).map(army),
+      works: live ? pl : null, builds: live ? pl.builds ?? [] : [],
+    };
+  }
+  const rep = intelOf(game, me, id);
+  if (!rep) return { live: false, seen: false, spy, rep: null };
+  return {
+    live: false, seen: false, spy, rep, age: game.turn - rep.turn,
+    pop: rep.pop, loyalty: rep.loyalty, garrison: rep.garrison, inside: rep.inside, gate: rep.gate, works: rep, builds: rep.builds,
+  };
+}
+
+function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
+  const id = ui.sel.id, pl = game.places[id], p = byId[id];
+  const me = game.player;
+  const own = pl.owner === me;
+  const f = factsOf(game, ui, id);
+  const old = !f.seen && !!f.rep; // eski raporun bilgileri soluk yazılır
+  const tone = old ? INK.soft : INK.ink;
+  // Kartın boyu içeriği kadar: satırlar sayılır, kalan yer görsele (en çok 200), kart da o kadar.
+  const area = sideRect(cam, bottomTop);
+  const armyRows = (n) => (n ? Math.min(n, 3) * 17 + (n > 3 ? 15 : 0) : 0);
+  const rowsH = 18 + (old ? 18 : 0) + (f.pop !== undefined ? 18 : 0) + (f.loyalty !== null && f.loyalty !== undefined ? 18 : 0)
+    + (f.works ? (p.port ? 52 : 17) + (f.builds?.length ? 18 : 0) : 0)
+    + (f.garrison ? 18 + armyRows(f.inside.length) + armyRows(f.gate.length) : 50);
+  const actsH = own ? 0 : 42 + 42 + (pl.owner && relation(game, me, pl.owner) === "neutral" ? 42 : 0);
+  const need = 8 + 26 + 36 + (wonderAt(id) ? 16 : 0) + 26 + rowsH + actsH + 12;
+  const VH = Math.max(92, Math.min(200, area.h - need));
+  const r = { ...area, h: Math.min(area.h, VH + need) };
+  panel(ctx, r.x, r.y, r.w, r.h, boxes);
+  const x = r.x + 14, w = r.w - 28;
+
+  // Görsel: yerin kendi arazisinde maketi; içi biliniyorsa önünde garnizonu kadar asker.
+  const vr = { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: VH };
+  drawVignette(ctx, id, pl.owner, vr, pl.level, 2.6);
+  if (f.garrison) {
+    const g = f.garrison, total = men(g);
+    const n = Math.min(6, Math.ceil(total / 30));
+    const fs = Math.max(1.1, VH / 85);
+    const kinds = UNITS.filter((k) => g[k] > 0);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(vr.x, vr.y, vr.w, vr.h);
+    ctx.clip();
+    for (let i = 0; i < n; i++) {
+      const k = kinds.length ? kinds[i % kinds.length] : "inf";
+      const left = i % 2 === 0, j = Math.floor(i / 2);
+      const fx = left ? vr.x + 20 * fs + j * 20 * fs : vr.x + vr.w - 20 * fs - j * 20 * fs;
+      trooper(ctx, k, pl.owner, fx, vr.y + vr.h - 8 - (j % 2) * 4, left ? -1 : 1, fs);
+    }
+    ctx.restore();
+  }
+  let y = vr.y + VH + 26;
+
+  // Ad, sahibi, türü.
+  shield(ctx, pl.owner, x, y - 15, 15);
+  fit(ctx, p.name[ui.lang], x + 22, y, w - 22, { title: true, bold: true, size: 18 });
+  y += 19;
+  const rel = own ? null : pl.owner ? relation(game, me, pl.owner) : "free";
+  const relText = rel === "war" ? [T.war, INK.bad] : rel === "ally" ? [T.ally, INK.good] : rel === "neutral" ? [T.neutral, INK.soft] : null;
+  const ow = text(ctx, civName(pl.owner, ui.lang, T.free), x, y, { size: 13, bold: true, color: colorOf(pl.owner) });
+  if (relText) text(ctx, " · " + relText[0], x + ow, y, { size: 13, italic: true, color: relText[1] });
+  y += 17;
+  fit(ctx, kindLine(id, game, T, !f.seen), x, y, w, { italic: true, size: 12, color: INK.soft });
+  y += 8;
+  if (wonderAt(id)) { y += 16; wonderLine(ctx, id, T, x, y, w); }
+  rule(ctx, x, x + w, y + 8);
+  y += 26;
+
+  // Satırlar: küçük başlık + değer.
+  const row = (label, value, color = tone, h = 18, size = 13) => {
+    const lw = text(ctx, label.toLocaleUpperCase(ui.lang), x, y, { bold: true, size: 10, color: INK.soft });
+    fit(ctx, value, x + Math.max(lw + 8, 74), y, w - Math.max(lw + 8, 74), { size, color });
+    y += h;
+  };
+  const walls = wallsOf(game, id);
+  row(T.wallsShort, wallsText(walls, T), INK.ink);
+  if (old) {
+    text(ctx, fill(T.spyOld, f.age), x, y, { italic: true, bold: true, size: 12, color: INK.warn });
+    y += 18;
+  }
+  if (f.pop !== undefined) row(T.popShort, own ? `${f.pop} / ${Math.round(popCap(pl, p.kind))}` : String(f.pop));
+  if (f.loyalty !== null && f.loyalty !== undefined) row(T.loyalty, String(f.loyalty), f.loyalty < N.loyalty.unrest ? INK.bad : tone);
+  if (f.works) {
+    const wk = f.works;
+    row(T.worksShort, `${T.levelShort} ${wk.level} · ${T.farms} ${wk.farms} · ${T.industry} ${wk.industry} · ${T.barracks} ${wk.barracks}`, tone, 17, 12);
+    if (p.port) {
+      row("", `${T.fishery} ${wk.fishery} · ${T.shipyard} ${wk.shipyard}`, tone, 17, 12);
+      row("", `${T.trade} ${wk.trade} · ${T.fort} ${wk.fort}`, tone, 18, 12);
+    }
+    if (f.builds?.length) row(T.buildingShort, f.builds.map((b) => `${T[b.what]} (${b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left)})`).join(" · "), INK.warn);
+  }
+  if (f.garrison) {
+    const g = f.garrison;
+    row(T.garrison, men(g) ? troops(T, g) + (fleetOf(g) ? ` · ⛵ ${fleetOf(g)}` : "") : T.undefended);
+    const list = (label, armies) => {
+      if (!armies.length) return;
+      const shown = armies.slice(0, 3);
+      shown.forEach((a, i) => {
+        const lab = i === 0 ? label : "";
+        const lw = lab ? text(ctx, lab.toLocaleUpperCase(ui.lang), x, y, { bold: true, size: 10, color: INK.soft }) : 0;
+        const ax = x + Math.max(lw + 8, 74);
+        shield(ctx, a.owner, ax, y - 11, 11);
+        const s = `${civName(a.owner, ui.lang, T.free)} · ${a.men ? fill(T.soldiers, a.men) : ""}${a.ships ? ` ⛵${a.ships}` : ""}${a.general ? ` ★ ${a.general}` : ""}`;
+        fit(ctx, s, ax + 15, y, w - (ax - x) - 15, { size: 12, color: tone });
+        y += 17;
+      });
+      if (armies.length > 3) { fit(ctx, fill(T.moreArmies, armies.length - 3), x + 74, y, w - 74, { italic: true, size: 11, color: INK.soft }); y += 15; }
+    };
+    list(T.insideShort, f.inside);
+    list(T.gateShort, f.gate);
+  } else {
+    // Hiç bilgi yok: sisin içinde, casus da yok.
+    y += 2;
+    y += 16 * lines(ctx, T.fogInside, x, y, w, { italic: true, size: 12, color: INK.soft }, 3, 16);
+  }
+
+  if (own) return r;
+  // Eylemler: saldırı (seçili ordu menzildeyse), casus, savaş ilanı.
+  const army = ui.army ? armyById(game, ui.army) : null;
+  let by = r.y + r.h - 46;
+  const btn = (b) => { button(ctx, boxes, { x, y: by, w, h: 34, size: 13, ...b }); by -= 42; };
+  if (pl.owner && rel === "neutral") {
+    btn({ label: T.declareLong, off: !canDeclare(game, me, pl.owner), act: { do: "askWar", civ: pl.owner }, tip: [T.declareLong, fill(T.neutralBlock, civName(pl.owner, ui.lang))] });
+  }
+  // Casus: yolda mı, içeride mi, yoksa gönder.
+  if (f.spy) {
+    const s = f.spy;
+    const msg = s.at ? T.spyInside : fill(s.eta - game.turn <= 1 ? T.spyRoadOne : T.spyRoad, s.eta - game.turn);
+    text(ctx, "👁 " + msg, x, by + 22, { italic: true, bold: true, size: 12, color: s.at ? INK.good : INK.warn });
+    by -= 30;
+  } else {
+    const si = spyInfo(game, me, id);
+    const turns = si.turns === 1 ? T.turnsOne : fill(T.turnsN, si.turns);
+    const b = { x, y: by, w, h: 34, label: "", off: !!si.why, act: { do: "spy", id }, tip: [T.spySend, fill(T.tipSpy, turns), si.why ? [T["whySpy" + si.why[0].toUpperCase() + si.why.slice(1)] ?? whyText(si.why, T), "bad"] : null] };
+    button(ctx, boxes, b);
+    const c = si.why ? INK.faint : INK.ink;
+    const lw = measure(ctx, T.spySend, { bold: true, size: 13 });
+    const tail = ` · ${turns}`;
+    const total = lw + 6 + 13 + 3 + measure(ctx, String(si.cost) + tail, { bold: true, size: 13 });
+    const sx = b.x + (b.w - total) / 2;
+    text(ctx, T.spySend, sx, b.y + 22, { bold: true, size: 13, color: c });
+    amount(ctx, "money", si.cost, sx + lw + 6, b.y + 22, { size: 13, bold: true, color: c });
+    text(ctx, tail, sx + lw + 6 + 16 + measure(ctx, String(si.cost), { bold: true, size: 13 }), b.y + 22, { bold: true, size: 13, color: c });
+    by -= 42;
+  }
+  if (army && canAttack(game, army, id)) {
+    const e = forecast(game, army, me, id);
+    const [label] = oddsLabel(e.odds, T);
+    btn({ label: `${T.attack} · ${label}`, main: true, act: { do: "attackAsk", army: army.id, id }, tip: [T.attack, `${T.odds}: ${label}`, fill(T.expect, e.lost, e.killed)] });
+  }
+  return r;
+}
+
 function drawToast(ctx, cam, s, y) {
   const w = Math.min(cam.w - 24, measure(ctx, s, { bold: true, size: 15 }) + 44);
   const x = (cam.w - w) / 2;
@@ -1005,12 +1115,13 @@ function darkPanel(ctx, x, y, w, h) {
  * Basılınca bütün rapor açılır. (Kullanıcı 22.10: "tepki az / donuk"; her tur açılan rapor
  * penceresi araya giriyordu.) Kararlar ve görevler yine pencere olarak sorulur.
  */
-function drawNews(ctx, cam, ui, boxes, T) {
+function drawNews(ctx, cam, ui, boxes, T, onLeft = false) {
   const now = performance.now();
   ui.news.since ??= now;
   const left = ui.news.since + 9000 - now;
   if (left <= 0) return;
-  const W = 340, x = cam.w - 12 - W, y = TOP + 14;
+  // Sağda şehir kartı açıksa haberler solda (sancağın sağında).
+  const W = 340, x = onLeft ? 96 : cam.w - 12 - W, y = TOP + 14;
   const rows = ui.news.lines.flatMap(([s, tone]) => wrap(ctx, s, W - 40, { size: 13 }).map((l, i) => [l, tone, i === 0])).slice(0, 9);
   const h = 42 + rows.length * 19;
   ctx.save();
@@ -1393,6 +1504,8 @@ export function eventLines(game, lang) {
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
+    if (e.type === "spyArrived" && e.civ === me) out.push([fill(T.evSpyArrived, placeName(e.place, lang)), "good"]);
+    if (e.type === "spyCaught" && e.civ === me) out.push([fill(T.evSpyCaught, placeName(e.place, lang), name(e.by)), "bad"]);
     if (e.type === "trespass" && e.by === me) out.push([fill(T.evTrespassBy, name(e.victim), Math.ceil(e.anger), N.anger.war), "bad"]);
     if (e.type === "trespass" && e.victim === me) out.push([fill(T.evTrespassOn, name(e.by)), "warn"]);
     if (e.type === "battle" && e.won && !e.field && wonderAt(e.place)) {

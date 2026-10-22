@@ -8,6 +8,7 @@
 import { CIVS } from "../data/world.js";
 import { aiTurn } from "./ai.js";
 import { trespass } from "./diplomacy.js";
+import { tickSpies } from "./spies.js";
 import { roll, settleInbox } from "./events.js";
 import { check as checkMissions, issue } from "./missions.js";
 import { tick } from "./loyalty.js";
@@ -95,6 +96,8 @@ export function endTurn(state) {
   }
   // Olaylar: oyuncununki gelen kutusuna, bilgisayarlarınki hemen çözülür.
   for (const c of CIVS) if (state.civs[c.id].alive) roll(state, c.id);
+  // Casuslar: yoldakiler varır, yerindekiler raporlar ya da yakalanır.
+  tickSpies(state, events);
   refresh(state, state.player);
   for (const a of armiesOf(state, state.player)) advance(state, a);
   // Görevler: tamamlanan ödülünü alır, süresi geçen düşer, belki yenisi gelir.

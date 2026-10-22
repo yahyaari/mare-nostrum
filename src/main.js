@@ -28,11 +28,12 @@ import { relation } from "./rules/state.js";
 import { eyes, seen as seenBy, sight } from "./rules/sight.js";
 import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
+import { sendSpy } from "./rules/spies.js";
 import { SCENE_MS } from "./view/battle.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { CARD_H, MODAL_MS, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
+import { CARD_H, MODAL_MS, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
 import { TOP, chipRise } from "./view/hud.js";
 import { SIZE, project } from "./geo.js";
 import { trait } from "./rules/numbers.js";
@@ -261,6 +262,7 @@ function mapView() {
   view.winter = isWinter(game.turn);
   view.levels = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.level]));
   view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place).map((x) => [x.place, true]));
+  view.spies = Object.fromEntries((game.spies ?? []).filter((s) => s.civ === game.player).map((s) => [s.target, s.at ? "in" : "road"]));
   view.building = Object.fromEntries(placesOf(game, game.player).filter((id) => game.places[id].builds?.length).map((id) => [id, true]));
   view.docked = Object.fromEntries(PLACES.filter((p) => p.port && fleetOf(game.places[p.id]) > 0).map((p) => [p.id, fleetOf(game.places[p.id])]));
   view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));
@@ -341,12 +343,15 @@ function stepGlide() {
  * Seçim kartı ekranın altında: seçilen yer (ya da ordunun durduğu yer) kartın arkasında
  * kalacaksa harita onu kartın üstündeki boşluğun ortasına kaydırır.
  */
-function keepVisible(pt) {
+function keepVisible(pt, side = false) {
   const s = toScreen(cam, pt.x, pt.y);
   const bottom = cam.h - 12 - CARD_H - 40;
-  if (s.y > TOP + 40 && s.y < bottom) return;
-  const want = (TOP + bottom) / 2;
-  glide(cam.x, cam.y + (s.y - want) / cam.scale);
+  // Yer seçilince sağda da kart açılır: yer onun arkasında kalmasın.
+  const right = side ? cam.w - 12 - SIDE_W - 40 : cam.w - 40;
+  const dy = s.y > TOP + 40 && s.y < bottom ? 0 : s.y - (TOP + bottom) / 2;
+  const dx = s.x > right ? s.x - (right - 120) : 0;
+  if (!dx && !dy) return;
+  glide(cam.x + dx / cam.scale, cam.y + dy / cam.scale);
 }
 
 /** Rakibin bölümünün şeridi: adı ve en önemli işi. */
@@ -738,6 +743,18 @@ function dispatch(act) {
       ui.modal = null;
       command(act.target);
       break;
+    case "spy": {
+      // Casus: en yakın kendi yerinden yola çıkar, uzaklığa göre birkaç turda varır.
+      const s = sendSpy(game, me, act.id);
+      if (s) {
+        sound.click();
+        const n = s.eta - game.turn;
+        toast(fill(T().spySent, PLACES.find((p) => p.id === act.id).name[ui.lang], n === 1 ? T().turnsOne : fill(T().turnsN, n)));
+        anim.pulse(act.id, INK.warn);
+      }
+      save();
+      break;
+    }
     case "aim":
       // Yürü: sıradaki basış ordunun gideceği yer.
       ui.aim = act.army;
@@ -861,7 +878,7 @@ function tapMap(x, y) {
   // Yer seçilince son seçilen kendi ordu hatırlanır: yerin kartında saldırı tahmini çıkar.
   ui.sel = p ? { kind: "place", id: p.id } : null;
   if (p && game.places[p.id].owner === game.player) coachDone("city");
-  if (p) keepVisible(POS[p.id]);
+  if (p) keepVisible(POS[p.id], true);
   else ui.army = null;
   redraw();
 }

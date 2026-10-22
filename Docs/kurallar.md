@@ -449,6 +449,14 @@ oyundan çıkar.
   "solda istemiyorum"): şehir (nüfus, garnizon, üretim, sadakat, Ordu çıkar) | sekmeler: Şehir
   (yükseltmeler, asker bas), Liman (liman yapıları, gemi yap), Garnizon (askerler kart kart). Panel açıkken alttaki menü gizlenir;
   seçilen yer panelin arkasında kalacaksa harita onu yukarı kaydırır.
+- **Sağdaki şehir kartı** (kullanıcı 22.10: "şehre tıklayınca ekranın sağında kart çıksın"): her
+  yerleşime tıklayınca sağda, sağ sütunun üstünde: şehrin görseli (kendi arazisinde maketi,
+  içi biliniyorsa önünde garnizonu kadar asker), adı, sahibi ve ilişkisi, türü ve seviyesi; sur,
+  nüfus, sadakat, yapılar, süren inşaat, garnizon, içerideki ve kapıdaki ordular. Kendi şehrinde
+  altta yine yükseltme / liman / garnizon paneli. Yabancı yerin içi ancak görülüyorsa (sis) ya da
+  casusu oradaysa bilinir; yoksa son casus raporu soluk, kaç tur önceki olduğuyla. Yabancı yerin
+  kartında: menzildeki ordun için saldırı, *Casus gönder*, tarafsızsa *Savaş ilan et*. Kart
+  açıkken haberler solda.
 - **Ordu kartı:** solda ordu (general, askerler, hareket), sağda birlik kartları; altta Yürü, Ayır,
   Birleştir, Garnizona kat. **Yürü**'ye basınca haritada basılan yer ordunun gideceği yer olur.
 - **Sol tık seçer, sağ tık yürütür:** orduya tıkla, gideceği yere sağ tıkla; yanındaki düşmana
@@ -466,6 +474,21 @@ oyundan çıkar.
 - **Savaş sonucu kartı:** Kim kazandı, kim kaç asker kaybetti.
 
 ---
+
+## 12b. Casuslar
+
+Kullanıcı 22.10: "casus gönder şeyi yapacağız, şehirler hakkında bilgi toplamak için, mesafeye
+göre birkaç turda gidecek" (`src/rules/spies.js`).
+
+- Yabancı bir yerleşimin kartından **Casus gönder**: 15 para. Casus hedefe en yakın kendi
+  yerinden yola çıkar; yolculuk uzaklık / 4 birim tur (en az 1).
+- Varınca içeride kalır ve **her tur rapor verir**: garnizon, içerideki ve kapıdaki ordular,
+  yapılar, nüfus, sadakat, inşaatlar. Orası sisin içinde olsa da görünür (1.4 birim çember).
+  Haritada sancağın solunda göz rozeti (yoldaysa soluk).
+- Her tur **yakalanma** ihtimali %6, garnizonun her 100 askeri için +%3. Yakalanınca haber
+  olur; son raporu kalır, yaşlanır ("3 tur önceki casus raporu").
+- Aynı anda en çok 3 casus; bir yere bir casus. Yer kendi ya da müttefik yeri olursa casus döner.
+- Bilgisayar casus kullanmaz (zaten her şeyi görüyor, bölüm 19).
 
 ## 13. İlk sürümde olmayanlar (sonra)
 

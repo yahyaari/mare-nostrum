@@ -17,6 +17,8 @@ export function eyes(state, civ) {
   const out = [];
   for (const [id, pl] of Object.entries(state.places)) if (friend(pl.owner)) out.push({ ...POS[id], r: N.reach.sightPlace });
   for (const a of state.armies) if (friend(a.owner) && !a.at) out.push({ x: a.x, y: a.y, r: N.reach.sightArmy });
+  // Yerine varmış casus: o yerin içi ve kapısı görünür (spies.js).
+  for (const s of state.spies ?? []) if (s.civ === civ && s.at) out.push({ ...POS[s.at], r: N.spy.eye });
   return out;
 }
 

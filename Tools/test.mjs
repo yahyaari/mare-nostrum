@@ -1392,6 +1392,60 @@ const SI = await import("../src/rules/sight.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Casuslar");
+
+{
+  const SP = await import("../src/rules/spies.js");
+  const s = S.newGame("rome", 7);
+  s.civs.rome.money = 100;
+  check("kendi şehrine casus gönderilmez", SP.spyInfo(s, "rome", "tarentum").why === "own");
+  const near = SP.spyInfo(s, "rome", "mediolanum"), far = SP.spyInfo(s, "rome", "babylon");
+  check("casus: 15 para, uzaklığa göre tur (yakın 1, Babil çok)", near.why === null && near.cost === N.spy.cost && near.turns === 1 && far.turns > 3, `${near.turns} ${far.turns}`);
+  check("en yakın kendi yerinden çıkar", near.from === "ariminum");
+  const spy = SP.sendSpy(s, "rome", "babylon");
+  check("gönderilince para ödenir, yolda", spy && s.civs.rome.money === 100 - N.spy.cost && !spy.at && spy.eta === s.turn + far.turns);
+  check("aynı yere ikinci casus gönderilmez", SP.spyInfo(s, "rome", "babylon").why === "already");
+  SP.sendSpy(s, "rome", "mediolanum"); SP.sendSpy(s, "rome", "massalia");
+  check("aynı anda en çok 3 casus", SP.spyInfo(s, "rome", "carthage").why === "max");
+  s.civs.rome.money = 0;
+  s.spies = s.spies.filter((x) => x.target !== "massalia");
+  check("parası yetmeyen gönderemez", SP.spyInfo(s, "rome", "carthage").why === "money");
+
+  // Varış: yolculuk bitince içeride, rapor verir; içerisi görünür olur.
+  const t = S.newGame("rome", 7);
+  t.civs.rome.money = 100;
+  const sp = SP.sendSpy(t, "rome", "babylon");
+  check("sisin içindeki Babil görünmüyor", !SI.sight(t, "rome").has("babylon"));
+  t.turn = sp.eta - 1;
+  SP.tickSpies(t, []);
+  check("varmadan rapor yok", !sp.at && !SP.intelOf(t, "rome", "babylon"));
+  t.turn = sp.eta;
+  const ev = SP.tickSpies(t, []);
+  const rp = SP.intelOf(t, "rome", "babylon");
+  check("varınca içeride, rapor ve haber", sp.at === "babylon" && rp && rp.garrison.inf === t.places.babylon.inf && rp.turn === t.turn && ev.some((e) => e.type === "spyArrived"));
+  check("casusun olduğu yer görünür", SI.sight(t, "rome").has("babylon"));
+  // Yakalanma: kocaman garnizonda er geç.
+  t.places.babylon.inf = 5000;
+  let caught = false;
+  for (let k = 0; k < 20 && !caught; k++) { t.turn++; caught = SP.tickSpies(t, []).some((e) => e.type === "spyCaught"); }
+  check("kalabalık garnizonda casus yakalanır, son raporu kalır", caught && !SP.spyAt(t, "rome", "babylon") && !!SP.intelOf(t, "rome", "babylon"));
+  check("yakalanınca yer artık görünmez", !SI.sight(t, "rome").has("babylon"));
+  // Yer kendi olursa casusun işi biter.
+  const u = S.newGame("rome", 7);
+  u.civs.rome.money = 100;
+  SP.sendSpy(u, "rome", "mediolanum");
+  u.places.mediolanum.owner = "rome";
+  SP.tickSpies(u, []);
+  check("hedef kendi yeri olunca casus döner", !SP.spyAt(u, "rome", "mediolanum"));
+  // Eski kayıt.
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 10;
+  delete old.spies; delete old.intel; delete old.nextSpy;
+  S.migrate(old);
+  check("10. sürüm kayıt yükseltiliyor: casus yok", old.version === S.VERSION && Array.isArray(old.spies) && !old.spies.length && old.intel && old.nextSpy === 1);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Kuşatma (bölüm 20)");
 
 const SG = await import("../src/rules/siege.js");

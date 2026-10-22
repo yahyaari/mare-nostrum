@@ -107,6 +107,10 @@ export const N = {
   // +1, girmeyince -0.5. Öfke `war` olunca o medeniyet savaş açar - barış süresini beklemeden,
   // ancak karşısındakinin gücünün en az `ratio` katıysa.
   anger: { war: 3, ratio: 0.7 },
+  // Casus (kullanıcı 22.10): fiyatı, turda kaç harita birimi yol alır (en az bir tur), aynı anda en
+  // çok kaç casus, yerinde her tur yakalanma ihtimali (+ garnizonun her 100 askeri için), ve
+  // vardığı yerde açtığı görüş (kapıdaki ordular da görünsün).
+  spy: { cost: 15, speed: 4, max: 3, caught: 0.06, perHundred: 0.03, eye: 1.4 },
 
   // Bilgisayar
   // Bilgisayarlar arası: bu turdan önce kimse kimseye savaş açmaz (önce bağımsızlar), ve ancak

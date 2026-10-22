@@ -675,6 +675,28 @@ function drawPlaces(ctx, cam, view, L) {
       ctx.fillRect(-3.4, -4.2, 6.8, 2.8);
       ctx.restore();
     }
+    // Casusun olduğu (ya da yolda olduğu) yabancı yer: sancağın solunda bir göz rozeti.
+    if (view.spies?.[p.id]) {
+      const bx = s.x - f.w / 2 - 9, by = s.y - f.pole + 6, on = view.spies[p.id] === "in";
+      ctx.globalAlpha = on ? 1 : 0.6;
+      ctx.beginPath();
+      ctx.arc(bx, by, 7.5, 0, TAU);
+      ctx.fillStyle = DARK;
+      ctx.fill();
+      ctx.strokeStyle = on ? GOLD_LIGHT : "#9a8a6a";
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(bx, by, 4.6, 2.6, 0, 0, TAU);
+      ctx.strokeStyle = CREAM;
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(bx, by, 1.4, 0, TAU);
+      ctx.fillStyle = CREAM;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     // Huzursuz (sadakati düşük) kendi yerin: sancağın yanında kırmızı bir ünlem rozeti.
     const lo = view.unrest?.[p.id];
     if (lo !== undefined) {
