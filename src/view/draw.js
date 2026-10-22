@@ -13,7 +13,7 @@ import { BOUNDS, LON_SCALE } from "../data/bounds.js";
 import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
-import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, ship, soldier, wonderMark } from "./pieces.js";
+import { CREAM, DARK, GOLD, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, shield, ship, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { clear, drawClouds, drawSnow, paintCompass, paintFog, paintGround, paintLabels } from "./atlas.js";
 import { regions } from "./regions.js";
@@ -997,6 +997,8 @@ function drawEffects(ctx, cam, fx) {
       ctx.globalAlpha = 1;
     } else if (e.kind === "clash") {
       clash(ctx, s.x, s.y, e.p);
+    } else if (e.kind === "fogfight") {
+      fogFight(ctx, s.x, s.y, e.p);
     } else if (e.kind === "float") {
       floatText(ctx, s.x, s.y - 22, e);
     }
@@ -1045,6 +1047,49 @@ function clash(ctx, x, y, p) {
   ctx.restore();
 }
 
+/**
+ * Sisin içinde bir savaş: ne olduğu görünmez ama olduğu anlaşılır - yerin üstünde atan kızıl
+ * bir parıltı, duman, çapraz kılıçlar ve bir soru işareti.
+ */
+function fogFight(ctx, x, y, p) {
+  const fade = p < 0.15 ? p / 0.15 : p > 0.8 ? 1 - (p - 0.8) / 0.2 : 1;
+  const beat = 0.5 + 0.5 * Math.sin(p * Math.PI * 7);
+  ctx.save();
+  ctx.globalAlpha = fade;
+  const r = 34 + beat * 10;
+  const g = ctx.createRadialGradient(x, y - 4, 2, x, y - 4, r);
+  g.addColorStop(0, "rgba(255,150,60,0.75)");
+  g.addColorStop(0.5, "rgba(200,60,30,0.35)");
+  g.addColorStop(1, "rgba(120,20,10,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y - 4, r, 0, TAU);
+  ctx.fill();
+  // Duman: yükselen gri öbekler.
+  for (let i = 0; i < 4; i++) {
+    const q = (p * 1.6 + i / 4) % 1;
+    ctx.globalAlpha = fade * (1 - q) * 0.5;
+    ctx.fillStyle = "#4a4440";
+    ctx.beginPath();
+    ctx.arc(x + Math.sin(i * 2.1 + q * 3) * 10, y - 14 - q * 34, 6 + q * 10, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+  clash(ctx, x, y, 0.35 + (p % 0.3));
+  ctx.save();
+  ctx.globalAlpha = fade;
+  ctx.font = `700 22px ${TITLE}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = DARK;
+  ctx.lineWidth = 5;
+  ctx.strokeText("?", x + 24, y - 30);
+  ctx.fillStyle = CREAM;
+  ctx.fillText("?", x + 24, y - 30);
+  ctx.restore();
+}
+
 /** Yükselip sönen yazı: "+10 piyade", "+13". */
 function floatText(ctx, x, y, e) {
   const rise = 28 * e.p;
@@ -1061,10 +1106,48 @@ function floatText(ctx, x, y, e) {
   ctx.globalAlpha = 1;
 }
 
+/**
+ * Rakibin bölümü oynarken üstte, ortada: medeniyetin kalkanı, adı ve ne yaptığı ("Siraküza'yı
+ * aldı"). Kayarak açılır, sonunda solar.
+ */
+function caption(ctx, cam, e) {
+  const ms = e.p * e.dur;
+  const open = Math.min(1, ms / 260), fade = Math.min(1, (e.dur - ms) / 300);
+  const w = Math.min(cam.w - 40, 460), h = 58;
+  const x = cam.w / 2 - w / 2, y = 62 - (1 - open) * 18;
+  ctx.save();
+  ctx.globalAlpha = open * fade;
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 10;
+  roundRect(ctx, x, y, w, h, 5);
+  ctx.fillStyle = "rgba(22,18,14,0.94)";
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 5);
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.fillStyle = colorOf(e.owner);
+  ctx.fillRect(x + 6, y + 6, 4, h - 12);
+  shield(ctx, e.owner, x + 20, y + 13, 30);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.font = `700 17px ${TITLE}`;
+  ctx.fillStyle = CREAM;
+  ctx.fillText(e.title, x + 62, y + 21);
+  if (e.sub) {
+    ctx.font = `italic 15px ${SERIF}`;
+    ctx.fillStyle = GOLD_LIGHT;
+    ctx.fillText(e.sub, x + 62, y + 41);
+  }
+  ctx.restore();
+}
+
 /** Arayüzün de üstünde: tur geçişi ve üst banttan yükselen sayılar. */
 export function drawOverlay(ctx, cam, fx) {
   for (const e of fx) {
     if (e.kind === "float" && e.screen) floatText(ctx, e.screen.x, e.screen.y, e);
+    if (e.kind === "caption") caption(ctx, cam, e);
     if (e.kind !== "banner") continue;
     // Ortadan geçen koyu bir şerit, altın kenarlı: önce açılır, durur, sonra solar.
     const open = e.p < 0.2 ? e.p / 0.2 : 1;

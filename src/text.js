@@ -203,6 +203,10 @@ export const TEXT = {
     next: "Next",
     tipsLabel: "Tips",
     coachOk: "Got it",
+    capTook: "took {0}!",
+    capHeld: "was beaten back at {0}",
+    capFog: "a battle somewhere in the fog...",
+    capMarch: "armies on the march",
     coachOff: "No more tips",
     coachOffToast: "Tips are off. You can turn them back on in the menu.",
     coach: {
@@ -564,6 +568,10 @@ export const TEXT = {
     next: "İleri",
     tipsLabel: "İpuçları",
     coachOk: "Tamam",
+    capTook: "{0} şehrini aldı!",
+    capHeld: "{0} önünde püskürtüldü",
+    capFog: "sisin içinde bir savaş...",
+    capMarch: "orduları yürüyor",
     coachOff: "İpuçlarını kapat",
     coachOffToast: "İpuçları kapandı. Menüden yeniden açabilirsin.",
     coach: {
