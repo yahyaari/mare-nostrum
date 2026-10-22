@@ -15,7 +15,7 @@ import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import { access, canAttack, defenders, forecast, fortOf, hostile, menace, shipsAt, terrainOf, wallsOf } from "../rules/moves.js";
 import { N, UNITS, trait } from "../rules/numbers.js";
 import {
-  PORT_UPGRADES, UPGRADES, armiesAt, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -286,7 +286,7 @@ function langToggle(ctx, cam, ui, boxes, y) {
 // solda yerin manzarası.
 
 /** En yüksek kartın boyu: main.js seçilen yeri bunun üstüne kaydırır. */
-export const CARD_H = 232;
+export const CARD_H = 256;
 const PAD = 16, GAP = 18;
 
 /** Kartın yeri: altta ortada; sağ alttaki sütuna (sıradaki ordu, mini harita, Turu bitir) değmez. */
@@ -359,7 +359,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const body = A + GAP + B + GAP + C + PAD;
   const V = vignetteWidth(cam, PAD + body, 128);
   const left = V ? 8 + V + GAP : PAD;
-  const r = cardRect(cam, left + body, 214 + (wonder ? 18 : 0));
+  const r = cardRect(cam, left + body, 238 + (wonder ? 18 : 0));
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   if (V) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: V, h: r.h - 16 }, pl.level);
   const y = r.y, H = r.h;
@@ -391,6 +391,8 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   x += A + GAP;
   vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
   let by = y + 14;
+  buildersRow(ctx, game, boxes, T, id, x, by, B);
+  by += 26;
   if (p.port) {
     const tw = (B - 8) / 2;
     [["city", T.tabCity], ["port", "⚓ " + T.tabPort]].forEach(([k, label], i) => {
@@ -435,20 +437,80 @@ function loyaltyRow(ctx, game, boxes, T, id, x, y, w) {
   amount(ctx, "money", gi.cost, gx + 12 + tw, gy + 20, { size: 12, bold: true, color: c });
 }
 
-/** Bir yükseltme satırı: ad, seviye, etkisi ya da neden olmadığı, fiyatlı düğme. */
+/**
+ * İnşaatçılar: her biri bir yuvarlak - çalışan dolu (çekiçli), boştaki halka; sağda kaçı boşta.
+ */
+function buildersRow(ctx, game, boxes, T, id, x, y, w) {
+  const n = buildersOf(id), busy = game.places[id].builds.length, free = n - busy;
+  const lw = text(ctx, T.builders, x, y + 15, { bold: true, size: 13 });
+  for (let i = 0; i < n; i++) {
+    const cx = x + lw + 16 + i * 20, cy = y + 10;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7.5, 0, TAU);
+    if (i < busy) {
+      ctx.fillStyle = GOLD_DARK;
+      ctx.fill();
+      hammer(ctx, cx, cy, CREAM);
+    } else {
+      ctx.strokeStyle = GOLD_DARK;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+  text(ctx, free ? fill(T.buildersFree, free) : T.buildersBusy, x + w, y + 15, { italic: true, size: 12, color: free ? INK.good : INK.faint, align: "right" });
+  boxes.push({ x, y, w, h: 22, act: null, tip: [T.builders, fill(T.tipBuilders, n)] });
+}
+
+/** Küçük bir çekiç: sap ve baş. */
+function hammer(ctx, cx, cy, color) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-0.75);
+  ctx.fillStyle = color;
+  ctx.fillRect(-0.9, -2, 1.8, 7);
+  ctx.fillRect(-3.6, -4.5, 7.2, 3);
+  ctx.restore();
+}
+
+/** Tur sayısı: "1 tur" / "3 tur". */
+const turnsText = (n, T) => (n === 1 ? T.turnsOne : fill(T.turnsN, n));
+
+/**
+ * Bir yükseltme satırı: ad, seviye, etkisi ve süresi ya da neden olmadığı, fiyatlı düğme.
+ * İnşa ediliyorsa: kalan tur, tur tur dolan çubuk, İptal.
+ */
 function upgradeRow(ctx, game, boxes, T, id, what, x, right, ry) {
   const u = upgradeInfo(game, id, what);
-  const done = u.why === "max" || u.why === "needLevel";
   const bw = 88;
+  const b = u.building;
+  if (b) {
+    const nw = text(ctx, `${T[what]}  ${u.now} → ${u.now + 1}`, x, ry + 15, { bold: true, size: 13 });
+    fit(ctx, b.left === 1 ? T.buildLeftOne : fill(T.buildLeft, b.left), x + nw + 8, ry + 15, right - x - bw - nw - 16, { italic: true, bold: true, size: 12, color: INK.warn });
+    const pw = right - x - bw - 10;
+    ctx.fillStyle = "rgba(90,70,40,0.18)";
+    ctx.fillRect(x, ry + 23, pw, 7);
+    ctx.fillStyle = INK.warn;
+    ctx.fillRect(x, ry + 23, (pw * (b.total - b.left)) / b.total, 7);
+    ctx.strokeStyle = "#5a4630";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, ry + 23.5, pw - 1, 6);
+    ctx.beginPath();
+    for (let k = 1; k < b.total; k++) { const tx = Math.round(x + (pw * k) / b.total) + 0.5; ctx.moveTo(tx, ry + 23); ctx.lineTo(tx, ry + 30); }
+    ctx.stroke();
+    button(ctx, boxes, { x: right - bw, y: ry + 3, w: bw, h: 30, label: T.cancelBuild, size: 12, act: { do: "cancelBuild", id, what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)] });
+    return;
+  }
+  const done = u.why === "max" || u.why === "needLevel";
   text(ctx, `${T[what]}  ${u.now}${done ? "" : " → " + (u.now + 1)}`, x, ry + 15, { bold: true, size: 13 });
   const note = u.why === "max" ? T.whyMax : u.why === "needLevel" ? fill(T.whyNeedLevel, u.now + 1)
-    : u.why === "done" ? T.whyDone : effect(game, id, what, T);
+    : u.why === "done" ? T.whyJustTaken : u.why === "busy" ? T.whyBusy
+    : `${effect(game, id, what, T)} · ${turnsText(u.turns, T)}`;
   fit(ctx, note, x, ry + 31, right - x - (done ? 0 : bw + 8), { italic: true, size: 12, color: u.why && u.why !== "money" ? INK.faint : INK.soft });
   if (done) return;
   const bx = right - bw, by = ry + 3;
   button(ctx, boxes, {
     x: bx, y: by, w: bw, h: 32, label: "", off: !!u.why, act: { do: "upgrade", id, what },
-    tip: [T[what], T.tipUpgrade[what], u.why ? [whyText(u.why, T), "bad"] : null],
+    tip: [T[what], T.tipUpgrade[what], fill(T.takesTurns, turnsText(u.turns, T)), u.why ? [u.why === "done" ? T.whyJustTaken : whyText(u.why, T), "bad"] : null],
   });
   const c = u.why ? INK.faint : INK.ink;
   const w = 16 + measure(ctx, String(u.cost), { bold: true, size: 13 });
@@ -1079,6 +1141,7 @@ export function eventLines(game, lang) {
     else if (e.type === "peace") out.push([fill(T.evPeace, name(e.by), name(e.to)), mine ? "good" : null]);
     else if (e.type === "broke") out.push([fill(T.evBroke, name(e.by), name(e.with)), mine ? "bad" : null]);
     else if (e.type === "famine" && e.civ === me) out.push([fill(T.evFamine, e.lost), "bad"]);
+    else if (e.type === "built" && e.civ === me) out.push([fill(T.evBuilt, placeName(e.place, lang), T[e.what], e.level), "good"]);
     else if (e.type === "battle" && mine) {
       const where = placeName(e.place, lang);
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);

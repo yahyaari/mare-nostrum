@@ -16,7 +16,7 @@ import { LEVELS, N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import {
   armiesAt, armiesOf, blockaded, budget, buildShip, canSail, enemiesOf, formArmy, gamesInfo, holdGames, info, key, merge, men,
-  placesOf, popCap, recruit, recruitInfo, relation, shipInfo, station, strength, upgrade, upgradeInfo,
+  freeBuilders, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, station, strength, upgrade, upgradeInfo,
 } from "./state.js";
 
 // Ordunun hedeflenen bileşimi (payları; gerisi piyade). Güçlü okçusu olan daha çok okçu, zayıf
@@ -143,26 +143,39 @@ function build(state, civ) {
   const reserve = 8; // asker basmaya para kalsın
   for (const id of mine) {
     const pl = state.places[id];
-    if (pl.upgraded) continue;
-    const b = budget(state, civ);
-    const cap = popCap(pl, info(id).kind);
-    const port = info(id).port;
-    const wish = [];
-    if (b.food < 2) wish.push("farms", ...(port ? ["fishery"] : []));
-    if (pl.pop >= cap * 0.9) wish.push("level");
-    if (pl.barracks < 2) wish.push("barracks");
-    if (b.weapons < mine.length) wish.push("industry");
-    // Liman: ablukadaysa kale, ve erken bir ticaret (10 paraya turda +2: beş turda kendini öder).
-    if (port && blockaded(state, id)) wish.push("fort");
-    if (port && pl.trade < 1) wish.push("trade");
-    wish.push("farms", ...(port ? ["fishery", "trade"] : []), "level", "industry", "barracks", ...(port ? ["shipyard", "fort"] : []));
-    for (const w of wish) {
-      const u = upgradeInfo(state, id, w);
-      if (u.why === "max" || u.why === "needLevel" || u.why === "notPort") continue;
-      if (!u.why && state.civs[civ].money >= u.cost + reserve) upgrade(state, id, w);
-      break; // en çok istenene para yetmiyorsa ucuz olana kaçmıyor: biriktiriyor
+    if (pl.upgraded) continue; // alındığı tur
+    // Boş her inşaatçıya bir iş: istekler her seferinde yeniden (bütçe değişti).
+    for (let slot = freeBuilders(state, id); slot > 0; slot--) {
+      if (!buildOne(state, civ, id, mine, reserve)) break;
     }
   }
+}
+
+/** Bir yere bir inşaat başlat: en çok istenene para yetmiyorsa biriktirir. Başladıysa true. */
+function buildOne(state, civ, id, mine, reserve) {
+  const pl = state.places[id];
+  const b = budget(state, civ);
+  const cap = popCap(pl, info(id).kind);
+  const port = info(id).port;
+  const wish = [];
+  // Yiyecek dar: tarla (limanda balıkçılık); tarla şehir seviyesine dayandıysa önce şehir seviyesi.
+  // İnşaat birkaç tur sürdüğü için bu zincir önemli: eskiden anında bitiyordu, şimdi kışlaya kaçan
+  // bilgisayar 10+ tur yiyeceksiz kalıp asker basamıyordu (Galya hiç büyüyemiyordu).
+  if (b.food < 2) wish.push("farms", ...(port ? ["fishery"] : []), ...(pl.farms >= pl.level ? ["level"] : []));
+  if (pl.pop >= cap * 0.9) wish.push("level");
+  if (pl.barracks < 2) wish.push("barracks");
+  if (b.weapons < mine.length) wish.push("industry");
+  // Liman: ablukadaysa kale, ve erken bir ticaret (10 paraya turda +2: beş turda kendini öder).
+  if (port && blockaded(state, id)) wish.push("fort");
+  if (port && pl.trade < 1) wish.push("trade");
+  wish.push("farms", ...(port ? ["fishery", "trade"] : []), "level", "industry", "barracks", ...(port ? ["shipyard", "fort"] : []));
+  for (const w of wish) {
+    const u = upgradeInfo(state, id, w);
+    if (u.why === "max" || u.why === "needLevel" || u.why === "notPort" || u.why === "building") continue;
+    if (!u.why && state.civs[civ].money >= u.cost + reserve) return upgrade(state, id, w);
+    return false; // en çok istenene para yetmiyorsa ucuz olana kaçmıyor: biriktiriyor
+  }
+  return false;
 }
 
 // ---- donanma ----

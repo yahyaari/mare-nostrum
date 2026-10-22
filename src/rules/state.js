@@ -9,7 +9,7 @@ import { byId } from "./graph.js";
 import { LEVELS, N, UNITS, trait } from "./numbers.js";
 import { holds } from "./wonders.js";
 
-export const VERSION = 7;
+export const VERSION = 8;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -47,6 +47,11 @@ export function migrate(s) {
     s.annals ??= [];
     s.version = 7;
   }
+  if (s.version === 7) {
+    // İnşaatçılar: eski yükseltmeler anında bitmişti, yarım iş yok.
+    for (const p of Object.values(s.places)) p.builds ??= [];
+    s.version = 8;
+  }
   return s;
 }
 
@@ -63,6 +68,7 @@ export function newGame(player, seed = 1, level = "normal") {
     const place = {
       owner: p.owner, level: lv, industry: 1, farms: 1, barracks: 1,
       pop: 0, inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, upgraded: false, recruited: 0,
+      builds: [], // süren inşaatlar: { what, left, total, paid }
       // Liman yapıları (sadece limanda kullanılır). Tersane 1 ile başlar: gemi yapılabilsin.
       fishery: 0, shipyard: p.port ? 1 : 0, trade: 0, fort: 0, built: 0,
       loyalty: 100, games: false,
@@ -210,27 +216,70 @@ export const UPGRADES = ["level", "farms", "industry", "barracks"];
 export const PORT_UPGRADES = ["fishery", "shipyard", "trade", "fort"];
 
 /** Bir yükseltmenin fiyatı ve yapılıp yapılamayacağı. `why`: neden olmuyor. */
+/** İnşaatçı sayısı: şehirde 2, kalede 1. */
+export const buildersOf = (id) => (byId[id].kind === "castle" ? N.builders.castle : N.builders.city);
+
+/** Boştaki inşaatçılar. */
+export const freeBuilders = (state, id) => buildersOf(id) - (state.places[id].builds?.length ?? 0);
+
+/** Bir yapının `next` seviyesine çıkması kaç tur sürer: o seviye kadar (şehir seviyesi, kışla, tersane +1). */
+export const buildTurns = (what, next) => Math.max(1, next + (N.buildExtra[what] ?? 0));
+
+/**
+ * Bir yükseltme başlatılabilir mi. Dönen: { now, max, cost, turns, building, why }; why:
+ * "notPort" | "max" | "needLevel" | "building" (o yapı zaten yapılıyor) | "done" (yer bu tur
+ * alındı) | "busy" (boş inşaatçı yok) | "money" | null. `building`: süren iş.
+ */
 export function upgradeInfo(state, id, what) {
   const pl = state.places[id], p = byId[id];
   const now = pl[what];
   const max = what === "level" ? (p.kind === "castle" ? N.maxCastle : N.maxCity) : pl.level;
   const cost = (now + 1) * N.upgradeCost * (what === "level" ? N.levelCostMul : 1);
+  const building = pl.builds?.find((b) => b.what === what) ?? null;
   let why = null;
   if (PORT_UPGRADES.includes(what) && !p.port) why = "notPort";
+  else if (building) why = "building";
   else if (now >= max) why = what === "level" ? "max" : "needLevel";
   else if (pl.upgraded) why = "done";
+  else if (freeBuilders(state, id) <= 0) why = "busy";
   else if (state.civs[pl.owner].money < cost) why = "money";
-  return { now, max, cost, why };
+  return { now, max, cost, turns: buildTurns(what, now + 1), building, why };
 }
 
+/** Yükseltmeyi başlat: para şimdi ödenir, boş bir inşaatçı `turns` tur çalışır. */
 export function upgrade(state, id, what) {
   const u = upgradeInfo(state, id, what);
   if (u.why) return false;
   const pl = state.places[id];
   state.civs[pl.owner].money -= u.cost;
-  pl[what] += 1;
-  pl.upgraded = true;
+  pl.builds.push({ what, left: u.turns, total: u.turns, paid: u.cost });
   return true;
+}
+
+/** Süren bir inşaatı bırak: parası geri gelir, inşaatçı boşalır. */
+export function cancelBuild(state, id, what) {
+  const pl = state.places[id];
+  const b = pl.builds?.find((x) => x.what === what);
+  if (!b) return false;
+  state.civs[pl.owner].money += b.paid;
+  pl.builds = pl.builds.filter((x) => x !== b);
+  return true;
+}
+
+/**
+ * Tur sonu: inşaatlar bir tur ilerler; biten yapı bir seviye yükselir, inşaatçısı boşalır.
+ * Kuşatılan yerde inşaat durur (kimse dışarı çıkıp taş taşıyamaz).
+ */
+export function progressBuilds(state, events) {
+  for (const [id, pl] of Object.entries(state.places)) {
+    if (!pl.builds?.length || !pl.owner || besieged(state, id)) continue;
+    for (const b of pl.builds) b.left -= 1;
+    for (const b of pl.builds.filter((x) => x.left <= 0)) {
+      pl[b.what] += 1;
+      events.push({ type: "built", turn: state.turn, civ: pl.owner, place: id, what: b.what, level: pl[b.what] });
+    }
+    pl.builds = pl.builds.filter((x) => x.left > 0);
+  }
 }
 
 // ---- sadakat: oyunlar ----

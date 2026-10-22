@@ -300,6 +300,7 @@ export function capture(state, id, civ) {
   pl.owner = civ;
   pl.pop = Math.round(pl.pop * (1 - N.captureLoss));
   pl.upgraded = true; // alındığı tur yükseltilmez
+  pl.builds = []; // yarım kalan inşaat yıkılır, parası gider
   pl.recruited = pl.barracks;
   // Yeni alınan yer huzursuz; bağımsızlığına dönen (isyan eden) yer ise kendi halkının.
   pl.loyalty = civ ? N.loyalty.captured : 100;

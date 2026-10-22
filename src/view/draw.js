@@ -675,6 +675,24 @@ function drawPlaces(ctx, cam, view, L) {
     if (wonderAt(p.id)) wonderMark(ctx, s.x + f.w / 2 + 10, s.y - f.pole + 22, 8.5 * Math.max(1, Math.min(1.3, z)));
     // Bir görevin hedefi: sancağın solunda altın bir madalyon.
     if (view.goals?.[p.id]) goalMark(ctx, s.x - f.w / 2 - 10, s.y - f.pole + 2);
+    // İnşaatı süren kendi yerin: sancağın solunda küçük bir çekiç rozeti.
+    if (view.building?.[p.id]) {
+      const bx = s.x - f.w / 2 - 9, by = s.y - f.pole + 6;
+      ctx.beginPath();
+      ctx.arc(bx, by, 7, 0, TAU);
+      ctx.fillStyle = DARK;
+      ctx.fill();
+      ctx.strokeStyle = GOLD_LIGHT;
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(-0.75);
+      ctx.fillStyle = GOLD_LIGHT;
+      ctx.fillRect(-0.9, -2, 1.8, 6.5);
+      ctx.fillRect(-3.4, -4.2, 6.8, 2.8);
+      ctx.restore();
+    }
     // Huzursuz (sadakati düşük) kendi yerin: sancağın yanında kırmızı bir ünlem rozeti.
     const lo = view.unrest?.[p.id];
     if (lo !== undefined) {

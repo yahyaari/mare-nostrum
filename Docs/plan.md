@@ -168,6 +168,22 @@ beklemeden geçer; rakiplerin kısmı en çok ~8 sn (aşarsa hızlanır). Sonra 
 bıraktığı yere döner ve oyuncunun kendi yürüyüşü oynar. Dokunuş hızlandırır, ikinci dokunuş
 bitirir ve kamerayı geri getirir. 8 kontrol.
 
+**İnşaatçılar (22.10, kullanıcı: "inşaatçı olsun, 2 tane; yükseltmelerin süresi olsun, sonra işçi
+boşa çıksın; seviye arttıkça uzasın, mekanik olsun"):** şehirde 2, kalede 1 inşaatçı; süre gidilen
+seviye kadar tur, şehir seviyesi/kışla/tersane +1; para başta, iptalde geri; kuşatmada durur, el
+değişince yıkılır. Şehir kartında inşaatçılar (dolu/boş yuvarlak), süren işte kalan tur + tur tur
+dolan çubuk + İptal, başlanabilecek işte süresi; haritada çekiç rozeti; bitince haber ve yükselen
+yazı. Kayıt sürümü 8. 17 yeni kontrol (1922).
+**Denge değişti:** 70 oyunda ilk düşüş 50 → 29 (en erken 23 → 19); küçük medeniyetler daha çabuk
+düşüyor (150 turda ayakta: Partlar 37 → 21, Galya 54 → 19, Sakalar 27 → 15), büyükler (Roma,
+Mısır, Makedonya) güçlendi. Sebep ölçüldü: inşaatçı sayısı ya da süre değil, yükseltmenin AYNI tur
+değil tur sonunda bitmesi (1 inşaatçı + 1 tur bile 30 veriyor; "anında" 50). Eskiden bilgisayar
+1. turda kışlayı yükseltip aynı tur okçu basıyor, 4. turda ilk bağımsızı alıyordu; şimdi okçu 4.
+turda, erken yayılma yarışını kaybedenler (Galya, Partlar, Sakalar) toparlanamıyor. Denenip işe
+yaramayanlar: liman yapılarına +1 tur, bilgisayar turda bir iş, öngörülü bilgisayar, uzun barış
+(18/22). Kışla 2 ile başlamak Galya'yı kurtarıyor ama Partları çökertiyor. Kalan: bilgisayarın
+"tarla tıkalıysa şehir seviyesi" kuralı. Kullanıcıya soruldu.
+
 **Sırada (plan sırası): kullanıcı oynasın; iki kişi (hotseat); en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi

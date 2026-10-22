@@ -9,7 +9,7 @@ import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rule
 import { neighbours, roadBetween } from "./rules/graph.js";
 import { access, attack, canAttack, canUse, forecast, hostile, menace, needsShips, order, routeTo } from "./rules/moves.js";
 import {
-  VERSION, armyById, buildShip, canSail, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, split, station, upgrade,
+  VERSION, armyById, buildShip, canSail, cancelBuild, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, split, station, upgrade,
 } from "./rules/state.js";
 import { resolve as answer } from "./rules/events.js";
 import { appoint } from "./rules/generals.js";
@@ -255,6 +255,7 @@ function mapView() {
   view.winter = isWinter(game.turn);
   view.levels = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.level]));
   view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place).map((x) => [x.place, true]));
+  view.building = Object.fromEntries(placesOf(game, game.player).filter((id) => game.places[id].builds?.length).map((id) => [id, true]));
   view.docked = Object.fromEntries(PLACES.filter((p) => p.port && game.places[p.id].ships > 0).map((p) => [p.id, game.places[p.id].ships]));
   view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));
   view.unrest = Object.fromEntries(placesOf(game, game.player)
@@ -568,11 +569,16 @@ function dispatch(act) {
       // Kamera bütün dünyaya uzaklaşır, rakipler oynar (sisin içindekiler görünmez ama sisteki
       // savaş bir parıltıyla belli olur), sonra oyuncunun bıraktığı yere döner.
       showHome = { x: cam.x, y: cam.y, scale: cam.scale };
-      anim.timeline(trace, t + 300, visible, me, {
+      const showEnd = anim.timeline(trace, t + 300, visible, me, {
         seen: (id) => !ui.fog || sawBefore.has(id) || sawAfter.has(id),
         overview: { x: SIZE.x / 2, y: SIZE.y / 2, scale: cam.min },
         home: showHome,
         caption: captionOf,
+      });
+      // Biten inşaatlar: kamera döndükten sonra şehrin üstünden yükselir.
+      game.events.filter((e) => e.type === "built" && e.civ === me).forEach((e, i) => {
+        anim.rise(e.place, `${T()[e.what]} ${e.level}`, INK.good, showEnd - anim.clock() + i * 250);
+        anim.pulse(e.place, INK.good, showEnd - anim.clock() + i * 250);
       });
       ["money", "weapons", "food"].forEach((k, i) => {
         const d = Math.round((game.civs[me][k] - before[k]) * 10) / 10;
@@ -632,11 +638,19 @@ function dispatch(act) {
       if (upgrade(game, act.id, act.what)) {
         coachDone("upgrade");
         sound.build();
-        anim.rise(act.id, T()[act.what] + " " + game.places[act.id][act.what], INK.good);
+        // İnşaat başladı: ne zaman biteceği yükselir.
+        const b = game.places[act.id].builds.at(-1);
+        anim.rise(act.id, `${T()[act.what]} · ${b.total === 1 ? T().turnsOne : fill(T().turnsN, b.total)}`, INK.good);
         anim.pulse(act.id, INK.good);
       }
       save();
       break;
+    case "cancelBuild": {
+      const b = game.places[act.id].builds?.find((x) => x.what === act.what);
+      if (b && cancelBuild(game, act.id, act.what)) anim.rise(act.id, `+${b.paid}`, INK.ink);
+      save();
+      break;
+    }
     case "recruit":
       if (recruit(game, act.id, act.type)) {
         coachDone("recruit");

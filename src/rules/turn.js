@@ -12,7 +12,7 @@ import { check as checkMissions, issue } from "./missions.js";
 import { tick } from "./loyalty.js";
 import { advance, refresh } from "./moves.js";
 import { N, UNITS, trait } from "./numbers.js";
-import { armiesOf, budget, empty, info, placesOf, popCap } from "./state.js";
+import { armiesOf, budget, empty, info, placesOf, popCap, progressBuilds } from "./state.js";
 import { holds } from "./wonders.js";
 import { tickSieges } from "./siege.js";
 import { record, snapshot } from "./chronicle.js";
@@ -80,6 +80,8 @@ export function endTurn(state) {
     state.armies = state.armies.filter((a) => !empty(a));
     if (lost[state.player]) events.push({ type: "winter", turn: state.turn, civ: state.player, lost: lost[state.player] });
   }
+  // İnşaatlar bir tur ilerler (üretimden önce: biten tarla bu tur üretir).
+  progressBuilds(state, events);
   economy(state, events);
   state.turn += 1;
   for (const id in state.places) {

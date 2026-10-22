@@ -198,8 +198,8 @@ section("Yükseltme ve asker");
   check("tarla 1->2: 20 para", S.upgradeInfo(s, "rome", "farms").cost === 20);
   check("şehir seviyesi 2->3: 60 para", S.upgradeInfo(s, "rome", "level").cost === 60);
   check("yapı şehir seviyesini geçemez", S.upgradeInfo(s, "tarentum", "farms").why === "needLevel");
-  check("yükseltme yapılıyor", S.upgrade(s, "rome", "farms") && s.places.rome.farms === 2 && s.civs.rome.money === 80);
-  check("turda bir yükseltme", S.upgradeInfo(s, "rome", "industry").why === "done");
+  check("yükseltme başlar: para şimdi, yapı bitince", S.upgrade(s, "rome", "farms") && s.places.rome.farms === 1 && s.civs.rome.money === 80 && s.places.rome.builds.length === 1);
+  check("aynı yapı iki kez başlamaz", S.upgradeInfo(s, "rome", "farms").why === "building");
   s.civs.rome.money = 5;
   check("parası yetmeyen yükseltemez", S.upgradeInfo(s, "tarentum", "level").why === "money");
   check("kale en fazla seviye 3", (s.places.ariminum.level = 3, S.upgradeInfo(s, "ariminum", "level").why === "max"));
@@ -674,6 +674,60 @@ section("Donanma (bölüm 15)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("İnşaatçılar: süreli yükseltmeler");
+
+{
+  check("süre gidilen seviye kadar: tarla 2 -> 2 tur, 4 -> 4 tur", S.buildTurns("farms", 2) === 2 && S.buildTurns("farms", 4) === 4);
+  check("şehir seviyesi, kışla, tersane bir tur fazla", S.buildTurns("level", 3) === 4 && S.buildTurns("barracks", 2) === 3 && S.buildTurns("shipyard", 2) === 3);
+  check("en kısa iş bir tur (liman kalesi 0 -> 1)", S.buildTurns("fort", 1) === 1);
+  check("şehirde 2, kalede 1 inşaatçı", S.buildersOf("rome") === 2 && S.buildersOf("ariminum") === 1);
+
+  const s = S.newGame("rome", 7);
+  s.civs.rome.money = 500;
+  check("iki inşaatçı iki işe", S.upgrade(s, "rome", "farms") && S.upgrade(s, "rome", "industry") && S.freeBuilders(s, "rome") === 0);
+  check("üçüncü işe inşaatçı yok", S.upgradeInfo(s, "rome", "level").why === "busy" && !S.upgrade(s, "rome", "level"));
+  check("kalenin tek inşaatçısı", S.upgrade(s, "ariminum", "level") && S.upgradeInfo(s, "ariminum", "barracks").why !== null && S.freeBuilders(s, "ariminum") === 0);
+  const ev = [];
+  S.progressBuilds(s, ev);
+  check("bir tur sonra: iş sürüyor, yapı aynı", s.places.rome.farms === 1 && s.places.rome.builds.every((b) => b.left === 1) && !ev.length);
+  S.progressBuilds(s, ev);
+  check("süresi dolunca yapı yükselir, inşaatçı boşalır", s.places.rome.farms === 2 && s.places.rome.industry === 2 && S.freeBuilders(s, "rome") === 2);
+  check("biten iş haber olur", ev.filter((e) => e.type === "built" && e.place === "rome").length === 2 && ev.find((e) => e.what === "farms").level === 2);
+  check("kalenin seviyesi 1 -> 2 üç tur: iki turdan sonra hâlâ sürüyor", s.places.ariminum.level === 1 && s.places.ariminum.builds[0].left === 1);
+
+  const c = S.newGame("rome", 7);
+  c.civs.rome.money = 100;
+  S.upgrade(c, "rome", "level");
+  check("iptal: para geri gelir, inşaatçı boşalır", S.cancelBuild(c, "rome", "level") && c.civs.rome.money === 100 && S.freeBuilders(c, "rome") === 2);
+
+  // Kuşatmada inşaat durur; el değiştiren yerin yarım işi yıkılır.
+  const k = S.newGame("rome", 7);
+  k.civs.rome.money = 100;
+  S.upgrade(k, "tarentum", "level");
+  k.armies.push({ id: 90, owner: "carthage", at: "syracuse", inf: 50, arch: 0, cav: 0, siege: 0, ships: 0, moves: 0, route: [], besieging: "tarentum", besiegedSince: 1 });
+  const left = k.places.tarentum.builds[0].left;
+  S.progressBuilds(k, []);
+  check("kuşatılan yerde inşaat durur", k.places.tarentum.builds[0].left === left);
+  k.armies = [];
+  M.capture(k, "tarentum", "carthage");
+  check("el değiştiren yerin yarım inşaatı yıkılır", k.places.tarentum.builds.length === 0);
+
+  // Tur sonu: inşaat üretimden önce ilerler (bir turluk iş o tur üretir).
+  const t = S.newGame("rome", 7);
+  t.civs.rome.money = 100;
+  t.places.tarentum.fishery = 0;
+  S.upgrade(t, "tarentum", "fishery");
+  T.endTurn(t);
+  check("tur sonunda biten balıkçılık", t.places.tarentum.fishery === 1 && t.events.some((e) => e.type === "built" && e.civ === "rome"));
+
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 7;
+  for (const p of Object.values(old.places)) delete p.builds;
+  S.migrate(old);
+  check("7. sürüm kayıt yükseltiliyor: inşaat listesi boş", old.version === S.VERSION && Object.values(old.places).every((p) => Array.isArray(p.builds) && !p.builds.length));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Liman yapıları (bölüm 16)");
 
 {
@@ -684,11 +738,11 @@ section("Liman yapıları (bölüm 16)");
   check("liman yapısı şehir seviyesini geçemez", (s.places.tarentum.fishery = 1, S.upgradeInfo(s, "tarentum", "fishery").why === "needLevel"));
   s.places.tarentum.fishery = 0;
   const f0 = S.output(s, "tarentum").food;
-  check("balıkçılık 1: turda +2 balık", S.upgrade(s, "tarentum", "fishery") && S.output(s, "tarentum").food === f0 + 2);
-  s.places.tarentum.upgraded = false;
+  // Liman yapısı da inşaatçıyla: 0 -> 1 bir tur.
+  check("balıkçılık 1: turda +2 balık", S.upgrade(s, "tarentum", "fishery") && (S.progressBuilds(s, []), S.output(s, "tarentum").food === f0 + 2));
   s.places.tarentum.level = 2;
   const m0 = S.output(s, "tarentum").money;
-  check("ticaret 1: turda +2 para", S.upgrade(s, "tarentum", "trade") && Math.abs(S.output(s, "tarentum").money - (m0 + 2)) < 1e-9);
+  check("ticaret 1: turda +2 para", S.upgrade(s, "tarentum", "trade") && (S.progressBuilds(s, []), Math.abs(S.output(s, "tarentum").money - (m0 + 2)) < 1e-9));
   const k = S.newGame("carthage", 7);
   k.places.carthage.trade = 1;
   check("Kartaca ticareti x1.5: +3", Math.abs(S.output(k, "carthage").money - S.output(S.newGame("carthage", 7), "carthage").money - 3) < 1e-9);
@@ -1341,6 +1395,10 @@ section("Bot: oyun boyunca değişmezler");
       if (p.owner && byId[id].port && p.fishery + p.trade + p.fort > 0) portWork++;
       for (const k of ["farms", "industry", "barracks", "level"]) if (p[k] < 1) bad.push(`t${s.turn} ${id}.${k} < 1`);
       if (p.pop > S.popCap(p, byId[id].kind) + 1e-9) bad.push(`t${s.turn} ${id} nüfusu tavanı aşıyor`);
+      // İnşaat: inşaatçı sayısını aşmaz, aynı yapı iki kez yapılmaz, kalan tur 1..toplam, sahipsiz yerde yok.
+      if (!Array.isArray(p.builds) || p.builds.length > S.buildersOf(id) || new Set(p.builds.map((b) => b.what)).size !== p.builds.length
+        || p.builds.some((b) => !(b.left >= 1 && b.left <= b.total && b.paid > 0)) || (!p.owner && p.builds.length)) bad.push(`t${s.turn} bozuk inşaat ${id} ${JSON.stringify(p.builds)}`);
+      if (p.builds?.length) building++;
     }
     for (const a of s.armies) {
       if (S.empty(a) || !Number.isInteger(a.ships) || a.ships < 0 || !UNITS.every((k) => Number.isInteger(a[k]) && a[k] >= 0)) bad.push(`t${s.turn} ordu ${a.id} ${UNITS.map((k) => a[k]).join("/")}`);
@@ -1360,13 +1418,14 @@ section("Bot: oyun boyunca değişmezler");
     }
     seenInbox += s.inbox.length;
   };
-  let seenInbox = 0, generals = 0, portWork = 0;
+  let seenInbox = 0, generals = 0, portWork = 0, building = 0;
   const games = [];
   for (let i = 0; i < 7; i++) games.push(play({ seed: 500 + i, player: CIVS[i].id, turns: 120, watch }));
   check("hiçbir turda bozuk sayı, bozuk ordu yok", !bad.length, bad.slice(0, 5).join(" | "));
   check("oyuncuya mektuplar geliyor", seenInbox > 0, seenInbox);
   check("bilgisayar general atıyor", generals > 0, generals);
   check("bilgisayar liman yapıları kuruyor", portWork > 0, portWork);
+  check("bilgisayar inşaatçılarını çalıştırıyor", building > 0, building);
   const free25 = games.map((g) => g.freeLeft[24] ?? 0);
   check("25. tura kadar bağımsızların çoğu alınıyor", free25.every((n) => n <= 8), free25.join(" "));
   // Bilgisayarlar arası savaş eşiği 1.8 (sadakat gelince 1.5 erken yok ediyordu): ilk savaş geç olabilir.

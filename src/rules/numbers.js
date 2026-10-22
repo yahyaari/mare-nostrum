@@ -21,6 +21,12 @@ export const N = {
   growth: 0.05, // tavanın %5'i
   upgradeCost: 10, // yeni seviye x 10 para
   levelCostMul: 2, // şehir seviyesi iki katı
+  // İnşaat (kullanıcı 22.10: "inşaatçı olsun, yükseltmelerin süresi olsun, işçi boşa çıksın;
+  // mekanik olsun, düzgün kullanılmalı"): şehirde 2, kalede 1 inşaatçı. Para başta ödenir; iş
+  // gidilen seviye kadar tur sürer, şehir seviyesi, kışla ve tersane bir tur fazla. Bitince
+  // inşaatçı boşalır. Süreler farklı olduğu için oyuncu ne zaman neyin biteceğini planlar.
+  builders: { city: 2, castle: 1 },
+  buildExtra: { level: 1, barracks: 1, shipyard: 1 },
   startPop: 0.75,
 
   // Askerler (bölüm 5)

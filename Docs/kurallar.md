@@ -102,7 +102,14 @@ Her yerleşimin dört yükseltmesi var:
 - Şehrin en yüksek seviyesi 5, kalenin 3.
 - **Hiçbir yapı şehir seviyesini geçemez.** Önce şehri büyütmek gerekir.
 - **Fiyat:** Bir yapıyı bir üst seviyeye çıkarmak (yeni seviye × 10) para tutar. Şehir seviyesi
-  bunun iki katıdır. Her yerleşimde turda bir yükseltme yapılır ve anında biter.
+  bunun iki katıdır.
+- **İnşaatçılar (22.10):** şehirde 2, kalede 1. Her yükseltme bir inşaatçıyı birkaç tur çalıştırır:
+  **gidilen seviye kadar tur**, şehir seviyesi, kışla ve tersane **bir tur fazla** (tarla 1→2: 2 tur,
+  tarla 3→4: 4 tur, şehir 2→3: 4 tur, kışla 1→2: 3 tur, liman kalesi 0→1: 1 tur). Parası başta
+  ödenir; iş bitince (tur sonunda, üretimden önce) yapı yükselir ve inşaatçı boşalır. Aynı yapı
+  aynı anda iki kez yapılmaz. İş iptal edilirse parası geri gelir. Kuşatılan yerde inşaat durur;
+  yer el değiştirirse yarım iş yıkılır (parası gider). Süreler farklı olduğu için oyuncu ne zaman
+  neyin biteceğini planlar (kullanıcı: "mekanik olsun, işçiler düzgün kullanılmalı").
 - **Nüfus** her tur tavanın %5'i kadar artar. Bunun için yiyecek ambarının boş olmaması gerekir.
 - **Kale:** Nüfusu ve silah/buğday üretimi şehrin yarısı kadardır. Karşılığında surları güçlüdür
   (Bölüm 7).
