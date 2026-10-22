@@ -12,7 +12,7 @@
 // kuşatma makinesi suru açar.
 
 import { has, might } from "./generals.js";
-import { N, UNITS, trait } from "./numbers.js";
+import { N, SHIPS, UNITS, trait } from "./numbers.js";
 
 /**
  * `att`, `def`: { civ, inf, arch, cav, siege, gen? } (bağımsızın civ'i null; gen: o tarafın
@@ -58,20 +58,47 @@ export function fight(att, def, walls, luck = [1, 1]) {
 }
 
 /**
- * Deniz savaşı: gemi gemiye. Güç = gemi x medeniyetin denizciliği x şans. Kaybeden filonun
- * hepsi batar; kazanan, güçler ne kadar yakınsa o kadar gemi kaybeder. Eşitlikte savunan.
+ * Deniz savaşı: filo filoya. Güç = her türün gemisi x gücü (kadırga 1, trireme 2.5, kinkerem 4)
+ * x medeniyetin denizciliği x şans. Kaybeden filonun hepsi batar; kazanan, güçler ne kadar
+ * yakınsa o kadar gemi kaybeder, her türden aynı oranda. Eşitlikte savunan.
+ * `att`, `def`: { civ, ships, trireme, quinq, fort? }. Dönen: iki tarafın kalan gemileri.
  */
 export function naval(att, def, luck = [1, 1]) {
-  const a = att.ships * trait(att.civ, "navy") * luck[0];
-  const d = def.ships * trait(def.civ, "navy") * (def.fort ?? 1) * luck[1];
-  const attWins = def.ships === 0 ? att.ships > 0 : a > d;
-  const [winShips, losePow, winPow] = attWins ? [att.ships, d, a] : [def.ships, a, d];
-  const left = winShips - (winPow > 0 ? Math.round(winShips * (losePow / winPow) ** 2 * N.winnerLoss) : 0);
-  return { attWins, att: attWins ? left : 0, def: attWins ? 0 : left };
+  const a = fleetMight(att) * trait(att.civ, "navy") * luck[0];
+  const d = fleetMight(def) * trait(def.civ, "navy") * (def.fort ?? 1) * luck[1];
+  const attWins = fleetCount(def) === 0 ? fleetCount(att) > 0 : a > d;
+  const [win, losePow, winPow] = attWins ? [att, d, a] : [def, a, d];
+  const left = pickShips(win);
+  sinkShips(left, winPow > 0 ? Math.round(fleetCount(win) * (losePow / winPow) ** 2 * N.winnerLoss) : 0);
+  const none = pickShips({});
+  return { attWins, att: attWins ? left : none, def: attWins ? none : left };
+}
+
+const pickShips = (u) => Object.fromEntries(SHIPS.map((k) => [k, u[k] ?? 0]));
+const fleetCount = (u) => SHIPS.reduce((n, k) => n + (u[k] ?? 0), 0);
+const fleetMight = (u) => SHIPS.reduce((n, k) => n + (u[k] ?? 0) * N.navy.types[k].might, 0);
+
+/** Bir filodan `n` gemi batar: her türden payına düşeni, artanı en kalabalık türden. */
+export function sinkShips(u, n) {
+  const total = fleetCount(u);
+  n = Math.min(n, total);
+  if (n <= 0) return;
+  let left = n;
+  for (const k of SHIPS) {
+    const take = Math.min(u[k] ?? 0, Math.floor((n * (u[k] ?? 0)) / total));
+    u[k] -= take;
+    left -= take;
+  }
+  while (left > 0) {
+    const k = SHIPS.reduce((m, x) => ((u[x] ?? 0) > (u[m] ?? 0) ? x : m), SHIPS[0]);
+    if (!(u[k] > 0)) break;
+    u[k] -= 1;
+    left -= 1;
+  }
 }
 
 export function navalOdds(att, def) {
-  if (!def.ships) return "easy";
+  if (!fleetCount(def)) return "easy";
   if (naval(att, def, [1 - N.luck, 1 + N.luck]).attWins) return "easy";
   return naval(att, def, [1 + N.luck, 1 - N.luck]).attWins ? "risky" : "hopeless";
 }

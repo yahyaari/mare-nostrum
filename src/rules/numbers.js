@@ -4,6 +4,12 @@
 // Asker türleri, her yerde bu sırayla. Kuşatma makinesi dövüşmez ama sayılır (mürettebat).
 export const UNITS = ["inf", "arch", "cav", "siege"];
 
+// Gemi türleri (kullanıcı 22.10: "kadırgalar, savaş gemileri vs olsun, birleştirip büyük bir
+// filo kuralım"), tersane seviyesiyle açılır - kışlanın askerleri açması gibi. Kadırga asker
+// taşır; trireme ve kinkerem savaşır. Kadırga eskiden tek tür olan gemi: alanının adı da eskisi
+// gibi `ships` (eski kayıtlar ve sayılar olduğu gibi kadırga olur).
+export const SHIPS = ["ships", "trireme", "quinq"];
+
 export const N = {
   // Kaynaklar (bölüm 3)
   taxPer: 20, // her 20 nüfus turda 1 para
@@ -115,11 +121,14 @@ export const N = {
 
   // Donanma (bölüm 15). Gemi tek tek sayılır (bölük değil).
   navy: {
-    cost: { money: 4, weapons: 2 },
-    pop: 5, // tayfa
-    carry: 25, // bir geminin taşıdığı asker
-    upkeep: 0.5, // gemi başına turda yiyecek
-    start: { capital: 2, port: 1, freeBig: 2, free: 1 },
+    // Her tür: fiyatı, tayfası (nüfustan), taşıdığı asker, deniz savaşındaki gücü, bakımı (turda
+    // yiyecek), açıldığı tersane seviyesi. Para başına güç savaş gemilerinde, taşıma kadırgada.
+    types: {
+      ships: { money: 4, weapons: 2, pop: 5, carry: 25, might: 1, upkeep: 0.5, yard: 1 },
+      trireme: { money: 7, weapons: 3, pop: 8, carry: 10, might: 2.5, upkeep: 0.75, yard: 2 },
+      quinq: { money: 12, weapons: 5, pop: 12, carry: 20, might: 4, upkeep: 1, yard: 3 },
+    },
+    start: { capital: 2, port: 1, freeBig: 2, free: 1 }, // başlangıç kadırgaları
     blockadeMoney: 0.5, // ablukadaki limanın vergisi
   },
 

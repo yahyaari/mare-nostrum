@@ -5,12 +5,12 @@
 // yabancı bir yere asla kendi başına girmez - saldırı her zaman açık bir emirdir.
 
 import { CIVS } from "../data/world.js";
-import { estimate, fight, naval, navalOdds } from "./combat.js";
+import { estimate, fight, naval, navalOdds, sinkShips } from "./combat.js";
 import { byId, neighbours, path, roadBetween } from "./graph.js";
 import { bestAt, bury, has, learn } from "./generals.js";
-import { N, UNITS, trait } from "./numbers.js";
+import { N, SHIPS, UNITS, trait } from "./numbers.js";
 import { between, random } from "./rng.js";
-import { armiesAt, armyById, canSail, empty, info, men, placesOf, relation } from "./state.js";
+import { armiesAt, armyById, canSail, empty, fleetOf, info, men, placesOf, relation, shipsOnly } from "./state.js";
 import { holds } from "./wonders.js";
 import { groundOf } from "./ground.js";
 import { isWinter } from "./season.js";
@@ -101,8 +101,8 @@ function storm(state, army, at) {
     army[k] -= n;
     lost += n;
   }
-  const sunk = army.ships > 1 ? 1 : 0;
-  army.ships -= sunk;
+  const sunk = fleetOf(army) > 1 ? 1 : 0;
+  sinkShips(army, sunk);
   (state.storms ??= []).push({ type: "storm", turn: state.turn, civ: army.owner, army: army.id, at, lost, sunk });
 }
 
@@ -137,7 +137,7 @@ export function advance(state, army) {
       break;
     }
     // Ekran için iz: kim nereden nereye yürüdü (state.trace sadece ekran isterse var, kayda girmez).
-    state.trace?.push({ type: "move", army: army.id, owner: army.owner, men: men(army), ships: army.ships, from: army.at, to: next });
+    state.trace?.push({ type: "move", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), from: army.at, to: next });
     // Yürüyen ordu kuşatmayı bırakır.
     delete army.besieging;
     delete army.besiegedSince;
@@ -168,7 +168,7 @@ export function forecast(state, unit, civ, id) {
   const pl = state.places[id];
   const from = unit.at ?? null;
   const bySea = from && roadBetween(from, id)?.sea;
-  const sea = bySea ? navalOdds({ civ, ships: unit.ships ?? 0 }, { civ: pl.owner, ships: shipsAt(state, id), fort: fortOf(state, id) }) : "easy";
+  const sea = bySea ? navalOdds({ civ, ...shipsOnly(unit) }, { civ: pl.owner, ...fleetAt(state, id), fort: fortOf(state, id) }) : "easy";
   const ter = terrainOf(from, id);
   const land = estimate(
     { civ, inf: unit.inf, arch: unit.arch, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null, terrain: ter.att },
@@ -196,11 +196,16 @@ export const fortOf = (state, id) => {
   return 1 + ((pl.fort ?? 0) + pharos) * N.port.fortPerLevel;
 };
 
-/** Bir yerin gemileri: limandakiler ve sahibinin orada duran ordularınınkiler. */
-export function shipsAt(state, id) {
+/** Bir yerin gemileri, türleriyle: limandakiler ve sahibinin orada duran ordularınınkiler. */
+export function fleetAt(state, id) {
   const pl = state.places[id];
-  return pl.ships + armiesAt(state, id).filter((a) => a.owner === pl.owner).reduce((n, a) => n + a.ships, 0);
+  const out = shipsOnly(pl);
+  for (const a of armiesAt(state, id)) if (a.owner === pl.owner) for (const k of SHIPS) out[k] += a[k] ?? 0;
+  return out;
 }
+
+/** Bir yerin bütün gemileri (sayı). */
+export const shipsAt = (state, id) => fleetOf(fleetAt(state, id));
 
 /**
  * Saldırı. Dönen olay: { type: "battle", ... }. Kazanırsa yer saldıranın olur, ordu içeri
@@ -218,12 +223,13 @@ export function attack(state, armyId, id, luck = null) {
   // Denizden saldırı: önce limandaki gemilerle deniz savaşı. Filo batarsa ordu denizde kaybolur.
   let navalEv = null;
   if (roadBetween(army.at, id).sea && shipsAt(state, id) > 0) {
-    const nr = naval({ civ: army.owner, ships: army.ships }, { civ: pl.owner, ships: shipsAt(state, id), fort: fortOf(state, id) }, luck ?? rollLuck(state));
-    navalEv = { won: nr.attWins, sunk: shipsAt(state, id) - nr.def, lost: army.ships - nr.att };
+    const theirs = fleetAt(state, id);
+    const nr = naval({ civ: army.owner, ...shipsOnly(army) }, { civ: pl.owner, ...theirs, fort: fortOf(state, id) }, luck ?? rollLuck(state));
+    navalEv = { won: nr.attWins, sunk: fleetOf(theirs) - fleetOf(nr.def), lost: fleetOf(army) - fleetOf(nr.att) };
     sinkAt(state, id, nr.def);
-    army.ships = nr.att;
+    for (const k of SHIPS) army[k] = nr.att[k];
     if (!nr.attWins) {
-      state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: army.ships, from: army.at, to: id, won: false, oldOwner: pl.owner });
+      state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), from: army.at, to: id, won: false, oldOwner: pl.owner });
       bury(state, army.owner, army.general);
       state.armies = state.armies.filter((a) => a !== army);
       return {
@@ -244,7 +250,7 @@ export function attack(state, armyId, id, luck = null) {
     after: { att: r.att, def: r.def }, naval: navalEv,
   };
   state.trace?.push({
-    type: "attack", army: army.id, owner: army.owner, men: men(army), ships: army.ships, from: army.at, to: id,
+    type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), from: army.at, to: id,
     won: r.attWins, oldOwner: pl.owner,
   });
   army.moves = 0;
@@ -277,15 +283,18 @@ export function attack(state, armyId, id, luck = null) {
 
 const pickUnits = (u) => Object.fromEntries(UNITS.map((k) => [k, u[k] ?? 0]));
 
-/** Bir yerin gemilerini `left` kadara indirir: önce limandakiler, sonra ordularınkiler batar. */
+/** Bir yerin gemilerini her türden `left`te kalan kadara indirir: önce limandakiler, sonra ordularınkiler batar. */
 function sinkAt(state, id, left) {
   const pl = state.places[id];
-  let sink = shipsAt(state, id) - left;
+  const now = fleetAt(state, id);
   const own = armiesAt(state, id).filter((a) => a.owner === pl.owner);
-  for (const u of [pl, ...own]) {
-    const n = Math.min(u.ships, sink);
-    u.ships -= n;
-    sink -= n;
+  for (const k of SHIPS) {
+    let sink = now[k] - (left[k] ?? 0);
+    for (const u of [pl, ...own]) {
+      const n = Math.min(u[k] ?? 0, sink);
+      u[k] -= n;
+      sink -= n;
+    }
   }
 }
 
@@ -296,7 +305,7 @@ export function capture(state, id, civ) {
   const pl = state.places[id];
   const loser = pl.owner;
   for (const k of UNITS) pl[k] = 0;
-  pl.ships = 0; // limandaki gemiler yakıldı
+  for (const k of SHIPS) pl[k] = 0; // limandaki gemiler yakıldı
   pl.owner = civ;
   pl.pop = Math.round(pl.pop * (1 - N.captureLoss));
   pl.upgraded = true; // alındığı tur yükseltilmez
@@ -322,7 +331,7 @@ export function expel(state, a, b) {
     const owner = state.places[army.at].owner;
     if ((army.owner === a && owner === b) || (army.owner === b && owner === a)) {
       const home = nearestOwn(state, army.owner, army.at);
-      if (home) { army.at = home; army.route = []; } else { for (const k of UNITS) army[k] = 0; army.ships = 0; }
+      if (home) { army.at = home; army.route = []; } else { for (const k of [...UNITS, ...SHIPS]) army[k] = 0; }
     }
   }
   state.armies = state.armies.filter((x) => !empty(x));

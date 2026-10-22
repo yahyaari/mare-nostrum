@@ -323,9 +323,19 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
 
 ## 15. Donanma
 
-- **Gemi** limanlarda yapılır: 4 para, 2 silah, 5 nüfus (tayfa). Asker basma hakkından yer.
-  Gemi başına turda yarım yiyecek bakım.
-- **Deniz yolları (kesik çizgiler) gemi ister:** bir gemi 25 asker taşır. Ordu, gemileri bütün
+- **Gemi türleri** (kullanıcı 22.10: "kadırgalar, savaş gemileri vs olsun"), tersane seviyesiyle
+  açılır - kışlanın askerleri açması gibi:
+
+  | Tür | Fiyat | Tayfa | Taşır | Savaş gücü | Bakım | Tersane |
+  |---|---|---|---|---|---|---|
+  | Kadırga (taşıma) | 4 para, 2 silah | 5 | 25 asker | 1 | 0.5 yiyecek | 1 |
+  | Trireme (savaş gemisi) | 7 para, 3 silah | 8 | 10 asker | 2.5 | 0.75 | 2 |
+  | Kinkerem (ağır savaş gemisi) | 12 para, 5 silah | 12 | 20 asker | 4 | 1 | 3 |
+
+  Tersanenin her seviyesi (1'den sonra) her gemiyi 1 para ucuzlatır; tersane seviyesi kadar gemi
+  turda (asker basma hakkından ayrı). Eski tek tür gemi kadırga oldu (kayıttaki alanı `ships`).
+  Gemiler de kart: filo kartları seçilerek birleştirilir, ayrılır.
+- **Deniz yolları (kesik çizgiler) gemi ister:** filo, gemilerinin taşıdığı kadar asker taşır. Ordu, gemileri bütün
   askerlerini taşıyabiliyorsa deniz yolunu kullanabilir; yoksa o yollar onun için yok.
   Gemiler ordunun içinde durur; ordu çıkarırken limandaki gemileri de alırsın. Sadece gemiden
   oluşan bir filo da ordu sayılır: **denizden gider, karadan yürümez, karaya saldıramaz.**
@@ -337,12 +347,13 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
 - **Başlangıç gemileri:** liman olan başkentte 2, öteki limanlarda 1, büyük bağımsız
   limanlarda 2, öteki bağımsız limanlarda 1.
 - **Deniz savaşı:** denizden bir limana saldırınca önce limandaki (ve sahibinin oradaki
-  ordularının) gemileriyle çarpışılır. Güç = gemi sayısı × denizcilik (Kartaca × 1.5) × şans.
-  Kaybeden filonun hepsi batar; kazanan, güçler yakınsa çok gemi kaybeder. **Filo yenilirse
+  ordularının) gemileriyle çarpışılır. Güç = her gemi türünün sayısı × gücü × denizcilik
+  (Kartaca × 1.5) × şans. Kaybeden filonun hepsi batar; kazanan, güçler yakınsa çok gemi kaybeder
+  (her türden aynı oranda). **Filo yenilirse
   ordu denizde kaybolur;** kazanırsa karaya çıkar ve kara savaşı başlar. Saldırı tahmini deniz
   savaşını da sayar.
 - **Alınan limanın gemileri yanar.**
-- **Abluka:** sahibiyle savaşta olan birinin, deniz yolunun öbür ucunda limandakinden çok gemisi
+- **Abluka:** sahibiyle savaşta olan birinin, deniz yolunun öbür ucunda limandakinden güçlü filosu
   duruyorsa liman ablukadadır: balık gelmez, vergi yarıya iner. Haritada çapası kırmızı.
 
 > Denge: donanma gelince denizler gerçek bir engel oldu. İlk denemede bilgisayar neredeyse hiç

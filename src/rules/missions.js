@@ -12,7 +12,7 @@ import { XP } from "./generals.js";
 import { menace } from "./moves.js";
 import { N } from "./numbers.js";
 import { random } from "./rng.js";
-import { PORT_UPGRADES, UPGRADES, armiesOf, men, placesOf, relation, upgradeInfo } from "./state.js";
+import { PORT_UPGRADES, UPGRADES, armiesOf, fleetOf, men, placesOf, relation, upgradeInfo } from "./state.js";
 
 /** Görevlerin zarı: oyunun zarıyla aynı yöntem, ayrı sayaç. */
 function roll(state) {
@@ -24,7 +24,7 @@ function roll(state) {
 const pick = (state, list) => list[Math.floor(roll(state) * list.length)];
 
 const totalShips = (state, civ) =>
-  placesOf(state, civ).reduce((n, id) => n + state.places[id].ships, 0) + armiesOf(state, civ).reduce((n, a) => n + a.ships, 0);
+  placesOf(state, civ).reduce((n, id) => n + fleetOf(state.places[id]), 0) + armiesOf(state, civ).reduce((n, a) => n + fleetOf(a), 0);
 const generals = (state, civ) => armiesOf(state, civ).map((a) => a.general).filter(Boolean);
 const capitalOf = (state, civ) => placesOf(state, civ).find((id) => byId[id].capital) ?? null;
 

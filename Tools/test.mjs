@@ -163,7 +163,7 @@ const C = await import("../src/rules/combat.js");
 const M = await import("../src/rules/moves.js");
 const D = await import("../src/rules/diplomacy.js");
 const T = await import("../src/rules/turn.js");
-const { N, UNITS } = await import("../src/rules/numbers.js");
+const { N, UNITS, SHIPS } = await import("../src/rules/numbers.js");
 const { play } = await import("./bot.mjs");
 
 {
@@ -769,6 +769,104 @@ section("Birlik kartları: her bölük bir kart");
   b.ships = 2;
   const c = S.detach(s, b.id, { ships: 2 });
   check("gemiler ayrı bir filo olabilir", c && c.ships === 2 && S.men(c) === 0 && b.ships === 0 && b.inf === 10);
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Gemi türleri: kadırga, trireme, kinkerem");
+
+{
+  const G = N.navy.types;
+  check("kadırga taşır, savaş gemileri savaşır", G.ships.carry > G.trireme.carry && G.trireme.might > G.ships.might && G.quinq.might > G.trireme.might);
+  check("savaş gemisi para başına daha güçlü", G.trireme.might / G.trireme.money > G.ships.might / G.ships.money && G.quinq.might / G.quinq.money > G.ships.might / G.ships.money);
+  check("kadırga asker başına daha ucuz", G.ships.money / G.ships.carry < G.trireme.money / G.trireme.carry);
+
+  const s = S.newGame("carthage", 7);
+  s.civs.carthage.money = 200; s.civs.carthage.weapons = 50;
+  const c = s.places.carthage;
+  check("tersane 1: kadırga yapılır, trireme ve kinkerem kapalı", !S.shipInfo(s, "carthage").why
+    && S.shipInfo(s, "carthage", "trireme").why === "needShipyard2" && S.shipInfo(s, "carthage", "quinq").why === "needShipyard3");
+  c.shipyard = 2;
+  const m0 = s.civs.carthage.money, w0 = s.civs.carthage.weapons, p0 = c.pop;
+  check("tersane 2: trireme yapılır (6 para, 3 silah, 8 tayfa)", S.buildShip(s, "carthage", "trireme") && c.trireme === 1
+    && s.civs.carthage.money === m0 - 6 && s.civs.carthage.weapons === w0 - 3 && c.pop === p0 - 8, `${m0 - s.civs.carthage.money}`);
+  check("trireme de tersanenin tur hakkından yer", S.shipInfo(s, "carthage").why === null && S.buildShip(s, "carthage") && S.shipInfo(s, "carthage").why === "done");
+  check("kinkerem hâlâ tersane 3 ister", S.shipInfo(s, "carthage", "quinq").why === "needShipyard3");
+
+  const u = { inf: 60, ships: 1, trireme: 2, quinq: 1 };
+  check("filo: 4 gemi, 65 asker taşır, gücü 10", S.fleetOf(u) === 4 && S.carryOf(u) === 65 && S.mightOf(u) === 10);
+  check("taşıyabildiği kadar asker: denize açılır", S.canSail(u) && !S.canSail({ ...u, inf: 70 }));
+  check("askersiz savaş filosu da denize açılır", S.canSail({ trireme: 1 }) && !S.empty({ trireme: 1 }));
+  const pick = S.shipsToCarry({ ships: 2, trireme: 3, quinq: 1 }, 60);
+  check("taşıma: önce kadırgalar, sonra kinkerem", pick.ships === 2 && pick.quinq === 1 && pick.trireme === 0, JSON.stringify(pick));
+  check("yetmiyorsa hepsi", S.fleetOf(S.shipsToCarry({ ships: 1, trireme: 1 }, 500)) === 2);
+
+  // Deniz savaşı: sayı değil güç. 2 trireme (5) 4 kadırgayı (4) yener (Mısır'ın denizciliği 1).
+  const nr = C.naval({ civ: "rome", trireme: 2 }, { civ: "egypt", ships: 4 });
+  check("2 trireme 4 kadırgayı yener", nr.attWins && S.fleetOf(nr.def) === 0 && nr.att.trireme >= 1);
+  const nr2 = C.naval({ civ: "rome", ships: 4 }, { civ: "egypt", trireme: 2 });
+  check("tersi: 4 kadırga 2 triremeye yenilir", !nr2.attWins && S.fleetOf(nr2.att) === 0);
+  const sk = { ships: 6, trireme: 3, quinq: 1 };
+  C.sinkShips(sk, 5);
+  check("batan gemiler türlere oranla (6/3/1'den 5 gemi: 2/2/1 kalır)", sk.ships === 2 && sk.trireme === 2 && sk.quinq === 1, JSON.stringify(sk));
+
+  // Denizden saldırı: limandaki kadırgalara karşı triremeli filo.
+  const b = S.newGame("rome", 7);
+  b.places.syracuse.ships = 3;
+  const a = S.muster(b, "tarentum", { inf: 0 });
+  check("boş ordu çıkmaz", a === null);
+  b.places.tarentum.inf = 80; b.places.tarentum.trireme = 3; b.places.tarentum.ships = 2;
+  const fl = S.muster(b, "tarentum", { inf: 50, ships: 2, trireme: 3 });
+  check("gemi türleriyle ordu çıkar", fl && fl.trireme === 3 && fl.ships === 2 && b.places.tarentum.trireme === 0);
+  fl.moves = 1;
+  b.places.syracuse.inf = 10; b.places.syracuse.arch = 0;
+  const ev = M.attack(b, fl.id, "syracuse", [1, 1]);
+  check("Tarentum'dan denizden: triremeler limanın 3 kadırgasını batırır, ordu karaya çıkar", ev && ev.naval?.won && ev.naval.sunk === 3 && !ev.drowned && ev.won, JSON.stringify(ev?.naval));
+  const lost = S.newGame("rome", 7);
+  lost.places.syracuse.trireme = 2; lost.places.tarentum.inf = 40; lost.places.tarentum.ships = 3;
+  const weak = S.muster(lost, "tarentum", { inf: 40, ships: 2 });
+  weak.moves = 1;
+  const ev2 = M.attack(lost, weak.id, "syracuse", [1, 1]);
+  check("kadırgalı ordu limandaki iki triremeye yenilir, denizde kaybolur", ev2 && ev2.drowned && !lost.armies.includes(weak) && M.shipsAt(lost, "syracuse") >= 1);
+
+  // Abluka gücüyle: limanda 3 kadırga (3), karşıda düşmanın 1 kinkereme (4).
+  const k = S.newGame("rome", 7);
+  k.relations[S.key("rome", "carthage")] = "war";
+  k.places.tarentum.ships = 3;
+  const q = S.muster(k, "carthage", {});
+  check("boş filo da çıkmaz", q === null);
+  k.places.carthage.quinq = 1;
+  const qa = S.muster(k, "carthage", { quinq: 1 });
+  qa.at = "syracuse";
+  k.places.syracuse.owner = "carthage";
+  check("tek kinkerem 3 kadırgalık limanı ablukaya alır (güç 4 > 3)", S.blockaded(k, "tarentum"));
+  qa.quinq = 0; qa.ships = 1;
+  check("tek kadırga almaz (1 < 3)", !S.blockaded(k, "tarentum"));
+  check("bakım türüne göre: kinkerem 1 yiyecek", (() => { const h = S.newGame("rome", 7); const u0 = S.budget(h, "rome").upkeep; h.places.tarentum.quinq += 2; return S.budget(h, "rome").upkeep === u0 + 2; })());
+
+  // Kartlar: her gemi kendi türüyle.
+  const cards = S.cardsOf({ inf: 10, ships: 1, trireme: 1, quinq: 1 });
+  check("gemi kartları türleriyle, sırasıyla", cards.map((x) => x.type).join(",") === "inf,ships,trireme,quinq");
+  const w = S.chosen({ inf: 10, ships: 1, trireme: 1, quinq: 1 }, [2, 3]);
+  check("seçilen gemi kartları", w.trireme === 1 && w.quinq === 1 && w.ships === 0);
+
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 8;
+  for (const p of Object.values(old.places)) { delete p.trireme; delete p.quinq; }
+  old.armies.push({ id: 1, owner: "rome", at: "rome", inf: 10, arch: 0, cav: 0, siege: 0, ships: 2, moves: 1, route: [], general: null });
+  S.migrate(old);
+  check("8. sürüm kayıt yükseltiliyor: eski gemiler kadırga", old.version === S.VERSION && old.places.tarentum.ships === 1 && old.places.tarentum.trireme === 0 && old.armies[0].quinq === 0 && old.armies[0].ships === 2);
+
+  // Bilgisayar: tersanesi 2 olan, gemisiz, karşısında alınacak yer olmayan liman savaş gemisi yapar.
+  const { aiTurn: ai0 } = await import("../src/rules/ai.js");
+  let tri = 0;
+  for (let i = 0; i < 6; i++) {
+    const h = S.newGame("rome", 40 + i);
+    h.places.carthage.ships = 0; h.places.carthage.shipyard = 2; h.civs.carthage.money = 200; h.civs.carthage.weapons = 40; h.civs.carthage.food = 80;
+    for (const id of Object.keys(h.places)) if (h.places[id].owner === null) h.places[id].owner = "egypt"; // alınacak bağımsız yok
+    ai0(h, "carthage", []);
+    tri += h.places.carthage.trireme;
+  }
+  check("bilgisayar savunmaya savaş gemisi yapıyor", tri > 0, tri);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1427,7 +1525,7 @@ section("Bot: oyun boyunca değişmezler");
       if (!civ.alive && (S.placesOf(s, c).length || S.armiesOf(s, c).length)) bad.push(`t${s.turn} ölü ${c}'nin malı var`);
     }
     for (const [id, p] of Object.entries(s.places)) {
-      for (const k of ["pop", ...UNITS, "ships", "level", "farms", "industry", "barracks"]) {
+      for (const k of ["pop", ...UNITS, ...SHIPS, "level", "farms", "industry", "barracks"]) {
         if (!Number.isInteger(p[k]) || p[k] < 0) bad.push(`t${s.turn} ${id}.${k}=${p[k]}`);
       }
       for (const k of ["farms", "industry", "barracks"]) if (p[k] > p.level) bad.push(`t${s.turn} ${id}.${k} > seviye`);
@@ -1445,7 +1543,7 @@ section("Bot: oyun boyunca değişmezler");
       if (p.builds?.length) building++;
     }
     for (const a of s.armies) {
-      if (S.empty(a) || !Number.isInteger(a.ships) || a.ships < 0 || !UNITS.every((k) => Number.isInteger(a[k]) && a[k] >= 0)) bad.push(`t${s.turn} ordu ${a.id} ${UNITS.map((k) => a[k]).join("/")}`);
+      if (S.empty(a) || ![...UNITS, ...SHIPS].every((k) => Number.isInteger(a[k]) && a[k] >= 0)) bad.push(`t${s.turn} ordu ${a.id} ${UNITS.map((k) => a[k]).join("/")}`);
       const k = M.access(s, a.owner, a.at);
       if (k !== "own" && k !== "ally") bad.push(`t${s.turn} ordu ${a.id} (${a.owner}) yabancı yerde: ${a.at} ${k}`);
       if (!s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);

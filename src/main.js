@@ -9,7 +9,7 @@ import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rule
 import { neighbours, roadBetween } from "./rules/graph.js";
 import { access, attack, canAttack, canUse, forecast, hostile, menace, needsShips, order, routeTo } from "./rules/moves.js";
 import {
-  VERSION, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, station, upgrade,
+  VERSION, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, merge, men, migrate, muster, newGame, placesOf, recruit, station, upgrade,
 } from "./rules/state.js";
 import { resolve as answer } from "./rules/events.js";
 import { appoint } from "./rules/generals.js";
@@ -256,13 +256,13 @@ function mapView() {
   view.levels = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.level]));
   view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place).map((x) => [x.place, true]));
   view.building = Object.fromEntries(placesOf(game, game.player).filter((id) => game.places[id].builds?.length).map((id) => [id, true]));
-  view.docked = Object.fromEntries(PLACES.filter((p) => p.port && game.places[p.id].ships > 0).map((p) => [p.id, game.places[p.id].ships]));
+  view.docked = Object.fromEntries(PLACES.filter((p) => p.port && fleetOf(game.places[p.id]) > 0).map((p) => [p.id, fleetOf(game.places[p.id])]));
   view.blockade = Object.fromEntries(PLACES.filter((p) => p.port && blockaded(game, p.id)).map((p) => [p.id, true]));
   view.unrest = Object.fromEntries(placesOf(game, game.player)
     .filter((id) => game.places[id].loyalty < N.loyalty.unrest).map((id) => [id, game.places[id].loyalty]));
   view.threats = Object.fromEntries(placesOf(game, game.player).map((id) => [id, menace(game, id)]).filter(([, n]) => n > 0));
   view.armies = game.armies.map((a) => ({
-    id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0, ships: a.ships,
+    id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0, ships: fleetOf(a),
     selected: ui.sel?.kind === "army" && ui.sel.id === a.id,
     spent: a.owner === game.player && a.moves <= 0,
     // Kuşatan ordu kendi yerinde değil, hedefin surlarının önünde kamp kurmuş görünür.
@@ -403,7 +403,7 @@ function unitOf(of) {
   const [k, id] = [of.slice(0, 1), of.slice(2)];
   return k === "p" ? game.places[id] ?? null : armyById(game, Number(id));
 }
-const sigOf = (u) => ["inf", "arch", "cav", "siege", "ships"].map((k) => u[k] ?? 0).join(",");
+const sigOf = (u) => ["inf", "arch", "cav", "siege", "ships", "trireme", "quinq"].map((k) => u[k] ?? 0).join(",");
 
 const T = () => TEXT[ui.lang];
 
@@ -615,9 +615,9 @@ function dispatch(act) {
       break;
     }
     case "buildShip":
-      if (buildShip(game, act.id)) {
+      if (buildShip(game, act.id, act.type ?? "ships")) {
         sound.launch();
-        anim.rise(act.id, T().addShip, INK.lane);
+        anim.rise(act.id, "+ " + T().shipNames[act.type ?? "ships"], INK.lane);
         anim.pulse(act.id, INK.lane);
       }
       save();
@@ -694,7 +694,7 @@ function dispatch(act) {
       // Garnizondan seçili kartlar dışarı çıkar: ordu (istenirse generalli).
       const pl = game.places[act.id];
       const want = chosen(pl, picksOf(ui, "p:" + act.id, pl));
-      const a = formArmy(game, act.id, want.inf, want.arch, want.cav, want.siege, want.ships);
+      const a = muster(game, act.id, want);
       if (!a) break;
       coachDone("form");
       sound.muster();
@@ -726,7 +726,7 @@ function dispatch(act) {
       if (!a) break;
       const at = a.at;
       const want = chosen(a, picksOf(ui, "a:" + a.id, a));
-      const part = men(want) + want.ships > 0 ? detach(game, a.id, want) : null;
+      const part = men(want) + fleetOf(want) > 0 ? detach(game, a.id, want) : null;
       if (station(game, (part ?? a).id)) anim.pulse(at, INK.ink);
       ui.cards = null;
       if (!part) { ui.sel = null; ui.army = null; }

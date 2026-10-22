@@ -12,11 +12,11 @@ import { rebels } from "./loyalty.js";
 import { neighbours, path, roadBetween } from "./graph.js";
 import { access, advance, attack, canAttack, defenders, forecast, hostile, order, refresh } from "./moves.js";
 import { besiege, canBesiege } from "./siege.js";
-import { LEVELS, N, UNITS } from "./numbers.js";
+import { LEVELS, N, SHIPS, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import {
-  armiesAt, armiesOf, blockaded, budget, buildShip, canSail, enemiesOf, formArmy, gamesInfo, holdGames, info, key, merge, men,
-  freeBuilders, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, station, strength, upgrade, upgradeInfo,
+  armiesAt, armiesOf, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men,
+  freeBuilders, muster, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, station, strength, upgrade, upgradeInfo,
 } from "./state.js";
 
 // Ordunun hedeflenen bileşimi (payları; gerisi piyade). Güçlü okçusu olan daha çok okçu, zayıf
@@ -182,7 +182,8 @@ function buildOne(state, civ, id, mine, reserve) {
 
 /**
  * Limanlarda gemi: deniz yolu olan her liman savunma için en az bir gemi tutar, garnizonun
- * fazlası denize açılabilsin diye de ona yetecek kadar (bir gemi 20 asker), en fazla 6.
+ * fazlası denize açılabilsin diye de ona yetecek kadar (bir kadırga 25 asker), en fazla 6.
+ * Taşınacak asker gemilere sığmıyorsa kadırga; yoksa tersanenin yapabildiği en iyi savaş gemisi.
  */
 function shipyard(state, civ) {
   for (const id of placesOf(state, civ)) {
@@ -192,18 +193,22 @@ function shipyard(state, civ) {
     // Filo ancak denizin karşısında alınacak bir yer varsa; yoksa savunma için tek gemi. (Her
     // limana 6 gemi yapınca limanı olanlar bakımdan eriyordu, limansız Galya Roma'yı yutuyordu.)
     const overseas = neighbours(id).some((n) => roadBetween(id, n).sea && hostile(access(state, civ, n)));
-    const want = overseas ? Math.min(6, Math.max(1, Math.ceil(spare / N.navy.carry))) : 1;
-    for (let guard = 0; guard < 3 && pl.ships < want; guard++) {
+    const want = overseas ? Math.min(6, Math.max(1, Math.ceil(spare / N.navy.types.ships.carry))) : 1;
+    for (let guard = 0; guard < 3 && fleetOf(pl) < want; guard++) {
+      const type = overseas && carryOf(pl) < spare ? "ships" : warship(pl);
       // Gemi de yer: yiyecek darsa tersane durur (yoksa bilgisayar kıtlığa giriyordu).
-      if (shipInfo(state, id).why || state.civs[civ].money < N.navy.cost.money + 10 || budget(state, civ).food < 2) break;
-      buildShip(state, id);
+      if (shipInfo(state, id, type).why || state.civs[civ].money < N.navy.types[type].money + 10 || budget(state, civ).food < 2) break;
+      buildShip(state, id, type);
     }
   }
 }
 
+/** Bu limanın tersanesinin yapabildiği en güçlü gemi. */
+const warship = (pl) => ["quinq", "trireme", "ships"].find((k) => (pl.shipyard ?? 0) >= N.navy.types[k].yard);
+
 /** Limandan çıkan kuvvete gemi: taşıyabileceği kadar. (Limana savunma için bir gemi
  * bırakınca başlangıçtaki tek gemiyle kimse denize açılamıyordu; dünya donuyordu.) */
-const shipsFor = (pl, force) => Math.max(0, Math.min(pl.ships, Math.ceil(men(force) / N.navy.carry)));
+const shipsFor = (pl, force) => shipsToCarry(pl, men(force));
 
 // ---- asker ----
 
@@ -305,14 +310,14 @@ function military(state, civ, events) {
     if (spare < 20) continue;
     const k = spare / men(pl);
     const force = Object.fromEntries(UNITS.map((t) => [t, Math.floor(pl[t] * k)]));
-    force.ships = shipsFor(pl, force);
+    Object.assign(force, shipsFor(pl, force));
     force.at = id;
     // Deniz aşırı komşu ancak gemiler kuvveti taşıyabiliyorsa.
     const reach = neighbours(id).filter((n) => !roadBetween(id, n).sea || canSail(force));
     const target = bestTarget(state, civ, force, reach);
     if (target) {
       const sea = roadBetween(id, target).sea;
-      const a = formArmy(state, id, force.inf, force.arch, force.cav, force.siege, sea ? force.ships : 0);
+      const a = muster(state, id, sea ? force : { ...force, ships: 0, trireme: 0, quinq: 0 });
       const ev = a && attack(state, a.id, target);
       if (ev) events.push(ev);
     }
@@ -325,17 +330,16 @@ function military(state, civ, events) {
     if (spare >= 50) {
       const k = spare / men(pl);
       const force = Object.fromEntries(UNITS.map((t) => [t, Math.floor(pl[t] * k)]));
-      formArmy(state, id, ...UNITS.map((t) => force[t]), shipsFor(pl, force));
+      muster(state, id, { ...force, ...shipsFor(pl, force) });
     }
   }
   for (const a of armiesOf(state, civ)) {
     if (a.moves <= 0 || a.route.length || a.besieging) continue;
     // Kendi limanındaysa gemiye bin: denizden de hedef seçebilsin.
     const pl = state.places[a.at];
-    if (pl.owner === civ && pl.ships > 0 && !canSail(a)) {
-      const take = Math.min(pl.ships, Math.ceil(men(a) / N.navy.carry) - a.ships);
-      pl.ships -= take;
-      a.ships += take;
+    if (pl.owner === civ && fleetOf(pl) > 0 && !canSail(a)) {
+      const take = shipsToCarry(pl, men(a) - carryOf(a));
+      for (const k of SHIPS) { pl[k] -= take[k]; a[k] += take[k]; }
     }
     const goal = farTarget(state, civ, a);
     if (goal) order(state, a.id, goal);

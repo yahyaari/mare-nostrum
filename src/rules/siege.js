@@ -8,7 +8,7 @@
 import { neighbours, roadBetween } from "./graph.js";
 import { access, canAttack, capture, defenders, hostile, wallsOf } from "./moves.js";
 import { N, UNITS } from "./numbers.js";
-import { armyById, empty, men } from "./state.js";
+import { armyById, empty, fleetOf, men } from "./state.js";
 
 /** Bu ordu bu yeri kuşatabilir mi: saldırabileceği, surlu, kara yoluyla komşu bir yer. */
 export function canBesiege(state, army, id) {
@@ -77,7 +77,7 @@ export function tickSieges(state, events = []) {
     if (men(defenders(state, id)) > 0) continue;
     // Teslim: kuşatan ordu içeri girer.
     const from = pl.owner;
-    state.trace?.push({ type: "move", army: a.id, owner: a.owner, men: men(a), ships: a.ships, from: a.at, to: id });
+    state.trace?.push({ type: "move", army: a.id, owner: a.owner, men: men(a), ships: fleetOf(a), from: a.at, to: id });
     capture(state, id, a.owner);
     a.at = id;
     lift(state, a.id);

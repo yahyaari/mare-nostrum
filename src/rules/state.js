@@ -6,10 +6,10 @@
 
 import { CIVS, PLACES, ROADS } from "../data/world.js";
 import { byId } from "./graph.js";
-import { LEVELS, N, UNITS, trait } from "./numbers.js";
+import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { holds } from "./wonders.js";
 
-export const VERSION = 8;
+export const VERSION = 9;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -52,6 +52,11 @@ export function migrate(s) {
     for (const p of Object.values(s.places)) p.builds ??= [];
     s.version = 8;
   }
+  if (s.version === 8) {
+    // Gemi türleri: eski gemiler kadırga (alanı yine `ships`); savaş gemisi yok.
+    for (const u of [...Object.values(s.places), ...s.armies]) { u.trireme ??= 0; u.quinq ??= 0; }
+    s.version = 9;
+  }
   return s;
 }
 
@@ -68,7 +73,7 @@ export function newGame(player, seed = 1, level = "normal") {
     const lv = free ? start.level : p.capital ? 2 : 1;
     const place = {
       owner: p.owner, level: lv, industry: 1, farms: 1, barracks: 1,
-      pop: 0, inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, upgraded: false, recruited: 0,
+      pop: 0, inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, upgraded: false, recruited: 0,
       builds: [], // süren inşaatlar: { what, left, total, paid }
       // Liman yapıları (sadece limanda kullanılır). Tersane 1 ile başlar: gemi yapılabilsin.
       fishery: 0, shipyard: p.port ? 1 : 0, trade: 0, fort: 0, built: 0,
@@ -120,14 +125,38 @@ export const armiesAt = (state, id) => state.armies.filter((a) => a.at === id);
 export const armyById = (state, id) => state.armies.find((a) => a.id === id) ?? null;
 export const men = (u) => UNITS.reduce((n, k) => n + (u[k] ?? 0), 0);
 /** Ne askeri ne gemisi kalmış ordu: silinir. (Sadece gemiden oluşan filo boş değildir.) */
-export const empty = (u) => men(u) === 0 && !(u.ships > 0);
+export const empty = (u) => men(u) === 0 && fleetOf(u) === 0;
 
 /** Karada dövüşenler (gemi ayrı sayılır). */
 export const landMen = (u) => men(u);
 /** Bir ordunun gemileri taşıyabildiği kadar askeri var mı: deniz yolundan geçebilir mi. */
 // Askersiz filo da denize açılır (kullanıcı 21.10: "gemiler denizden yürüsün"); eskiden asker
 // şartı vardı ve sadece gemiden filo deniz yolunu hiç kullanamıyordu.
-export const canSail = (u) => (u.ships ?? 0) > 0 && (u.ships ?? 0) * N.navy.carry >= men(u);
+export const canSail = (u) => fleetOf(u) > 0 && carryOf(u) >= men(u);
+
+// ---- gemiler ----
+
+/** Bütün gemiler, her türden. */
+export const fleetOf = (u) => SHIPS.reduce((n, k) => n + (u[k] ?? 0), 0);
+/** Gemilerin taşıyabildiği asker. */
+export const carryOf = (u) => SHIPS.reduce((n, k) => n + (u[k] ?? 0) * N.navy.types[k].carry, 0);
+/** Deniz savaşındaki gücü (medeniyetin denizciliği ve liman kalesi hariç). */
+export const mightOf = (u) => SHIPS.reduce((n, k) => n + (u[k] ?? 0) * N.navy.types[k].might, 0);
+/** Sadece gemiler: { ships, trireme, quinq }. */
+export const shipsOnly = (u) => Object.fromEntries(SHIPS.map((k) => [k, u[k] ?? 0]));
+
+/**
+ * `n` askeri taşıyacak gemiler, `u`nun gemilerinden: önce kadırgalar (taşımak onların işi),
+ * sonra kinkerem, en son trireme. Yetmiyorsa hepsi. Dönen: { ships, trireme, quinq }.
+ */
+export function shipsToCarry(u, n) {
+  const out = { ships: 0, trireme: 0, quinq: 0 };
+  let left = n;
+  for (const k of ["ships", "quinq", "trireme"]) {
+    while (left > 0 && out[k] < (u[k] ?? 0)) { out[k] += 1; left -= N.navy.types[k].carry; }
+  }
+  return out;
+}
 
 /**
  * Abluka: limanın deniz yollarının öbür ucunda, sahibiyle savaşan birinin, limandakinden
@@ -137,14 +166,14 @@ export function blockaded(state, id) {
   const p = byId[id], pl = state.places[id];
   if (!p.port || !pl.owner) return false;
   // Liman kalesi limanın gemilerini daha değerli kılar: ablukaya almak için daha çok gemi gerekir.
-  const mine = (pl.ships + armiesAt(state, id).filter((a) => a.owner === pl.owner).reduce((n, a) => n + a.ships, 0))
+  const mine = (mightOf(pl) + armiesAt(state, id).filter((a) => a.owner === pl.owner).reduce((n, a) => n + mightOf(a), 0))
     * (1 + (pl.fort ?? 0) * N.port.fortPerLevel);
   for (const r of seaLanes[id] ?? []) {
     const other = r.a === id ? r.b : r.a;
     let theirs = 0;
-    for (const a of armiesAt(state, other)) if (relation(state, pl.owner, a.owner) === "war") theirs += a.ships;
+    for (const a of armiesAt(state, other)) if (relation(state, pl.owner, a.owner) === "war") theirs += mightOf(a);
     const op = state.places[other];
-    if (op.owner && relation(state, pl.owner, op.owner) === "war") theirs += op.ships;
+    if (op.owner && relation(state, pl.owner, op.owner) === "war") theirs += mightOf(op);
     if (theirs > mine) return true;
   }
   return false;
@@ -207,8 +236,9 @@ export function budget(state, civ) {
   const horses = [...placesOf(state, civ).map((id) => state.places[id]), ...armiesOf(state, civ)].reduce((n, u) => n + (u.cav ?? 0), 0);
   b.upkeep = Math.ceil((strength(state, civ) - fed + horses * (N.cavUpkeep - 1)) / N.company) * N.upkeep;
   // Gemiler: tayfa da yer.
-  const ships = [...placesOf(state, civ).map((id) => state.places[id]), ...armiesOf(state, civ)].reduce((n, u) => n + (u.ships ?? 0), 0);
-  b.upkeep += ships * N.navy.upkeep;
+  for (const u of [...placesOf(state, civ).map((id) => state.places[id]), ...armiesOf(state, civ)]) {
+    for (const k of SHIPS) b.upkeep += (u[k] ?? 0) * N.navy.types[k].upkeep;
+  }
   b.food -= b.upkeep;
   return b;
 }
@@ -322,30 +352,31 @@ export function holdGames(state, id) {
 
 /**
  * Gemi: limanın tersanesinde. Tersane seviyesi kadar gemi turda (asker hakkından ayrı); 1.
- * seviyeden sonraki her seviye gemiyi 1 para ucuzlatır.
+ * seviyeden sonraki her seviye gemiyi 1 para ucuzlatır. Trireme tersane 2, kinkerem tersane 3
+ * ister. `type`: "ships" (kadırga), "trireme", "quinq".
  */
-export function shipInfo(state, id) {
-  const pl = state.places[id], civ = state.civs[pl.owner];
-  const cost = { money: Math.max(1, N.navy.cost.money - Math.max(0, (pl.shipyard ?? 0) - 1) * N.port.shipDiscount), weapons: N.navy.cost.weapons };
+export function shipInfo(state, id, type = "ships") {
+  const pl = state.places[id], civ = state.civs[pl.owner], t = N.navy.types[type];
+  const cost = { money: Math.max(1, t.money - Math.max(0, (pl.shipyard ?? 0) - 1) * N.port.shipDiscount), weapons: t.weapons };
   let why = null;
   if (!byId[id].port) why = "notPort";
-  else if ((pl.shipyard ?? 0) < 1) why = "needShipyard";
+  else if ((pl.shipyard ?? 0) < t.yard) why = t.yard > 1 ? "needShipyard" + t.yard : "needShipyard";
   else if ((pl.built ?? 0) >= pl.shipyard) why = "done";
-  else if (pl.pop < N.navy.pop + 10) why = "pop";
+  else if (pl.pop < t.pop + 10) why = "pop";
   else if (civ.money < cost.money) why = "money";
   else if (civ.weapons < cost.weapons) why = "weapons";
   return { cost, why, left: Math.max(0, (pl.shipyard ?? 0) - (pl.built ?? 0)) };
 }
 
 /** Limanda bir gemi yap. */
-export function buildShip(state, id) {
-  const si = shipInfo(state, id);
+export function buildShip(state, id, type = "ships") {
+  const si = shipInfo(state, id, type);
   if (si.why) return false;
   const pl = state.places[id], civ = state.civs[pl.owner];
   civ.money -= si.cost.money;
   civ.weapons -= si.cost.weapons;
-  pl.pop -= N.navy.pop;
-  pl.ships += 1;
+  pl.pop -= N.navy.types[type].pop;
+  pl[type] += 1;
   pl.built += 1;
   return true;
 }
@@ -389,29 +420,33 @@ export function recruit(state, id, type) {
 
 // ---- ordular ----
 
+/** Bir orduda ya da garnizonda sayılan her şey: asker türleri ve gemi türleri. */
+const KEYS = [...UNITS, ...SHIPS];
+
 /**
- * Garnizondan ordu çıkarır. Sayılar bölüğün katı olmak zorunda değil: savaş ve açlık
- * kayıpları bölük gözetmiyor, garnizonda kalan 7 adam da yola çıkabilmeli.
+ * Garnizondan ordu çıkarır: `want` her türden kaç asker ve kaç gemi ({ inf, arch, cav, siege,
+ * ships, trireme, quinq }; yazılmayan 0). Sayılar bölüğün katı olmak zorunda değil: savaş ve
+ * açlık kayıpları bölük gözetmiyor, garnizonda kalan 7 adam da yola çıkabilmeli.
  */
-export function formArmy(state, id, inf, arch, cav = 0, siege = 0, ships = 0) {
+export function muster(state, id, want) {
   const pl = state.places[id];
-  const want = { inf, arch, cav, siege };
-  if (!UNITS.every((k) => Number.isInteger(want[k]) && want[k] >= 0 && want[k] <= pl[k])) return null;
-  if (!Number.isInteger(ships) || ships < 0 || ships > pl.ships) return null;
-  if (men(want) <= 0 && ships <= 0) return null;
-  for (const k of UNITS) pl[k] -= want[k];
-  pl.ships -= ships;
-  const army = { id: state.nextArmy++, owner: pl.owner, at: id, ...want, ships, moves: trait(pl.owner, "moves"), route: [], general: null };
+  const w = Object.fromEntries(KEYS.map((k) => [k, want[k] ?? 0]));
+  if (!KEYS.every((k) => Number.isInteger(w[k]) && w[k] >= 0 && w[k] <= (pl[k] ?? 0))) return null;
+  if (empty(w)) return null;
+  for (const k of KEYS) pl[k] -= w[k];
+  const army = { id: state.nextArmy++, owner: pl.owner, at: id, ...w, moves: trait(pl.owner, "moves"), route: [], general: null };
   state.armies.push(army);
   return army;
 }
+
+/** Kısaca: asker türleri ve kadırga sayısı. */
+export const formArmy = (state, id, inf, arch, cav = 0, siege = 0, ships = 0) => muster(state, id, { inf, arch, cav, siege, ships });
 
 /** Ordu kendi yerleşimindeyse garnizona katılır. */
 export function station(state, armyId) {
   const a = armyById(state, armyId);
   if (!a || state.places[a.at].owner !== a.owner) return false;
-  for (const k of UNITS) state.places[a.at][k] += a[k];
-  state.places[a.at].ships += a.ships;
+  for (const k of KEYS) state.places[a.at][k] += a[k] ?? 0;
   state.armies = state.armies.filter((x) => x !== a);
   return true;
 }
@@ -420,8 +455,7 @@ export function station(state, armyId) {
 export function merge(state, intoId, fromId) {
   const a = armyById(state, intoId), b = armyById(state, fromId);
   if (!a || !b || a === b || a.at !== b.at || a.owner !== b.owner) return false;
-  for (const k of UNITS) a[k] += b[k];
-  a.ships += b.ships;
+  for (const k of KEYS) a[k] = (a[k] ?? 0) + (b[k] ?? 0);
   a.moves = Math.min(a.moves, b.moves);
   // İki general varsa daha tecrübelisi komutayı alır, öteki emekli olur (adı yine kullanılabilir).
   if (b.general && (!a.general || b.general.xp > a.general.xp)) a.general = b.general;
@@ -431,13 +465,13 @@ export function merge(state, intoId, fromId) {
 }
 
 /**
- * Ordudan seçilen kartlar (`want`: { inf, arch, cav, siege, ships }) ayrı bir ordu olur, aynı
+ * Ordudan seçilen kartlar (`want`: { inf, arch, ..., ships, trireme, quinq }) ayrı bir ordu olur, aynı
  * yerde ve aynı kalan hareketle. Hepsi ya da hiçbiri ayrılmaz; kuşatan ordu bölünmez.
  */
 export function detach(state, armyId, want) {
   const a = armyById(state, armyId);
   if (!a || a.besieging) return null;
-  const keys = [...UNITS, "ships"];
+  const keys = KEYS;
   const part = Object.fromEntries(keys.map((k) => [k, want[k] ?? 0]));
   if (!keys.every((k) => Number.isInteger(part[k]) && part[k] >= 0 && part[k] <= (a[k] ?? 0))) return null;
   const rest = Object.fromEntries(keys.map((k) => [k, (a[k] ?? 0) - part[k]]));
@@ -455,20 +489,20 @@ export function detach(state, armyId, want) {
 // sayısını tutmaya devam ediyor: 37 piyade 10, 10, 10 ve 7 kişilik dört kart. Savaşta eriyen
 // bölük küçülür; yarım bölükler birleşince tamamlanır. Her gemi de bir kart.
 
-/** Bir garnizonun ya da ordunun kartları, türlerin sırasıyla: [{ type, men }]. Gemiler sonda. */
+/** Bir garnizonun ya da ordunun kartları, türlerin sırasıyla: [{ type, men }]. Gemiler sonda, türleriyle. */
 export function cardsOf(u) {
   const out = [];
   for (const type of UNITS) {
     for (let n = u[type] ?? 0; n > 0; n -= N.company) out.push({ type, men: Math.min(N.company, n) });
   }
-  for (let i = 0; i < (u.ships ?? 0); i++) out.push({ type: "ships", men: 1 });
+  for (const type of SHIPS) for (let i = 0; i < (u[type] ?? 0); i++) out.push({ type, men: 1 });
   return out;
 }
 
-/** Seçilen kartların (`picks`: kartların sıraları) toplamı: { inf, arch, cav, siege, ships }. */
+/** Seçilen kartların (`picks`: kartların sıraları) toplamı: { inf, arch, cav, siege, ships, trireme, quinq }. */
 export function chosen(u, picks) {
   const cards = cardsOf(u);
-  const want = { inf: 0, arch: 0, cav: 0, siege: 0, ships: 0 };
+  const want = Object.fromEntries(KEYS.map((k) => [k, 0]));
   for (const i of picks) if (cards[i]) want[cards[i].type] += cards[i].men;
   return want;
 }
