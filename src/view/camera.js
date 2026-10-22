@@ -30,7 +30,11 @@ export function resize(cam, w, h) {
 export function clamp(cam) {
   cam.scale = Math.max(cam.min, Math.min(MAX, cam.scale));
   const hw = cam.w / 2 / cam.scale, hh = cam.h / 2 / cam.scale;
-  cam.x = SIZE.x <= hw * 2 ? SIZE.x / 2 : Math.max(hw, Math.min(SIZE.x - hw, cam.x));
+  // `pad`: ekranın bir paneli örttüğü kenarları (piksel). Haritanın kenarı o panelin arkasına
+  // kadar gelebilir - başlangıç ekranında kenardaki medeniyet (Partlar) açık alanın ortasına
+  // gelsin diye.
+  const p = cam.pad ?? {}, l = (p.left ?? 0) / cam.scale, r = (p.right ?? 0) / cam.scale;
+  cam.x = SIZE.x <= hw * 2 ? SIZE.x / 2 : Math.max(hw - l, Math.min(SIZE.x - hw + r, cam.x));
   cam.y = SIZE.y <= hh * 2 ? SIZE.y / 2 : Math.max(hh, Math.min(SIZE.y - hh, cam.y));
 }
 

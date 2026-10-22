@@ -132,6 +132,15 @@ anlaşılmazlığın çaresi sistem kesmek değil, anlatmak. Sade sürümden kal
 - **Tur sonu haberleri** sağ üstte, rapor penceresi araya girmiyor; pencereler süzülerek açılıyor;
   düğmeler basılınca çöküyor; Enter / Tab.
 
+**Medeniyet seçim ekranı (22.10, kullanıcı: "Bannerlord'un açılış ekranı gibi, slayt, panelde
+tek medeniyet, görsel, bonus ve kötü özellik, harita arkada o bölgeye gitsin"):** solda yedi
+asılı sancak, sağda tek medeniyetin paneli: görsel (başkenti kendi arazisinde, iki yanında
+kendi askerleri - Roma lejyonu, Partların atlı okçuları, Sakaların atlıları), ad, Latince/
+lakap alt başlık, kısa tarihçe, ▲ güçlü ▼ zayıf yan, başlangıç toprakları; ‹ › ve noktalar,
+klavyede ← → ve Enter. Harita arkada o medeniyetin topraklarına süzülür, yerleri altın halkalı;
+kenardaki medeniyet (Partlar) için kamera panelin arkasına taşabilir (`camera.pad`), verinin
+bittiği yer koyu örtülür. Panel içeriği kadar uzun, büyük ekranda görsel büyür.
+
 **Sırada (plan sırası): kullanıcı oynasın; iki kişi (hotseat); en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi

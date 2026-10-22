@@ -50,7 +50,7 @@ function layout(figs, side, r, walls) {
 }
 
 /** Tek bir figür; `side` -1 sağa (saldıran), +1 sola bakar. */
-function trooper(ctx, k, owner, x, y, side, s = 1.05) {
+export function trooper(ctx, k, owner, x, y, side, s = 1.05) {
   const color = colorOf(owner);
   ctx.save();
   ctx.translate(x, y);

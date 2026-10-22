@@ -29,7 +29,7 @@ import { SCENE_MS } from "./view/battle.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { alongRoad, drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { CARD_H, MODAL_MS, armyTip, drawUI, eventLines, missionText, placeTip } from "./view/ui.js";
+import { CARD_H, MODAL_MS, armyTip, drawUI, eventLines, missionText, placeTip, startLayout } from "./view/ui.js";
 import { TOP, chipRise } from "./view/hud.js";
 import { SIZE } from "./geo.js";
 import { trait } from "./rules/numbers.js";
@@ -123,7 +123,8 @@ function redraw() {
     const now = performance.now();
     const scene = ui.modal?.kind === "battle" && now - (ui.modal.t0 ?? 0) < SCENE_MS;
     const opening = ui.modal && now - ui.modalAt < MODAL_MS;
-    if (anim.busy() || gliding || scene || opening) redraw();
+    const sliding = ui.screen === "start" && now - (ui.pickAt ?? 0) < 320;
+    if (anim.busy() || gliding || scene || opening || sliding) redraw();
     // Canlı harita: bulutlar süzülür, sancaklar dalgalanır - saniyede 20 kare, sekme arkadayken hiç.
     else if (!ambient && !document.hidden) ambient = setTimeout(() => { ambient = null; redraw(); }, 50);
     if (!anim.busy()) settle();
@@ -212,7 +213,11 @@ const ownArmy = () => {
 
 function mapView() {
   const view = { lang: ui.lang, owners: startOwners, selected: null, armies: [], marks: null, route: null };
-  if (!game) return view;
+  if (!game) {
+    // Başlangıç ekranı: seçilen medeniyetin yerleri halkalı.
+    view.halo = new Set(PLACES.filter((p) => p.owner === ui.pick).map((p) => p.id));
+    return view;
+  }
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
   view.hover = ui.hover ?? null;
@@ -329,6 +334,28 @@ function keepVisible(id) {
   glide(cam.x, cam.y + (s.y - want) / cam.scale);
 }
 
+/**
+ * Başlangıç ekranında haritayı bir medeniyetin topraklarına kaydır: yerleri, panelle sancak
+ * listesinin arasındaki açık alanın ortasına sığacak yakınlıkta.
+ */
+function showCiv(civ, ms = 900) {
+  const S = startLayout(cam), L = S.map;
+  cam.pad = { left: S.list.w, right: cam.w - S.panel.x };
+  const pts = PLACES.filter((p) => p.owner === civ).map((p) => placeAt(p.id));
+  const xs = pts.map((m) => m.x), ys = pts.map((m) => m.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const pad = 3.2; // harita birimi: çevresi de görünsün
+  const scale = Math.max(cam.min * 1.3, Math.min(cam.min * 3.2, L.w / (x1 - x0 + 2 * pad), L.h / (y1 - y0 + 2 * pad)));
+  const sx = L.x + L.w / 2, sy = L.y + L.h / 2;
+  glide((x0 + x1) / 2 - (sx - cam.w / 2) / scale, (y0 + y1) / 2 - (sy - cam.h / 2) / scale, scale, ms);
+}
+
+/** Sıradaki ya da önceki medeniyet (başlangıç ekranında ‹ › ve klavye). */
+function stepCiv(by) {
+  const i = CIVS.findIndex((c) => c.id === ui.pick);
+  dispatch({ do: "pick", civ: CIVS[(i + by + CIVS.length) % CIVS.length].id });
+}
+
 // ---- eylemler ----
 
 const T = () => TEXT[ui.lang];
@@ -357,7 +384,7 @@ function dispatch(act) {
       try { localStorage.setItem("mn.lang", act.lang); } catch { /* varsayılan */ }
       break;
     case "pick":
-      ui.pick = act.civ;
+      if (ui.pick !== act.civ) { ui.pick = act.civ; ui.pickAt = performance.now(); showCiv(act.civ); }
       break;
     case "level":
       ui.level = act.level;
@@ -368,6 +395,7 @@ function dispatch(act) {
       // ?seed=123 aynı oyunu tekrar kurar (araçlar ve hata ayıklama için).
       game = newGame(ui.pick, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level);
       ui.screen = "game";
+      cam.pad = null;
       ui.sel = null;
       ui.army = null;
       ui.news = null;
@@ -379,6 +407,7 @@ function dispatch(act) {
       game = load();
       if (!game) { ui.saved = null; break; }
       ui.screen = "game";
+      cam.pad = null;
       ui.sel = null;
       ui.army = null;
       ui.modal = next();
@@ -394,8 +423,9 @@ function dispatch(act) {
       ui.army = null;
       ui.news = null;
       ui.modal = null;
-      cam.scale = cam.min;
-      clamp(cam);
+      ui.pick ??= CIVS[0].id;
+      ui.pickAt = performance.now();
+      showCiv(ui.pick, 1200);
       break;
     case "askNew":
       ui.modal = { kind: "confirm", text: T().newGameQ, yes: { do: "newGame" } };
@@ -972,8 +1002,15 @@ window.addEventListener("keydown", (e) => {
     ArrowUp: () => panBy(cam, 0, step),
     ArrowDown: () => panBy(cam, 0, -step),
     Escape: () => { if (ui.modal) dispatch({ do: "close" }); else { ui.sel = null; ui.army = null; } },
+    // Başlangıç ekranında oklar medeniyetler arasında gezer.
+    ...(ui.screen === "start" && !ui.modal ? {
+      ArrowLeft: () => stepCiv(-1), ArrowRight: () => stepCiv(1), ArrowUp: () => stepCiv(-1), ArrowDown: () => stepCiv(1),
+    } : {}),
     // Total War gibi: Enter turu bitirir, Tab sıradaki orduyu seçer (karar penceresi açıkken değil).
-    Enter: () => { if (playing && !ui.modal && !blocking) dispatch({ do: "endTurn" }); },
+    Enter: () => {
+      if (ui.screen === "start" && !ui.modal) dispatch({ do: "start" });
+      else if (playing && !ui.modal && !blocking) dispatch({ do: "endTurn" });
+    },
     Tab: () => { if (playing && !ui.modal) dispatch({ do: "nextArmy" }); },
   };
   if (keys[e.key]) {
@@ -995,6 +1032,10 @@ window.addEventListener("resize", fit);
   }
 }
 fit();
+// Açılışta harita bütün Akdeniz'den seçili medeniyetin topraklarına süzülür.
+ui.pick ??= CIVS[0].id;
+ui.pickAt = performance.now();
+showCiv(ui.pick, 1800);
 
 // Yazı tipleri (index.html, Google Fonts) gelince yeniden çiz: tuval bir yazı tipinin
 // yüklenmesini beklemez, o ana kadar yedeğiyle (Georgia) yazar.
@@ -1007,7 +1048,7 @@ if (document.fonts) {
 window.MareNostrum = {
   cam, ui, dispatch, redraw, tap, rightTap, anim,
   get game() { return game; },
-  set game(g) { game = g; ui.screen = g ? "game" : "start"; redraw(); },
+  set game(g) { game = g; ui.screen = g ? "game" : "start"; if (g) cam.pad = null; redraw(); },
   /** Kayma bitene kadar çizer; araç beklemek isterse. */
   get gliding() { return !!glideTo; },
   look(id, zoom = 1) {

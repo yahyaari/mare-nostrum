@@ -155,7 +155,7 @@ if (TERRAIN) {
  */
 const FY = 0.7;
 
-export function drawVignette(ctx, id, owner, r, level = 2) {
+export function drawVignette(ctx, id, owner, r, level = 2, zMax = 2.4) {
   const p = byIdPlace[id], m = POS[id];
   ctx.save();
   ctx.beginPath();
@@ -174,7 +174,7 @@ export function drawVignette(ctx, id, owner, r, level = 2) {
   ctx.fillStyle = colorOf(owner);
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.globalAlpha = 1;
-  const z = Math.min(2.4, r.h / 50);
+  const z = Math.min(zMax, r.h / 50);
   const cx = r.x + r.w / 2, cy = r.y + r.h * FY;
   const f = flagSize(p, owner, z * 0.62);
   banner(ctx, owner, cx, cy - 3 * z, f.w, f.h, f.pole, { gold: p.capital && !!owner });
@@ -599,6 +599,8 @@ function drawPlaces(ctx, cam, view, L) {
       ring(s, 36, "rgba(178,52,40,0.95)", 3, [4, 4]);
     }
     if (p.id === view.selected) ring(s, 24, GOLD_LIGHT, 2.2, null, "rgba(236,212,154,0.28)");
+    // Başlangıç ekranında seçilen medeniyetin yerleri.
+    if (view.halo?.has(p.id)) ring(s, 26, GOLD_LIGHT, 2.6, null, "rgba(236,212,154,0.22)");
     const m = view.marks?.[p.id];
     if (m === "walk") ring(s, 21, "rgba(243,231,201,0.95)", 1.8, [3, 4]);
     else if (m) ring(s, 23, MARK[m], 3.2, null, "rgba(255,255,255,0.12)");
@@ -697,7 +699,7 @@ function drawPlaces(ctx, cam, view, L) {
   // Adlar: önce seçili, sonra başkentler, şehirler, kaleler. Bir levha başka bir levhanın, bir
   // maketin ya da bir ordunun üstüne düşecekse yazılmaz - yakınlaşınca yer açılır.
   const taken = [...shown.map(({ s }) => ({ x: s.x - 16 * z, y: s.y - 14 * z, w: 32 * z, h: 18 * z })), ...tokens.filter((t) => !t.moving && !t.fleet)];
-  const rank = (p) => (p.id === view.selected || p.id === view.hover ? 0 : p.capital ? 1 : p.kind === "city" ? 2 : 3);
+  const rank = (p) => (p.id === view.selected || p.id === view.hover || view.halo?.has(p.id) ? 0 : p.capital ? 1 : p.kind === "city" ? 2 : 3);
   for (const { p, s } of [...shown].sort((a, b) => rank(a.p) - rank(b.p))) {
     const name = p.name[view.lang].toLocaleUpperCase(view.lang === "tr" ? "tr" : "en");
     const size = p.capital ? Math.max(11, Math.min(15, 10.5 * z)) : Math.max(9.5, Math.min(13, 9 * z));

@@ -124,7 +124,7 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
 }
 
 /** Bandın sol köşesinden sarkan büyük sancak: oyuncunun medeniyeti. */
-function hanging(ctx, owner, x, y, w, h) {
+export function hanging(ctx, owner, x, y, w, h) {
   const color = colorOf(owner);
   const cut = 16;
   const shape = () => {

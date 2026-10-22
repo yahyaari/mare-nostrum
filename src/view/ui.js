@@ -9,7 +9,7 @@
 //   news:  { lines, since } tur sonunda sağ üstte beliren haberler (pencere açmadan)
 //   tip:   { lines, since } farenin altındaki şeyin açıklaması
 
-import { CIVS } from "../data/world.js";
+import { CIVS, PLACES } from "../data/world.js";
 import { canDeclare, canPropose } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import { access, canAttack, defenders, forecast, fortOf, hostile, menace, shipsAt, terrainOf, wallsOf } from "../rules/moves.js";
@@ -24,16 +24,18 @@ import { appointInfo } from "../rules/generals.js";
 import { options as letterOptions } from "../rules/events.js";
 import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
 import {
-  INK, SERIF, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, panel, pointer, text, wrap,
+  INK, SERIF, TAU, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, over, panel, pointer, text, wrap,
 } from "./kit.js";
-import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar } from "./hud.js";
+import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging } from "./hud.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shield, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { sight } from "../rules/sight.js";
 import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
-import { drawBattle } from "./battle.js";
+import { drawBattle, trooper } from "./battle.js";
 import { drawVignette } from "./draw.js";
+import { toScreen } from "./camera.js";
+import { SIZE } from "../geo.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
 
@@ -72,74 +74,198 @@ export function drawUI(ctx, cam, game, ui, boxes, view) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Başlangıç
+// Başlangıç: medeniyet seçimi
+//
+// Mount & Blade Bannerlord'un kültür seçimi gibi (kullanıcı 22.10): solda medeniyetlerin
+// sancakları alt alta, sağda TEK medeniyetin paneli - görseli (başkenti kendi arazisinde, önünde
+// kendi askerleri), adı, tarihçesi, güçlü ve zayıf yanı, başlangıç toprakları. ‹ › (ya da
+// klavyede ← →) ile geçilir; arkada harita o medeniyetin topraklarına kayar (main.js showCiv).
+
+/** Başlangıç ekranının parçaları: main.js haritayı `map` alanının ortasına kaydırır. */
+export function startLayout(cam) {
+  const listW = 250;
+  const w = Math.round(Math.min(540, Math.max(410, cam.w * 0.36)));
+  const panel = { x: cam.w - 24 - w, y: 56, w, h: cam.h - 56 - 18 };
+  return { list: { x: 0, y: 0, w: listW, h: cam.h }, panel, map: { x: listW + 20, y: 60, w: panel.x - listW - 40, h: cam.h - 80 } };
+}
+
+/** Görseldeki askerler: medeniyetin kendi gücü (Roma lejyonu, Partların atlı okçusu...). */
+const SIGNATURE = {
+  rome: ["inf", "inf", "inf", "inf", "inf", "inf"],
+  carthage: ["inf", "arch", "cav", "cav", "arch", "inf"],
+  egypt: ["arch", "inf", "inf", "inf", "inf", "arch"],
+  macedon: ["inf", "inf", "inf", "inf", "inf", "inf"],
+  parthia: ["arch", "cav", "arch", "arch", "cav", "arch"],
+  gaul: ["inf", "inf", "cav", "cav", "inf", "inf"],
+  saka: ["cav", "cav", "cav", "cav"],
+};
 
 function drawStart(ctx, cam, ui, boxes, T) {
-  const veil = ctx.createRadialGradient(cam.w / 2, cam.h / 2, cam.h * 0.2, cam.w / 2, cam.h / 2, Math.hypot(cam.w, cam.h) * 0.6);
-  veil.addColorStop(0, "rgba(15,11,7,0.25)");
-  veil.addColorStop(1, "rgba(15,11,7,0.6)");
-  ctx.fillStyle = veil;
-  ctx.fillRect(0, 0, cam.w, cam.h);
-  const W = Math.min(cam.w - 24, 540);
-  // Dar ekranda güçlü ve zayıf yan tek satıra sığmıyor: iki satır, daha yüksek satır.
-  const twoLines = CIVS.some((c) => {
-    const [good, bad] = T.traits[c.id];
-    return measure(ctx, `▲ ${good}   ▼ ${bad}`, { size: 12, italic: true }) > W - 80;
-  });
-  const rowH = twoLines ? 66 : 52;
-  const H = 104 + CIVS.length * rowH + 52 + 76 + (ui.saved ? 56 : 0);
-  const x = Math.round((cam.w - W) / 2), y = Math.max(12, Math.round((cam.h - H) / 2));
-  panel(ctx, x, y, W, H, boxes);
-  text(ctx, T.title, x + W / 2, y + 44, { title: true, bold: true, size: 30, align: "center" });
-  ornament(ctx, x + W / 2, y + 56, 150);
-  text(ctx, T.era, x + W / 2, y + 76, { italic: true, size: 14, color: INK.soft, align: "center" });
-  text(ctx, T.chooseCiv, x + 22, y + 94, { bold: true, size: 13 });
+  const L = startLayout(cam);
+  const civ = CIVS.find((c) => c.id === ui.pick) ?? CIVS[0];
+  // Solda koyu şerit (sancaklar okunsun), sağda panelin arkası hafif koyu; ortada harita açık.
+  let g = ctx.createLinearGradient(0, 0, L.list.w + 140, 0);
+  g.addColorStop(0, "rgba(12,9,6,0.85)");
+  g.addColorStop(0.6, "rgba(12,9,6,0.6)");
+  g.addColorStop(1, "rgba(12,9,6,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, L.list.w + 140, cam.h);
+  g = ctx.createLinearGradient(L.panel.x - 90, 0, cam.w, 0);
+  g.addColorStop(0, "rgba(12,9,6,0)");
+  g.addColorStop(1, "rgba(12,9,6,0.5)");
+  ctx.fillStyle = g;
+  ctx.fillRect(L.panel.x - 90, 0, cam.w - L.panel.x + 90, cam.h);
+  boxes.push({ x: 0, y: 0, w: L.list.w, h: cam.h, act: null });
+  // Kenardaki medeniyette (Partlar) kamera haritanın kenarını geçer: verinin bittiği yerin
+  // ötesi düz gri görünmesin, koyu bir örtüyle kapanır.
+  for (const [mx, d] of [[SIZE.x + 2.6, 1], [-2.6, -1]]) {
+    const ex = toScreen(cam, mx, 0).x;
+    if (d > 0 ? ex >= cam.w : ex <= 0) continue;
+    const eg = ctx.createLinearGradient(ex - d * 60, 0, ex + d * 8, 0);
+    eg.addColorStop(0, "rgba(12,9,6,0)");
+    eg.addColorStop(1, "rgba(12,9,6,0.95)");
+    ctx.fillStyle = eg;
+    if (d > 0) ctx.fillRect(ex - 60, 0, cam.w - ex + 60, cam.h);
+    else ctx.fillRect(0, 0, ex + 60, cam.h);
+  }
 
+  // Oyunun adı
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.8)";
+  ctx.shadowBlur = 8;
+  text(ctx, T.title, 28, 50, { title: true, bold: true, size: 30, color: CREAM });
+  ctx.restore();
+  text(ctx, `${T.era} · ${T.chooseCiv}`, 30, 74, { italic: true, size: 14, color: GOLD_LIGHT });
+
+  // Sancaklar: seçili olan öne çıkar, altın şeritle işaretlenir.
+  const step = Math.min(92, (cam.h - 96 - 16) / CIVS.length);
+  const top = Math.max(96, Math.round((cam.h - step * CIVS.length) / 2 + 24));
   CIVS.forEach((c, i) => {
-    const ry = y + 104 + i * rowH;
-    const on = ui.pick === c.id;
-    if (on) {
-      roundRect(ctx, x + 13, ry + 2, W - 26, rowH - 4, 4);
-      ctx.fillStyle = "rgba(120,85,40,0.13)";
-      ctx.fill();
-      ctx.strokeStyle = GOLD_DARK;
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
+    const y = top + i * step, on = c.id === civ.id;
+    const hot = over(0, y, L.list.w, step);
+    if (on || hot) {
+      const hg = ctx.createLinearGradient(0, 0, L.list.w, 0);
+      hg.addColorStop(0, on ? "rgba(201,164,90,0.38)" : "rgba(201,164,90,0.16)");
+      hg.addColorStop(1, "rgba(201,164,90,0)");
+      ctx.fillStyle = hg;
+      ctx.fillRect(0, y + 4, L.list.w, step - 8);
+      if (on) { ctx.fillStyle = GOLD_LIGHT; ctx.fillRect(0, y + 4, 4, step - 8); }
     }
-    shield(ctx, c.id, x + 22, ry + 8, 22);
-    text(ctx, c.name[ui.lang], x + 54, ry + 24, { title: true, bold: true, size: 16 });
-    const [good, bad] = T.traits[c.id];
-    const o = { size: 12, color: INK.soft, italic: true };
-    if (!twoLines) text(ctx, `▲ ${good}   ▼ ${bad}`, x + 54, ry + 42, o);
-    else {
-      text(ctx, `▲ ${good}`, x + 54, ry + 42, o);
-      text(ctx, `▼ ${bad}`, x + 54, ry + 58, o);
-    }
-    boxes.push({ x: x + 12, y: ry, w: W - 24, h: rowH, act: { do: "pick", civ: c.id } });
+    const bw = Math.min(44, step * 0.52), bh = bw * 1.38;
+    const bx = on ? 36 : 26;
+    ctx.globalAlpha = on || hot ? 1 : 0.78;
+    hanging(ctx, c.id, bx, y + (step - bh) / 2, bw, bh);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 6;
+    text(ctx, c.name[ui.lang].toLocaleUpperCase(ui.lang === "tr" ? "tr" : "en"), bx + bw + 16, y + step / 2 + 6, { title: true, bold: true, size: on ? 18 : 15, color: on ? GOLD_LIGHT : CREAM });
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    boxes.push({ x: 0, y, w: L.list.w, h: step, act: { do: "pick", civ: c.id } });
   });
 
-  // Zorluk: üç düğme yan yana, seçili olan dolu.
-  const ly = y + 104 + CIVS.length * rowH + 8;
-  text(ctx, T.difficulty, x + 22, ly + 25, { bold: true, size: 13 });
-  const lw = Math.min(110, (W - 150) / 3);
-  [["easy", T.lvEasy], ["normal", T.lvNormal], ["hard", T.lvHard]].forEach(([lv, label], i) => {
-    button(ctx, boxes, { x: x + W - 20 - (3 - i) * (lw + 6) + 6, y: ly + 4, w: lw, h: 34, label, size: 13, main: ui.level === lv, act: { do: "level", level: lv } });
-  });
+  civPanel(ctx, ui, boxes, T, civ, L.panel);
+  langToggle(ctx, cam, ui, boxes, 12);
+}
 
-  const by = ly + 52 + 6;
-  const picked = CIVS.find((c) => c.id === ui.pick);
-  button(ctx, boxes, {
-    x: x + 20, y: by, w: W - 40, h: 48, main: true, size: 16, off: !picked,
-    label: picked ? `${T.start} · ${picked.name[ui.lang]}` : T.start, act: { do: "start" },
+/**
+ * Sağdaki panel: tek medeniyet. İçeriği kadar uzun ve ayrılan yerde dikeyde ortalı; üst kısmı
+ * medeniyet değişince kayarak gelir.
+ */
+function civPanel(ctx, ui, boxes, T, civ, area) {
+  const x = area.x + 24, w = area.w - 48, cx = area.x + area.w / 2;
+  const [good, bad] = T.traits[civ.id];
+  const desc = wrap(ctx, T.civDesc[civ.id], w, { size: 14 });
+  const lands = PLACES.filter((p) => p.owner === civ.id).sort((a, b) => (b.capital ? 1 : 0) - (a.capital ? 1 : 0)).map((p) => p.name[ui.lang] + (p.capital ? ` (${T.capital.toLocaleLowerCase(ui.lang)})` : "")).join(" · ");
+  const landRows = wrap(ctx, fill(T.startLands, lands), w, { italic: true, size: 12 });
+  // Alttaki sabit kısım (gezinme, zorluk, başla, devam) ve metin; görsel kalan yeri alır.
+  const bottomH = 40 + 14 + 36 + 14 + 48 + (ui.saved ? 54 : 0) + 18;
+  const textH = 44 + 20 + 18 + desc.length * 19 + 14 + 44 + landRows.length * 16 + 10;
+  const illH = Math.round(Math.max(110, Math.min(300, area.h * 0.32, area.h - 20 - bottomH - textH)));
+  const h = 20 + illH + textH + bottomH;
+  const r = { x: area.x, y: area.y + Math.max(0, Math.round((area.h - h) / 2)), w: area.w, h: Math.min(area.h, h) };
+  panel(ctx, r.x, r.y, r.w, r.h, boxes);
+
+  // Medeniyet değişince içerik sağdan kayarak, saydamdan belirir.
+  const t = Math.min(1, (performance.now() - (ui.pickAt ?? 0)) / 300), e = 1 - (1 - t) ** 3;
+  ctx.save();
+  ctx.globalAlpha = e;
+  ctx.translate((1 - e) * 28, 0);
+  illustration(ctx, civ.id, { x: r.x + 10, y: r.y + 10, w: r.w - 20, h: illH });
+  let y = r.y + 10 + illH + 42;
+  text(ctx, civ.name[ui.lang], cx, y, { title: true, bold: true, size: 28, align: "center" });
+  y += 22;
+  text(ctx, T.civSub[civ.id], cx, y, { italic: true, size: 14, color: INK.soft, align: "center" });
+  y += 14;
+  ornament(ctx, cx, y, 180);
+  y += 24;
+  desc.forEach((l, i) => text(ctx, l, x, y + i * 19, { size: 14 }));
+  y += desc.length * 19 + 10;
+  text(ctx, "▲ " + good, x, y, { bold: true, size: 14, color: INK.good });
+  text(ctx, "▼ " + bad, x, y + 22, { bold: true, size: 14, color: INK.bad });
+  y += 44;
+  landRows.forEach((l, i) => text(ctx, l, x, y + i * 16, { italic: true, size: 12, color: INK.soft }));
+  ctx.restore();
+
+  // Gezinme: ‹ noktalar ›
+  let by = r.y + r.h - bottomH + 4;
+  const i = CIVS.findIndex((c) => c.id === civ.id), n = CIVS.length;
+  button(ctx, boxes, { x, y: by, w: 46, h: 36, label: "‹", size: 22, act: { do: "pick", civ: CIVS[(i + n - 1) % n].id }, tip: [CIVS[(i + n - 1) % n].name[ui.lang]] });
+  button(ctx, boxes, { x: x + w - 46, y: by, w: 46, h: 36, label: "›", size: 22, act: { do: "pick", civ: CIVS[(i + 1) % n].id }, tip: [CIVS[(i + 1) % n].name[ui.lang]] });
+  const gap = Math.min(30, (w - 120) / n);
+  CIVS.forEach((c, j) => {
+    const dx = cx + (j - (n - 1) / 2) * gap, dy = by + 18, on = j === i;
+    ctx.beginPath();
+    ctx.arc(dx, dy, on ? 7 : 5, 0, TAU);
+    ctx.fillStyle = colorOf(c.id);
+    ctx.fill();
+    ctx.strokeStyle = on ? GOLD_DARK : "rgba(43,33,24,0.5)";
+    ctx.lineWidth = on ? 2 : 1;
+    ctx.stroke();
+    boxes.push({ x: dx - gap / 2, y: by, w: gap, h: 36, act: { do: "pick", civ: c.id }, tip: [c.name[ui.lang]] });
   });
+  by += 36 + 14;
+
+  // Zorluk
+  text(ctx, T.difficulty, x, by + 23, { bold: true, size: 13 });
+  const lw = Math.min(104, (w - 110) / 3);
+  [["easy", T.lvEasy], ["normal", T.lvNormal], ["hard", T.lvHard]].forEach(([lv, label], k) => {
+    button(ctx, boxes, { x: x + w - (3 - k) * (lw + 6) + 6, y: by, w: lw, h: 36, label, size: 13, main: ui.level === lv, act: { do: "level", level: lv } });
+  });
+  by += 36 + 14;
+
+  button(ctx, boxes, { x, y: by, w, h: 48, main: true, size: 17, label: `${T.start} · ${civ.name[ui.lang]}`, act: { do: "start" } });
   if (ui.saved) {
     const c = CIVS.find((cc) => cc.id === ui.saved.player);
-    button(ctx, boxes, {
-      x: x + 20, y: by + 58, w: W - 40, h: 44, size: 14,
-      label: `${T.cont} · ${fill(T.contInfo, c.name[ui.lang], ui.saved.turn)}`, act: { do: "continue" },
-    });
+    button(ctx, boxes, { x, y: by + 56, w, h: 44, size: 14, label: `${T.cont} · ${fill(T.contInfo, c.name[ui.lang], ui.saved.turn)}`, act: { do: "continue" } });
   }
-  langToggle(ctx, cam, ui, boxes, 12);
+}
+
+/**
+ * Medeniyetin görseli: başkenti kendi arazisinde (kartlardaki manzara), iki yanında kendi
+ * askerleri sancağa dönük dizilmiş.
+ */
+function illustration(ctx, civ, r) {
+  const cap = PLACES.find((p) => p.owner === civ && p.capital);
+  const z = Math.max(2.4, r.h / 75);
+  drawVignette(ctx, cap.id, civ, r, 3, z);
+  const figs = SIGNATURE[civ];
+  const s = Math.max(1.4, Math.min(3.2, r.h / 92));
+  const half = Math.ceil(figs.length / 2);
+  // Askerler şehrin iki yanında, maketin üstüne binmeden (maket yaklaşık 22 x z yarım genişlikte).
+  const gap = Math.max(14 * s, Math.min(34 * s, (r.w / 2 - 34 - 22 * z) / half));
+  const base = r.y + r.h - 10;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(r.x, r.y, r.w, r.h);
+  ctx.clip();
+  figs.forEach((k, i) => {
+    const left = i < half, j = left ? i : i - half;
+    const x = left ? r.x + 26 + j * gap + (k === "cav" ? 10 * s : 0) : r.x + r.w - 26 - j * gap - (k === "cav" ? 10 * s : 0);
+    // Soldakiler sağa (side -1), sağdakiler sola (side 1) bakar: ortadaki şehre.
+    trooper(ctx, k, civ, x, base - (j % 2) * 5 * s, left ? -1 : 1, s);
+  });
+  ctx.restore();
 }
 
 function langToggle(ctx, cam, ui, boxes, y) {
