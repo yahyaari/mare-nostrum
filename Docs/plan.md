@@ -42,7 +42,7 @@ açılsın, sadece şehirlere kalelere değil ordular etrafta gezebilsin, düşm
    fazlasıyla vur, uzak hedefe A*.
    Denge: 70 oyunla: hız 5 / yol dışı 2 iken ilk düşüş 36'ya indi (eski 43), Sakalar Odessos ile Bizans'ın yanından geçip 12. turda Pella'yı alıyordu. Çözüm: yabancı yerleşimin çevresinden (0.6) geçilmez (`N.reach.hold`, moves.js `heldFor`) - bağımsızlar yine tampon; hız 4, yol dışı 2.5; Sakalara (50+25) ve Makedonya'ya (20+10) başlangıç desteği. Şimdi ilk düşüş 55 (en erken 25), ayakta Roma 50, Kartaca 57, Mısır 45, Makedonya 35, Partlar 48, Galya 36, Sakalar 32 (eski 60/68/61/36/37/60/35: dünya biraz daha kanlı). Deney aracı: `node Tools/experiment.mjs '{"march.mp":4}' 70` (N ve 'T.saka.moves' gibi özellikler; paralel koşarken her biri ayrı dosyaya yazsın - aynı dosyaya >> ile yazınca birbirini siliyor).
 
-4. **Sağdaki şehir kartı ve casuslar** (bu commit): her yere tıklayınca sağda görselli bilgi
+4. **Sağdaki şehir kartı ve casuslar** (5cbaff3): her yere tıklayınca sağda görselli bilgi
    kartı (ui.js `sideCard`, `factsOf`: canlı / görülen / eski rapor), kendi şehrinde altta yine
    panel; yabancı yerin alttaki kartı kalktı (saldırı ve savaş ilanı sağ kartta). Casus: 15 para,
    uzaklık/4 tur, içeride her tur rapor, yakalanma %6 + garnizon; `src/rules/spies.js`, kayıt 11.
