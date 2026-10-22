@@ -8,6 +8,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { CIVS, PLACES, ROADS } from "../src/data/world.js";
 import { onLand, coastDistance, project } from "../src/geo.js";
+import { BOUNDS, LON_SCALE } from "../src/data/bounds.js";
 import { byId, neighbours, path, roadLine } from "../src/rules/graph.js";
 
 let pass = 0, fail = 0;
@@ -165,6 +166,34 @@ const D = await import("../src/rules/diplomacy.js");
 const T = await import("../src/rules/turn.js");
 const { N, UNITS, SHIPS } = await import("../src/rules/numbers.js");
 const { play } = await import("./bot.mjs");
+const MAP = await import("../src/rules/map.js");
+const { POS } = MAP;
+
+// Serbest yürüyüşte ordunun yeri (x, y) ve içinde durduğu yer (at). Testler orduyu doğrudan koyar:
+/** Bir orduyu bir yerleşimin içine koy. */
+const put = (a, id) => { a.at = id; a.x = POS[id].x; a.y = POS[id].y; a.route = []; return a; };
+/** Bir orduyu bir yerleşimin kapısının önüne, sahaya koy (komşu bir kara karesi): menzilde. */
+const before = (a, id) => {
+  const c = MAP.around(MAP.PLACE_CELL[id]).map(([x]) => x).find((x) => MAP.isLand(x) && !MAP.placeAtCell(x));
+  Object.assign(a, MAP.centre(c), { at: null, route: [] });
+  return a;
+};
+/** Bir orduyu bir limanın önüne, denize koy: menzildeki en yakın deniz karesi. */
+const offshore = (a, id) => {
+  let best = -1, bd = Infinity;
+  for (let c = 0; c < MAP.W * MAP.H; c++) {
+    if (MAP.isLand(c)) continue;
+    const d = MAP.dist(MAP.centre(c), POS[id]);
+    if (d < bd) { bd = d; best = c; }
+  }
+  Object.assign(a, MAP.centre(best), { at: null, route: [] });
+  return a;
+};
+/** Bir yerden ordu çıkar; garnizonda o kadar yoksa önce konur. */
+const raise = (st, id, want) => {
+  for (const [k, v] of Object.entries(want)) st.places[id][k] = Math.max(st.places[id][k] ?? 0, v);
+  return S.muster(st, id, want);
+};
 
 {
   const s = S.newGame("rome", 7);
@@ -267,86 +296,264 @@ section("Savaş (bölüm 7) - her kuralın vaadi");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Harita ızgarası: serbest yürüyüşün zemini");
+
+{
+  // Alet önce kendini kanıtlar: denizin ortası deniz, karanın ortası kara.
+  const at = (lon, lat) => { const m = project(lon, lat); return MAP.cellOf(m.x, m.y); };
+  check("ızgara: Akdeniz ortası deniz, Anadolu kara", !MAP.isLand(at(18, 34)) && MAP.isLand(at(33, 39)));
+  // Izgara ekrandaki kıyılarla aynı: kıyıdan uzak 200 rastgele karede onLand ile aynı.
+  let agree = 0, asked = 0;
+  for (let c = 17; c < MAP.W * MAP.H && asked < 200; c += 113) {
+    const m = MAP.centre(c);
+    const lon = m.x / LON_SCALE + BOUNDS.w, lat = BOUNDS.n - m.y;
+    if (coastDistance(lon, lat) < 0.3) continue;
+    asked++;
+    if (MAP.isLand(c) === onLand(lon, lat)) agree++;
+  }
+  check("ızgara kıyılarla aynı (kıyıdan uzak kareler)", asked > 100 && agree === asked, `${agree}/${asked}`);
+  check("her yerleşimin karesi karada", PLACES.every((p) => MAP.isLand(MAP.PLACE_CELL[p.id])));
+  check("iki yerleşim aynı karede değil", new Set(Object.values(MAP.PLACE_CELL)).size === PLACES.length);
+
+  // Kara yolları yürünür ve hızlıdır: iki ucu arasında karadan yol, bedeli yolun uzunluğuna yakın.
+  const s = S.newGame("rome", 7);
+  for (const k of Object.keys(s.places)) s.places[k].owner = "rome"; // her yere girilsin
+  const walker = (id) => ({ owner: "rome", at: id, x: POS[id].x, y: POS[id].y, inf: 10, arch: 0, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, mp: 5, route: [] });
+  const slow = [];
+  for (const r of ROADS.filter((x) => !x.sea)) {
+    const p = M.routeTo(s, walker(r.a), { place: r.b });
+    const pts = roadLine(r).map(([lon, lat]) => project(lon, lat));
+    const len = pts.slice(1).reduce((n, q, i) => n + Math.hypot(q.x - pts[i].x, q.y - pts[i].y), 0);
+    if (!p || p.cost > len * 1.35 + 0.6) slow.push(`${r.a}-${r.b} ${p ? p.cost.toFixed(1) : "yok"}/${len.toFixed(1)}`);
+  }
+  check("her kara yolu karadan yürünür, bedeli uzunluğu kadar (yol hızlı)", !slow.length, slow.slice(0, 6).join(", "));
+  // Boğazlar: Sicilya, Sardinya, Kıbrıs adası; karadan geçilmez. Bizans boğazını yol aşar.
+  check("Sicilya'ya karadan gidilmez (Messina boğazı)", M.routeTo(s, walker("rome"), { place: "syracuse" }) === null);
+  check("Sardinya'ya karadan gidilmez", M.routeTo(s, walker("rome"), { place: "caralis" }) === null);
+  check("Cebelitarık'tan karadan geçilmez: Afrika'ya karadan ancak Akdeniz'i dolaşarak", M.routeTo(s, walker("gades"), { place: "tingis" })?.cost > 40);
+  check("Bizans'tan Anadolu'ya karadan (yol boğazı aşar)", M.routeTo(s, walker("byzantium"), { place: "ancyra" }) !== null);
+  check("Korint'ten Atina'ya karadan (kıstak)", M.routeTo(s, walker("corinth"), { place: "athens" }) !== null);
+  // Deniz yolları: askersiz filo iki liman arasında denizden gider.
+  const fleet = (id) => ({ ...walker(id), inf: 0, ships: 1 });
+  const lanes = ROADS.filter((x) => x.sea && byId[x.a].port && byId[x.b].port).filter((r) => M.routeTo(s, fleet(r.a), { place: r.b }) === null);
+  check("her deniz yolu filoyla geçilir", !lanes.length, lanes.map((r) => `${r.a}-${r.b}`).join(", "));
+  check("filo karadan geçmez: Akdeniz'den Karadeniz'e ancak boğazdan", M.routeTo(s, fleet("carthage"), { place: "sinope" }) !== null);
+  // Toprak: ekrandaki gibi en yakın yerleşimin; denizin ve uzak çölün sahibi yok.
+  check("toprak: Roma'nın yanı Roma'nın, deniz kimsenin", MAP.regionOf(at(12.7, 41.9)) === "rome" && MAP.regionOf(at(18, 34)) === null);
+  check("toprak: uzak çöl kimsenin", MAP.regionOf(at(25, 27)) === null);
+  // Yumuşatılmış yol aynı yerde başlar ve biter, daha az köşeli.
+  const way = M.routeTo(s, walker("rome"), { place: "mediolanum" }).cells;
+  const sm = MAP.smooth(way);
+  check("yumuşatılmış yol: aynı uçlar, daha az nokta", sm.length < way.length && MAP.dist(sm[0], MAP.centre(way[0])) < 1e-9 && MAP.dist(sm.at(-1), MAP.centre(way.at(-1))) < 1e-9);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Hareket ve diplomasi (bölüm 6, 8)");
 
 {
   const s = S.newGame("rome", 7);
   const a = S.formArmy(s, "rome", 30, 0);
-  check("ordu kuruluyor, garnizon boşalıyor", a && s.places.rome.inf === 0);
-  check("tarafsız toprağa girilemez", M.access(s, "rome", "carthage") === null && M.routeTo(s, a, "carthage") === null);
+  check("ordu kuruluyor, garnizon boşalıyor, ordu şehrin içinde", a && s.places.rome.inf === 0 && a.at === "rome" && a.x === POS.rome.x && a.y === POS.rome.y);
+  check("tam hareketle çıkar", a.mp === N.march.mp);
+  check("tarafsızın şehrine girilemez", M.access(s, "rome", "carthage") === null && M.routeTo(s, a, { place: "carthage" }) === null);
   check("bağımsıza saldırılır", M.access(s, "rome", "mediolanum") === "free");
-  check("bir turda bir yol", M.order(s, a.id, "mediolanum") === 1 && a.at === "ariminum" && a.moves === 0);
-  check("hareketi bitmiş ordu saldıramaz", !M.canAttack(s, a, "mediolanum"));
-  M.refresh(s, "rome");
-  const big = S.formArmy(s, "tarentum", 20, 0);
-  a.inf = 200;
-  const ev = M.attack(s, a.id, "mediolanum", [1, 1]);
-  check("saldırı kazanılıyor, yer el değiştiriyor", ev?.won && s.places.mediolanum.owner === "rome" && a.at === "mediolanum");
-  check("alınan yerin nüfusunun dörtte biri kaçar", s.places.mediolanum.pop === Math.round(150 * 0.75), s.places.mediolanum.pop);
-  check("kaybeden ordu yok olur", (() => {
-    big.inf = 5;
-    big.at = "mediolanum"; // karadan: Siraküza deniz aşırı, gemisiz gidilmez; Mediolanum artık Roma'nın
-    M.attack(s, big.id, "massalia", [1, 1]);
-    return !S.armyById(s, big.id);
-  })());
+  const r = M.routeTo(s, a, { place: "ariminum" });
+  check("Ariminum'a yol yoldan: bedeli yolun uzunluğu kadar, bir turdan az", r && r.cost > 2 && r.cost < N.march.mp && r.kind === "walk", r?.cost);
+  M.order(s, a.id, { place: "ariminum" });
+  check("yürüyüp kalenin içine girer, hareketi azalır", a.at === "ariminum" && a.x === POS.ariminum.x && a.mp > 0 && a.mp < N.march.mp, `${a.at} ${a.mp}`);
 
-  // Sakalar: iki yol.
+  // Uzak hedef: bu tur bir kısmı; yol saklanır, her tur kendiliğinden ilerler; düşmanın önünde durur.
+  const s2 = S.newGame("rome", 7);
+  const b = raise(s2, "tarentum", { inf: 200 });
+  M.order(s2, b.id, { place: "mediolanum" });
+  const left = b.route.length;
+  check("uzak hedef: bu tur yolun bir kısmı, kalanı saklanır", left > 0 && !b.at && b.mp < 1, `${left} ${b.mp}`);
+  M.refresh(s2, "rome");
+  M.advance(s2, b);
+  check("ertesi tur kendiliğinden ilerler", b.route.length < left);
+  for (let t = 0; t < 6 && b.route.length; t++) { M.refresh(s2, "rome"); M.advance(s2, b); }
+  check("düşmanın kapısının önünde durur: menzilde, içinde değil", !b.at && !b.route.length && MAP.dist(b, POS.mediolanum) <= N.reach.strike, MAP.dist(b, POS.mediolanum));
+  check("menzildeki yere saldırabilir", M.canAttack(s2, b, "mediolanum"));
+  const mp = b.mp;
+  b.mp = 0;
+  check("hareketi bitmiş ordu saldıramaz", !M.canAttack(s2, b, "mediolanum"));
+  b.mp = mp || 1;
+  const pop0 = s2.places.mediolanum.pop;
+  const ev = M.attack(s2, b.id, "mediolanum", [1, 1]);
+  check("saldırı kazanılıyor, yer el değiştiriyor, ordu içeri girer", ev?.won && s2.places.mediolanum.owner === "rome" && b.at === "mediolanum" && b.x === POS.mediolanum.x);
+  check("alınan yerin nüfusunun dörtte biri kaçar", s2.places.mediolanum.pop === Math.round(pop0 * 0.75), s2.places.mediolanum.pop);
+  check("saldırı hareketi bitirir", b.mp === 0);
+  const weak = raise(s2, "rome", { inf: 5 });
+  check("menzil dışından saldırılamaz", !M.canAttack(s2, weak, "massalia"));
+  before(weak, "massalia");
+  M.attack(s2, weak.id, "massalia", [1, 1]);
+  check("kaybeden ordu yok olur", !S.armyById(s2, weak.id));
+
+  // Yol hızlıdır: aynı uzunluk yolda yarı bedel; Sakalar iki kat yürür.
+  const road = [...Array(MAP.W * MAP.H).keys()].find((c) => MAP.isRoad(c) && MAP.around(c).some(([n]) => MAP.isRoad(n)));
+  const [rn, rl] = MAP.around(road).find(([n]) => MAP.isRoad(n));
+  const off = [...Array(MAP.W * MAP.H).keys()].find((c) => MAP.isLand(c) && !MAP.isRoad(c) && MAP.around(c).some(([n]) => MAP.isLand(n) && !MAP.isRoad(n)));
+  const [on, ol] = MAP.around(off).find(([n]) => MAP.isLand(n) && !MAP.isRoad(n));
+  check("yolda birim başına 1, yol dışında 2", Math.abs(MAP.stepCost(road, rn, rl) / rl - N.march.road) < 1e-9 && Math.abs(MAP.stepCost(off, on, ol) / ol - N.march.land) < 1e-9);
   const k = S.newGame("saka", 7);
   const sa = S.formArmy(k, "olbia", 10, 0);
-  check("Saka ordusu turda iki yol yürür", M.order(k, sa.id, "tanais") === 2 && sa.at === "tanais");
+  check("Saka ordusunun hareketi iki kat", sa.mp === 2 * N.march.mp);
+  M.order(k, sa.id, { place: "tanais" });
+  check("Saka ordusu bir turda Olbia'dan Tanais'e (iki yol)", sa.at === "tanais", `${sa.at} ${sa.route.length}`);
+
+  // Boş araziye yürüyüş: o kare.
+  const fx = S.newGame("rome", 7);
+  const fa = S.formArmy(fx, "rome", 20, 0);
+  const spot = project(12.0, 42.6); // Apeninler, yol dışı
+  M.order(fx, fa.id, spot);
+  check("boş araziye yürür, oraya varır, hiçbir yerin içinde değil", !fa.at && MAP.cellOf(fa.x, fa.y) === MAP.cellOf(spot.x, spot.y) && !fa.route.length, `${fa.x} ${fa.y}`);
+  check("gemisiz ordu denize yürüyemez", M.routeTo(fx, fa, project(11, 41.5)) === null);
+
+  // Önünü kesme: savaştığı birinin ordusunun menziline giren ordu durur.
+  const z = S.newGame("rome", 7);
+  z.relations[S.key("rome", "gaul")] = "war";
+  const ro = raise(z, "rome", { inf: 50 });
+  ro.mp = 40;
+  const way = M.routeTo(z, ro, { place: "massalia" }).cells;
+  const mid = MAP.centre(way[Math.floor(way.length / 2)]);
+  const gal = raise(z, "bibracte", { inf: 50 });
+  gal.at = null; gal.x = mid.x; gal.y = mid.y;
+  M.order(z, ro.id, { place: "massalia" });
+  check("düşman ordusu yolu kesince menzilinde durur", ro.at !== "massalia" && !ro.route.length && MAP.dist(ro, gal) <= N.reach.zoc && ro.mp > 0, `${ro.at} ${MAP.dist(ro, gal)}`);
+
+  // Yabancı yerleşimin çevresinden geçilmez: bağımsız Bizans boğazı tutuyor.
+  const h = S.newGame("rome", 7);
+  const an = raise(h, "rome", { inf: 20 });
+  put(an, "ancyra");
+  h.places.ancyra.owner = "rome";
+  h.places.pella.owner = "rome";
+  const shut = M.routeTo(h, an, { place: "pella" });
+  h.places.byzantium.owner = "rome";
+  const open = M.routeTo(h, an, { place: "pella" });
+  // Bizans kapalıyken yol Çanakkale'den (Efes yolunun feribotu) dolanır: daha uzun.
+  check("bağımsız Bizans boğazı tutarken yol dolanır, alınınca kısalır", open && (!shut || shut.cost > open.cost + 2), `${shut?.cost.toFixed(1)} / ${open?.cost.toFixed(1)}`);
+  check("yabancı yerleşimin çevresi yolda yok", shut === null || shut.cells.every((c) => !MAP.rings(N.reach.hold).at(c).includes("byzantium")));
+  h.places.byzantium.owner = null;
+  before(an, "byzantium");
+  check("yerleşimin kapısındaki ordu oradan uzaklaşabilir", M.routeTo(h, an, { place: "ancyra" }) !== null);
+  const gate = MAP.centre(MAP.around(MAP.PLACE_CELL.byzantium).map(([x]) => x).find((x) => MAP.isLand(x) && !MAP.placeAtCell(x)));
+  check("yerleşimin çevresindeki bir noktaya yürünebilir (oraya gidilir)", M.routeTo(h, put(an, "ancyra"), gate) !== null);
 
   // Diplomasi: tarafsız -> müttefik -> bozuluyor -> o tur savaş yok -> ertesi tur var.
   const d = S.newGame("rome", 7);
   d.relations[S.key("rome", "gaul")] = "ally";
   const g = S.formArmy(d, "rome", 20, 0);
-  check("müttefik toprağından geçilir", M.access(d, "rome", "bibracte") === "ally");
-  g.at = "gergovia";
+  check("müttefik şehrine girilir", M.access(d, "rome", "bibracte") === "ally" && M.routeTo(d, g, { place: "bibracte" })?.kind === "walk");
+  put(g, "gergovia");
   check("ittifak bozuluyor", D.breakAlliance(d, "rome", "gaul")?.type === "broke" && S.relation(d, "rome", "gaul") === "neutral");
-  check("bozulunca ordu evine döner", S.placesOf(d, "rome").includes(g.at), g.at);
+  check("bozulunca ordu şehrin dışına, kapının önüne çıkar", g.at === null && MAP.dist(g, POS.gergovia) < 0.5, `${g.at} ${MAP.dist(g, POS.gergovia)}`);
   check("ittifakın bozulduğu tur savaş ilan edilemez", D.declareWar(d, "rome", "gaul") === null);
   d.turn++;
   check("ertesi tur edilir", D.declareWar(d, "rome", "gaul")?.type === "war");
   check("savaşla barış teklifi turda bir", D.proposePeace(d, "rome", "gaul") && D.proposePeace(d, "rome", "gaul") === null);
 
-  // Ekranın izi: her adım ve her saldırı kaydediliyor; iz istenmediyse hiç yazılmıyor.
+  // Ekranın izi: her yürüyüş ve her saldırı kaydediliyor; iz istenmediyse hiç yazılmıyor.
   const tr = S.newGame("saka", 7);
   tr.trace = [];
   const ta = S.formArmy(tr, "olbia", 10, 0);
-  M.order(tr, ta.id, "tanais");
-  check("iz: iki yol, iki adım", tr.trace.length === 2 && tr.trace[0].from === "olbia" && tr.trace[1].to === "tanais",
-    JSON.stringify(tr.trace));
+  M.order(tr, ta.id, { place: "tanais" });
+  const t0 = tr.trace[0];
+  check("iz: bir yürüyüş, Olbia'dan Tanais'e noktalar", tr.trace.length === 1 && t0.type === "move" && t0.path[0][0] === POS.olbia.x && t0.path.at(-1)[0] === POS.tanais.x && t0.path.length > 10,
+    JSON.stringify(tr.trace).slice(0, 120));
   const tq = S.newGame("rome", 7);
   const tb = S.formArmy(tq, "rome", 30, 0);
-  M.order(tq, tb.id, "ariminum");
+  M.order(tq, tb.id, { place: "ariminum" });
   check("iz istenmediyse yazılmıyor", !("trace" in tq));
+  before(tb, "mediolanum");
   M.refresh(tq, "rome");
   tq.trace = [];
   tb.inf = 200;
   M.attack(tq, tb.id, "mediolanum", [1, 1]);
-  check("iz: saldırı kaydı", tq.trace.length === 1 && tq.trace[0].type === "attack" && tq.trace[0].won && tq.trace[0].oldOwner === null);
+  check("iz: saldırı kaydı", tq.trace.length === 1 && tq.trace[0].type === "attack" && tq.trace[0].won && tq.trace[0].oldOwner === null && tq.trace[0].at === "mediolanum");
 
   // Saldıranı püskürten savunma asker kazanamaz (bölüğe yuvarlama 7'yi 10 yapıyordu).
   let grew = 0;
   for (let i = 0; i < 60; i++) {
-    const g = S.newGame("rome", 7);
-    g.places.mediolanum.inf = 3 + i;
-    g.places.mediolanum.arch = (i * 7) % 23;
-    const a2 = S.formArmy(g, "ariminum", 10, 0);
+    const g2 = S.newGame("rome", 7);
+    g2.places.mediolanum.inf = 3 + i;
+    g2.places.mediolanum.arch = (i * 7) % 23;
+    const a2 = before(S.formArmy(g2, "ariminum", 10, 0), "mediolanum");
     a2.inf = 2 + (i % 9);
-    const was = g.places.mediolanum.inf + g.places.mediolanum.arch;
-    const ev2 = M.attack(g, a2.id, "mediolanum", [1, 1]);
-    if (ev2 && !ev2.won && g.places.mediolanum.inf + g.places.mediolanum.arch > was) grew++;
+    const was = g2.places.mediolanum.inf + g2.places.mediolanum.arch;
+    const ev2 = M.attack(g2, a2.id, "mediolanum", [1, 1]);
+    if (ev2 && !ev2.won && g2.places.mediolanum.inf + g2.places.mediolanum.arch > was) grew++;
   }
   check("püskürten savunma asker kazanmıyor", grew === 0, grew);
 
-  // Tehdit uyarısı: yanında SAVAŞTIĞI birinin ordusu varsa; tarafsızın ordusu tehdit değil.
+  // Tehdit uyarısı: yakında SAVAŞTIĞI birinin ordusu varsa; tarafsızın ordusu tehdit değil.
   const w = S.newGame("rome", 7);
-  const c = S.formArmy(w, "carthage", 30, 0);
-  c.at = "syracuse";
   w.places.syracuse.owner = "carthage";
+  const c = before(S.formArmy(w, "carthage", 30, 0), "syracuse");
   check("tarafsızın ordusu tehdit sayılmaz", M.menace(w, "tarentum") === 0);
   D.declareWar(w, "carthage", "rome");
-  check("savaştığın ordu yanındaysa tehdit", M.menace(w, "tarentum") === 30 && M.menace(w, "rome") === 0);
+  check("savaştığın ordu yakındaysa tehdit", M.menace(w, "tarentum") === 30 && M.menace(w, "rome") === 0, `${M.menace(w, "tarentum")} ${M.menace(w, "rome")}`);
+  void c;
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Meydan muharebesi ve tarafsızın toprağı");
+
+{
+  const s = S.newGame("rome", 7);
+  s.relations[S.key("rome", "gaul")] = "war";
+  const ro = before(raise(s, "rome", { inf: 120 }), "mediolanum");
+  const ga = raise(s, "bibracte", { inf: 40 });
+  ga.at = null; ga.x = ro.x + 0.25; ga.y = ro.y;
+  check("menzildeki düşman ordusuna saldırılır", M.canStrike(s, ro, ga));
+  check("savaşmadığın ordusuna saldırılmaz", (() => { s.relations[S.key("rome", "gaul")] = "neutral"; const no = !M.canStrike(s, ro, ga); s.relations[S.key("rome", "gaul")] = "war"; return no; })());
+  check("şehrin içindeki orduya meydan muharebesi yok", (() => { put(ga, "bibracte"); const no = !M.canStrike(s, ro, ga); ga.at = null; ga.x = ro.x + 0.25; ga.y = ro.y; return no; })());
+  ga.general = { name: "Brennus", level: 1, xp: 0, traits: [] };
+  const f = M.forecastField(s, ro, ga);
+  check("meydan muharebesinin tahmini", f.odds === "easy", f.odds);
+  s.trace = [];
+  const ev = M.strike(s, ro.id, ga.id, [1, 1]);
+  check("meydan muharebesi: kazanan kalır, kaybeden ordu yok olur", ev?.won && ev.field && !S.armyById(s, ga.id) && S.armyById(s, ro.id) && ro.mp === 0);
+  check("olayın yeri en yakın yerleşim, sursuz", ev.place === "mediolanum" && ev.at && s.trace[0]?.type === "attack" && s.trace[0].at === null);
+  check("yenilen generali ölür", s.fallenGenerals?.gaul?.includes("Brennus"));
+
+  // Denizde: filo filoya; yenilen filo askerleriyle batar.
+  const n = S.newGame("rome", 7);
+  n.relations[S.key("rome", "carthage")] = "war";
+  // Kartaca açıklarında yan yana iki deniz karesi.
+  const c1 = [...Array(MAP.W * MAP.H).keys()].find((c) => !MAP.isLand(c) && MAP.dist(MAP.centre(c), POS.carthage) < 1.2 && MAP.around(c).some(([x]) => !MAP.isLand(x)) && MAP.around(c).some(([x]) => MAP.isLand(x) && !MAP.placeAtCell(x)));
+  const c2 = MAP.around(c1).find(([x]) => !MAP.isLand(x))[0];
+  const rf = raise(n, "rome", { inf: 20, trireme: 3 });
+  rf.at = null; Object.assign(rf, MAP.centre(c1)); rf.mp = 5;
+  const cf = raise(n, "carthage", { inf: 20, ships: 2 });
+  cf.at = null; Object.assign(cf, MAP.centre(c2));
+  const nev = M.strike(n, rf.id, cf.id, [1, 1]);
+  check("denizde: triremeler kadırgaları batırır, askerleri de", nev?.won && nev.naval && !S.armyById(n, cf.id) && rf.trireme >= 2, JSON.stringify(nev?.naval));
+  const ashore = raise(n, "carthage", { inf: 10 });
+  ashore.at = null; Object.assign(ashore, MAP.centre(MAP.around(c1).map(([x]) => x).find((x) => MAP.isLand(x) && !MAP.placeAtCell(x))));
+  rf.mp = 5;
+  check("karadaki ordu denizdeki filoya saldıramaz", !M.canStrike(n, ashore, rf) && MAP.dist(ashore, rf) <= N.reach.strike);
+
+  // Tarafsızın toprağı: girilir ama öfkelenir; sabrı taşınca savaş.
+  const t = S.newGame("rome", 7);
+  const tres = before(S.formArmy(t, "rome", 30, 0), "alexandria");
+  check("toprak: İskenderiye'nin önü Mısır'ın", MAP.regionOf(MAP.cellOf(tres.x, tres.y)) === "alexandria");
+  const evs = D.trespass(t, []);
+  check("tarafsızın toprağında: öfke +1 ve oyuncuya haber", D.angerOf(t, "egypt", "rome") === 1 && evs.some((e) => e.type === "trespass" && e.by === "rome" && e.victim === "egypt"));
+  D.trespass(t, []); D.trespass(t, []);
+  check("üç tur sonra öfke savaş eşiğinde", D.angerOf(t, "egypt", "rome") >= N.anger.war);
+  check("öfkeli medeniyet ittifak istemez", !D.wantsAlliance(t, "egypt", "rome"));
+  t.turn = 3; // barış süresinin içinde
+  const { aiTurn: AI } = await import("../src/rules/ai.js");
+  const wev = [];
+  AI(t, "egypt", wev);
+  check("öfkesi taşan bilgisayar barış süresini beklemeden savaş açar", S.relation(t, "egypt", "rome") === "war" && wev.some((e) => e.type === "war" && e.on === "rome"));
+  const u = S.newGame("rome", 7);
+  before(S.formArmy(u, "rome", 30, 0), "alexandria");
+  D.trespass(u, []);
+  u.armies = [];
+  D.trespass(u, []);
+  check("çıkınca öfke söner", D.angerOf(u, "egypt", "rome") === 0.5);
+  check("bilgisayar tarafsızın toprağını pahalı sayar", M.avoidFor(u, "rome")(MAP.cellOf(POS.alexandria.x + 0.5, POS.alexandria.y + 0.5)) > 0 && M.avoidFor(u, "rome")(MAP.PLACE_CELL.tarentum) === 0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -357,7 +564,7 @@ const EV = await import("../src/rules/events.js");
 {
   const s = S.newGame("rome", 7);
   check("başlangıçta herkes 100", Object.values(s.places).every((p) => p.loyalty === 100));
-  const a = S.formArmy(s, "ariminum", 10, 0);
+  const a = before(S.formArmy(s, "ariminum", 10, 0), "mediolanum");
   a.inf = 300;
   M.attack(s, a.id, "mediolanum", [1, 1]);
   check("alınan yer 20 ile başlar", s.places.mediolanum.loyalty === N.loyalty.captured);
@@ -514,7 +721,7 @@ const GN = await import("../src/rules/generals.js");
 
   // Ordu yenilirse general ölür ve adı bir daha verilmez.
   const d = S.newGame("rome", 7);
-  const b = S.formArmy(d, "ariminum", 10, 0);
+  const b = before(S.formArmy(d, "ariminum", 10, 0), "mediolanum");
   const gb = GN.appoint(d, b.id) ?? (d.civs.rome.money = 99, GN.appoint(d, b.id));
   M.attack(d, b.id, "mediolanum", [1, 1]);
   check("yenilen ordunun generali ölür", !S.armyById(d, b.id) && d.fallenGenerals.rome.includes(gb.name));
@@ -539,13 +746,13 @@ const GN = await import("../src/rules/generals.js");
   check("birleşmede tecrübeli general komutayı alır", x.general.level === 3);
   x.general.traits = ["swift"];
   M.refresh(e, "rome");
-  check("hızlı general: bir yol fazla", x.moves === 2);
-  const before = S.budget(e, "rome").upkeep;
+  check("hızlı general: hareket bir buçuk kat", x.mp === 1.5 * N.march.mp);
+  const upkeep0 = S.budget(e, "rome").upkeep;
   x.inf = 100;
   const fat = S.budget(e, "rome").upkeep;
   x.general.traits = ["supply"];
   // 100 askerlik ordunun yarısı 50 asker = 5 bölük daha az bakım.
-  check("iaşeci general: ordu yarı yiyecek yer", S.budget(e, "rome").upkeep === fat - 5 && fat > before, `${before} ${fat} ${S.budget(e, "rome").upkeep}`);
+  check("iaşeci general: ordu yarı yiyecek yer", S.budget(e, "rome").upkeep === fat - 5 && fat > upkeep0, `${upkeep0} ${fat} ${S.budget(e, "rome").upkeep}`);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -597,28 +804,24 @@ section("Donanma (bölüm 15)");
     && s.civs.carthage.money === 26 && s.civs.carthage.weapons === 3 && s.places.carthage.pop === pop - 5);
   check("gemi asker hakkından yemez, tersaneninkinden yer", !S.recruitInfo(s, "carthage", "inf").why && S.shipInfo(s, "carthage").why === "done");
 
-  // Deniz yolu gemi ister: bir gemi 25 asker.
+  // Denizi geçmek gemi ister: gemiler bütün askerini taşımalı (bir kadırga 25).
   const a = S.formArmy(s, "carthage", 30, 0);
-  check("gemisiz ordu Sicilya'ya yol bulamaz", M.routeTo(s, a, "lilybaeum") === null && M.needsShips(s, a, "lilybaeum"));
+  check("gemisiz ordu Sicilya'ya yol bulamaz", M.routeTo(s, a, { place: "lilybaeum" }) === null && M.needsShips(s, a, { place: "lilybaeum" }));
   a.ships = 1;
-  check("1 gemi 30 askere yetmez", !S.canSail(a) && M.routeTo(s, a, "lilybaeum") === null);
+  check("1 gemi 30 askere yetmez", !S.canSail(a) && M.routeTo(s, a, { place: "lilybaeum" }) === null);
   a.ships = 2;
-  check("2 gemi yeter: deniz yolu açılır", S.canSail(a) && M.order(s, a.id, "lilybaeum") === 1 && a.at === "lilybaeum");
+  M.order(s, a.id, { place: "lilybaeum" });
+  check("2 gemi yeter: denizden Lilybaion'a, bir turda", S.canSail(a) && a.at === "lilybaeum", `${a.at} ${a.route.length}`);
 
-  // Askersiz filo (kullanıcı: "gemiler denizden yürüsün"): denizden gider, karadan yürümez,
-  // saldıramaz. Eskiden canSail asker istiyordu ve filo sadece karadan yürüyebiliyordu.
+  // Askersiz filo (kullanıcı: "gemiler denizden yürüsün"): denizden gider, karaya çıkmaz,
+  // limana girer, saldıramaz.
   const navy = S.formArmy(s, "carthage", 0, 0, 0, 0, 2);
-  check("askersiz filo denize açılır", S.canSail(navy) && M.routeTo(s, navy, "lilybaeum")?.length === 1);
-  const landRoad = ROADS.find((r) => !r.sea && (r.a === "carthage" || r.b === "carthage"));
-  check("askersiz filo limandan karaya yürümez", landRoad && !M.canUse(navy, landRoad) && M.routeTo(s, navy, "cirta") === null);
+  check("askersiz filo denize açılır, limana gider", M.modeOf(navy) === "sea" && M.routeTo(s, navy, { place: "lilybaeum" }) !== null);
+  check("askersiz filo karaya yürümez", M.routeTo(s, navy, { place: "cirta" }) === null && M.routeTo(s, navy, project(9.5, 35.5)) === null);
   check("askersiz filo saldıramaz", !M.canAttack(s, navy, "caralis"));
-  check("askerli ordu kara yolunu kullanır", M.canUse(a, landRoad));
-  navy.at = "memphis";
-  check("karada kalmış filo limana dönebilir", M.canUse(navy, ROADS.find((r) => !r.sea && (r.a === "memphis" || r.b === "memphis"))));
-  navy.at = "carthage";
-  S.station(s, navy.id);
+  check("gemileri yeten ordu hem karadan hem denizden gider", M.modeOf(a) === "both" && M.modeOf(raise(s, "carthage", { inf: 10 })) === "land");
 
-  // Deniz savaşı: denizden saldırıda önce limandaki gemiler.
+  // Deniz savaşı: denizden saldırıda (saldıran denizde) önce limandaki gemiler.
   const sea = (ships, defShips, civ = "rome") => {
     const g = S.newGame(civ, 7);
     const from = civ === "rome" ? "tarentum" : "carthage";
@@ -627,37 +830,39 @@ section("Donanma (bölüm 15)");
     g.places[target].ships = defShips;
     const army = S.formArmy(g, from, 10, 0);
     army.inf = 50; army.ships = ships;
+    offshore(army, target);
     const ev = M.attack(g, army.id, target, [1, 1]);
     return { g, ev, army, target };
   };
   const lost = sea(2, 3);
-  check("filo yenilirse ordu denizde kaybolur", lost.ev?.drowned && !S.armyById(lost.g, lost.army.id) && lost.g.places.syracuse.owner === null);
+  check("filo yenilirse ordu denizde kaybolur", lost.ev?.drowned && !S.armyById(lost.g, lost.army.id) && lost.g.places.syracuse.owner === null, JSON.stringify(lost.ev?.naval));
   check("kazanan filo da gemi kaybeder", lost.g.places.syracuse.ships > 0 && lost.g.places.syracuse.ships < 3);
   const won = sea(4, 2);
   check("filo kazanırsa karaya çıkılır", won.ev && !won.ev.drowned && won.ev.naval?.won && won.g.places.syracuse.ships === 0);
   check("Kartaca gemisi x1.5: 3 gemi 4 gemiyi yener", sea(3, 4, "carthage").ev?.naval?.won && !sea(3, 4, "rome").ev?.naval?.won);
   check("tahmin deniz savaşını sayar", M.forecast(lost.g, { at: "tarentum", inf: 500, arch: 0, ships: 1 }, "rome", "syracuse").odds === "hopeless");
+  const land = S.newGame("rome", 7);
+  land.places.syracuse.ships = 5;
+  const ashore = before(S.formArmy(land, "tarentum", 20, 0), "syracuse");
+  ashore.inf = 300;
+  const lev = M.attack(land, ashore.id, "syracuse", [1, 1]);
+  check("karadan saldırıda limandaki gemiler savaşmaz", lev && !lev.naval && lev.won);
 
-  // Abluka: savaştığın birinin daha çok gemisi deniz yolunun öbür ucunda.
+  // Abluka: savaştığın birinin, limanın önünde denizde, limandakinden güçlü filosu.
   const b = S.newGame("rome", 7);
   const fleet = S.formArmy(b, "carthage", 0, 0, 0, 0, 2);
-  fleet.at = "lilybaeum";
-  b.places.syracuse.owner = "rome";
-  b.places.syracuse.ships = 1;
-  const free = S.output(b, "syracuse");
-  check("savaş yokken abluka yok", !S.blockaded(b, "syracuse"));
+  offshore(fleet, "tarentum");
+  const free = S.output(b, "tarentum");
+  check("savaş yokken abluka yok", !S.blockaded(b, "tarentum"));
   b.relations[S.key("carthage", "rome")] = "war";
-  fleet.at = "lilybaeum";
-  b.places.lilybaeum.owner = "carthage";
-  // Lilybaion-Siraküza kara yolu; deniz komşusu Tarentum: filo Tarentum'un karşısında olmalı.
-  b.places.tarentum.owner = "rome";
-  b.places.syracuse.owner = "carthage";
-  fleet.at = "syracuse";
   const t0 = S.output(b, "tarentum");
   check("abluka: balık kesilir, vergi yarıya", S.blockaded(b, "tarentum") && t0.food === b.places.tarentum.farms * N.wheatPerFarm
     && Math.abs(t0.money - (b.places.tarentum.pop / N.taxPer) * 0.5) < 1e-9, JSON.stringify(t0));
   b.places.tarentum.ships = 3;
-  check("limanda daha çok gemi varsa abluka yok", !S.blockaded(b, "tarentum"));
+  check("limanda daha güçlü filo varsa abluka yok", !S.blockaded(b, "tarentum"));
+  b.places.tarentum.ships = 1;
+  offshore(fleet, "syracuse");
+  check("uzaktaki filo abluka yapmaz", !S.blockaded(b, "tarentum"));
   check("savaşsız çıktı aynı kalır", free.food > 0);
 
   // Filo (sadece gemi) ordudur: silinmez, ama karaya saldıramaz.
@@ -669,7 +874,7 @@ section("Donanma (bölüm 15)");
   check("kıtlık filoyu silmez", !!S.armyById(f, onlyShips.id));
   check("filo karaya saldıramaz", !M.canAttack(f, onlyShips, "syracuse"));
   const g = S.newGame("rome", 7);
-  const raid = S.formArmy(g, "ariminum", 10, 0); raid.inf = 300;
+  const raid = before(S.formArmy(g, "ariminum", 10, 0), "mediolanum"); raid.inf = 300;
   g.places.mediolanum.ships = 4;
   M.attack(g, raid.id, "mediolanum", [1, 1]);
   check("alınan limanın gemileri yanar", g.places.mediolanum.ships === 0);
@@ -756,9 +961,9 @@ section("Birlik kartları: her bölük bir kart");
   const a = S.formArmy(s, "rome", pick.inf, pick.arch, pick.cav, pick.siege, pick.ships);
   check("seçilen kartlar dışarı çıkar, gerisi garnizonda", a && a.inf === 20 && a.arch === 10 && s.places.rome.inf === 20 && s.places.rome.arch === 10);
   a.general = { name: "Scipio", level: 1, xp: 0, traits: [] };
-  a.moves = 1;
+  a.mp = 1;
   const b = S.detach(s, a.id, { inf: 10, arch: 10 });
-  check("ayrılan kartlar yeni ordu: aynı yerde, aynı hareketle", b && b.at === "rome" && b.inf === 10 && b.arch === 10 && b.moves === 1 && s.armies.length === 2);
+  check("ayrılan kartlar yeni ordu: aynı yerde, aynı hareketle", b && b.at === "rome" && b.x === a.x && b.inf === 10 && b.arch === 10 && b.mp === 1 && s.armies.length === 2);
   check("kalan ordu ve generali yerinde", a.inf === 10 && a.arch === 0 && a.general?.name === "Scipio" && !b.general);
   check("hepsi ayrılmaz", S.detach(s, a.id, { inf: 10 }) === null && a.inf === 10);
   check("hiçbiri ayrılmaz", S.detach(s, b.id, {}) === null);
@@ -817,14 +1022,14 @@ section("Gemi türleri: kadırga, trireme, kinkerem");
   b.places.tarentum.inf = 80; b.places.tarentum.trireme = 3; b.places.tarentum.ships = 2;
   const fl = S.muster(b, "tarentum", { inf: 50, ships: 2, trireme: 3 });
   check("gemi türleriyle ordu çıkar", fl && fl.trireme === 3 && fl.ships === 2 && b.places.tarentum.trireme === 0);
-  fl.moves = 1;
+  offshore(fl, "syracuse");
   b.places.syracuse.inf = 10; b.places.syracuse.arch = 0;
   const ev = M.attack(b, fl.id, "syracuse", [1, 1]);
   check("Tarentum'dan denizden: triremeler limanın 3 kadırgasını batırır, ordu karaya çıkar", ev && ev.naval?.won && ev.naval.sunk === 3 && !ev.drowned && ev.won, JSON.stringify(ev?.naval));
   const lost = S.newGame("rome", 7);
   lost.places.syracuse.trireme = 2; lost.places.tarentum.inf = 40; lost.places.tarentum.ships = 3;
   const weak = S.muster(lost, "tarentum", { inf: 40, ships: 2 });
-  weak.moves = 1;
+  offshore(weak, "syracuse");
   const ev2 = M.attack(lost, weak.id, "syracuse", [1, 1]);
   check("kadırgalı ordu limandaki iki triremeye yenilir, denizde kaybolur", ev2 && ev2.drowned && !lost.armies.includes(weak) && M.shipsAt(lost, "syracuse") >= 1);
 
@@ -836,8 +1041,7 @@ section("Gemi türleri: kadırga, trireme, kinkerem");
   check("boş filo da çıkmaz", q === null);
   k.places.carthage.quinq = 1;
   const qa = S.muster(k, "carthage", { quinq: 1 });
-  qa.at = "syracuse";
-  k.places.syracuse.owner = "carthage";
+  offshore(qa, "tarentum");
   check("tek kinkerem 3 kadırgalık limanı ablukaya alır (güç 4 > 3)", S.blockaded(k, "tarentum"));
   qa.quinq = 0; qa.ships = 1;
   check("tek kadırga almaz (1 < 3)", !S.blockaded(k, "tarentum"));
@@ -911,6 +1115,7 @@ section("Liman yapıları (bölüm 16)");
     g.places.syracuse.fort = fort;
     const army = S.formArmy(g, "tarentum", 10, 0);
     army.inf = 50; army.ships = 5;
+    offshore(army, "syracuse");
     return M.attack(g, army.id, "syracuse", [1, 1]);
   };
   check("liman kalesi 1: 4 gemi 5 gemiyi durdurur (kalesiz durduramaz)", fight(1).drowned && !fight(0).drowned);
@@ -918,7 +1123,7 @@ section("Liman yapıları (bölüm 16)");
   b.relations[S.key("carthage", "rome")] = "war";
   b.places.syracuse.owner = "carthage";
   b.places.syracuse.ships = 0; // Siraküza'nın başlangıç gemileri de Kartaca'ya geçmesin: karşıda sadece filo
-  const fl = S.formArmy(b, "carthage", 0, 0, 0, 0, 2); fl.at = "syracuse"; fl.ships = 2;
+  const fl = offshore(S.formArmy(b, "carthage", 0, 0, 0, 0, 2), "tarentum");
   b.places.tarentum.ships = 1;
   check("2 gemi 1 gemiyi abluka eder", S.blockaded(b, "tarentum"));
   b.places.tarentum.fort = 3; b.places.tarentum.ships = 2;
@@ -1011,7 +1216,9 @@ const MI = await import("../src/rules/missions.js");
   check("savunma: tehdit yokken görev yok", MI.make(s, "hold") === null);
   s.relations[S.key("rome", "gaul")] = "war";
   const enemy = S.formArmy(s, "bibracte", 10, 0);
-  enemy.at = neighbours("ariminum").find((n) => s.places[n].owner !== "rome") ?? "mediolanum";
+  // Sahada, Alplerin eteğinde: Ariminum'un tehdit menzilinde, Roma'nınkinin dışında.
+  Object.assign(enemy, project(9.5, 46.3), { at: null });
+  check("düşman sadece Ariminum'u tehdit ediyor", M.menace(s, "ariminum") > 0 && M.menace(s, "rome") === 0);
   const ho = MI.make(s, "hold");
   check("savunma: tehdit altındaki yer", ho && M.menace(s, ho.place) > 0);
   s.missions.push(ho);
@@ -1144,7 +1351,8 @@ const WO = await import("../src/rules/wonders.js");
   const w = S.newGame("rome", 7);
   w.relations[S.key("rome", "macedon")] = "war";
   const a = S.formArmy(w, "tarentum", 10, 0);
-  a.inf = 900; a.at = "corinth"; a.moves = 1;
+  a.inf = 900;
+  before(a, "athens");
   w.places.corinth.owner = "rome";
   w.places.athens.owner = "macedon";
   check("Atina Makedonya'nınken Parthenon onun", WO.holds(w, "macedon", "parthenon"));
@@ -1159,55 +1367,57 @@ const SI = await import("../src/rules/sight.js");
 {
   const s = S.newGame("saka", 7);
   const seen = SI.sight(s, "saka");
+  const within = (id, r) => PLACES.filter((p) => MAP.dist(POS[p.id], POS[id]) <= r).map((p) => p.id);
   check("kendi yerlerini görür", ["neapolis", "olbia", "tanais"].every((id) => seen.has(id)));
-  check("komşularını görür", neighbours("olbia").every((n) => seen.has(n)));
+  check("yerlerinin görüş çemberindekileri görür", within("olbia", N.reach.sightPlace).every((n) => seen.has(n)) && within("olbia", N.reach.sightPlace).length > 1);
   check("uzaktakini görmez", !seen.has("rome") && !seen.has("carthage") && !seen.has("babylon"));
   const far = PLACES.find((p) => !seen.has(p.id) && p.owner !== "saka");
   check("görülmeyen bir yer var (sis bir şey saklıyor)", !!far);
 
-  // Ordu gözdür: bir ordu nereye giderse oranın komşuları da görünür.
-  const a = S.formArmy(s, "neapolis", 10, 0);
-  a.at = "byzantium";
+  // Ordu gözdür: sahadaki ordu nereye giderse oranın çevresi görünür (kullanıcı 22.10: "yürüdüğü
+  // yerlerde sisler açılsın").
+  const a = before(S.formArmy(s, "neapolis", 10, 0), "byzantium");
   const seen2 = SI.sight(s, "saka");
-  check("ordu gittiği yerin çevresini açar", seen2.has("byzantium") && neighbours("byzantium").every((n) => seen2.has(n)));
+  check("ordu gittiği yerin çevresini açar", seen2.has("byzantium") && within("byzantium", N.reach.sightArmy - 0.3).every((n) => seen2.has(n)));
+  check("ordunun gözü çember: içindekini görür, dışındakini görmez", SI.seen(SI.eyes(s, "saka"), { x: a.x + 2, y: a.y }) && !SI.seen(SI.eyes(s, "saka"), project(-5, 40)));
+  s.armies = [];
 
   // Müttefik gözü paylaşılır.
   check("tarafsız medeniyetin yerini görmez", !SI.sight(s, "saka").has("rome"));
   s.relations[S.key("saka", "rome")] = "ally";
   const seen3 = SI.sight(s, "saka");
-  check("müttefikin yerlerini ve komşularını görür", seen3.has("rome") && neighbours("rome").every((n) => seen3.has(n)));
+  check("müttefikin yerlerini ve çevrelerini görür", seen3.has("rome") && within("rome", N.reach.sightPlace).every((n) => seen3.has(n)));
   s.relations[S.key("saka", "rome")] = "war";
-  check("savaştığının yerini (komşu değilse) görmez", !SI.sight(s, "saka").has("rome"));
+  check("savaştığının yerini (yakında değilse) görmez", !SI.sight(s, "saka").has("rome"));
 }
 
 // ---------------------------------------------------------------------------------------------
 section("Kuşatma (bölüm 20)");
 
 const SG = await import("../src/rules/siege.js");
-const { roadBetween: roadBetweenT } = await import("../src/rules/graph.js");
 {
   const setup = () => {
     const s = S.newGame("rome", 7);
-    const a = S.formArmy(s, "ariminum", 10, 0);
+    const a = before(S.formArmy(s, "ariminum", 10, 0), "mediolanum");
     a.inf = 150;
     s.places.mediolanum.inf = 100;
     s.places.mediolanum.arch = 0;
     return { s, a };
   };
   let { s, a } = setup();
-  check("Mediolanum Ariminum'a kara yoluyla komşu", neighbours("ariminum").includes("mediolanum") && !roadBetweenT("ariminum", "mediolanum").sea);
+  check("ordu Mediolanum'un önünde, karada, menzilde", !a.at && MAP.isLand(MAP.cellOf(a.x, a.y)) && MAP.dist(a, POS.mediolanum) <= N.reach.strike);
   s.places.mediolanum.level = 2;
   check("sursuz yer kuşatılmaz", !M.wallsOf(s, "mediolanum") && !SG.canBesiege(s, a, "mediolanum"));
   s.places.mediolanum.level = 3;
   check("3. seviye şehir surlu: kuşatılabilir", SG.canBesiege(s, a, "mediolanum"));
   const t = S.newGame("rome", 7);
-  const fleetArmy = S.formArmy(t, "tarentum", 10, 0);
+  const fleetArmy = offshore(S.formArmy(t, "tarentum", 10, 0), "syracuse");
   fleetArmy.inf = 30;
   fleetArmy.ships = 2;
   t.places.syracuse.level = 3;
-  check("deniz yolundan kuşatma olmaz (deniz ablukası ayrı)", roadBetweenT("tarentum", "syracuse").sea && M.canAttack(t, fleetArmy, "syracuse") && !SG.canBesiege(t, fleetArmy, "syracuse"));
+  check("denizden kuşatma olmaz (deniz ablukası ayrı)", M.canAttack(t, fleetArmy, "syracuse") && !SG.canBesiege(t, fleetArmy, "syracuse"));
 
-  check("kuşatma başlar, ordu bu turun hareketini harcar", SG.besiege(s, a.id, "mediolanum") && a.besieging === "mediolanum" && a.moves === 0);
+  check("kuşatma başlar, ordu bu turun hareketini harcar", SG.besiege(s, a.id, "mediolanum") && a.besieging === "mediolanum" && a.mp === 0);
   check("kuşatılan yer bir şey üretmez", Object.values(S.output(s, "mediolanum")).every((v) => v === 0) && S.besieged(s, "mediolanum"));
   check("kuşatma ikinci kez başlamaz", !SG.besiege(s, a.id, "mediolanum"));
   SG.tickSieges(s, []);
@@ -1234,18 +1444,18 @@ const { roadBetween: roadBetweenT } = await import("../src/rules/graph.js");
   ({ s, a } = setup());
   s.places.mediolanum.level = 3;
   SG.besiege(s, a.id, "mediolanum");
-  a.moves = 1;
-  M.order(s, a.id, "rome");
-  check("yürüdüğü anda kuşatma kalkar (tur sonunu beklemez)", a.at !== "ariminum" && !a.besieging && !S.besieged(s, "mediolanum"));
+  a.mp = N.march.mp;
+  M.order(s, a.id, { place: "rome" });
+  check("yürüdüğü anda kuşatma kalkar (tur sonunu beklemez)", MAP.dist(a, POS.mediolanum) > 0.5 && !a.besieging && !S.besieged(s, "mediolanum"));
   const g0 = s.places.mediolanum.inf;
   SG.tickSieges(s, []);
-  check("yürüyen ordu kuşatmayı bırakır", a.at !== "ariminum" && !a.besieging && s.places.mediolanum.inf === g0);
+  check("yürüyen ordu kuşatmayı bırakır", !a.besieging && s.places.mediolanum.inf === g0);
 
   // Saldırı kuşatmayı bitirir.
   ({ s, a } = setup());
   s.places.mediolanum.level = 3;
   SG.besiege(s, a.id, "mediolanum");
-  a.moves = 1;
+  a.mp = 1;
   M.attack(s, a.id, "mediolanum", [1, 1]);
   check("saldırı kuşatmayı bitirir", !a.besieging);
 
@@ -1271,8 +1481,11 @@ const { roadBetween: roadBetweenT } = await import("../src/rules/graph.js");
 
   // Bilgisayar da kuşatır: kolay olmayan surlu hedefin önünde, yeterince büyük orduyla.
   const g = S.newGame("gaul", 7);
-  const ra = S.formArmy(g, "ariminum", 10, 0);
+  const ra = before(S.formArmy(g, "ariminum", 10, 0), "mediolanum");
   ra.inf = 240;
+  g.places.ariminum.inf = 20; // kale boş kalmasın: yoksa ordu onu korumaya döner
+  // Bu tur yetişebileceği daha kolay bir hedef olmasın (Massalia gibi): öteki bağımsızlar Mısır'ın.
+  for (const id of Object.keys(g.places)) if (id !== "mediolanum" && g.places[id].owner === null) g.places[id].owner = "egypt";
   g.places.mediolanum.level = 3;
   g.places.mediolanum.inf = 220;
   check("bilgisayar için hedef zor (kolay değil, umutsuz değil)", M.forecast(g, ra, "rome", "mediolanum").odds === "risky");
@@ -1281,12 +1494,14 @@ const { roadBetween: roadBetweenT } = await import("../src/rules/graph.js");
   check("bilgisayar zor surlu hedefi kuşatır", g.armies.some((x) => x.owner === "rome" && x.besieging === "mediolanum"));
   // Umutsuz hedefi kuşatmaz: kuşatma imkânsızı değil, zoru bitirmek için (denge, kurallar.md 20).
   const h = S.newGame("gaul", 7);
-  const rb = S.formArmy(h, "ariminum", 10, 0);
+  const rb = before(S.formArmy(h, "ariminum", 10, 0), "mediolanum");
   rb.inf = 160;
+  h.places.ariminum.inf = 20;
+  for (const id of Object.keys(h.places)) if (id !== "mediolanum" && h.places[id].owner === null) h.places[id].owner = "egypt";
   h.places.mediolanum.level = 3;
   h.places.mediolanum.inf = 220;
   aiTurn(h, "rome", []);
-  check("bilgisayar umutsuz hedefi kuşatmaz", M.forecast(h, { at: "ariminum", inf: 160, arch: 0 }, "rome", "mediolanum").odds === "hopeless" && !h.armies.some((x) => x.besieging === "mediolanum"));
+  check("bilgisayar umutsuz hedefi kuşatmaz", M.forecast(h, { x: rb.x, y: rb.y, inf: 160, arch: 0 }, "rome", "mediolanum").odds === "hopeless" && !h.armies.some((x) => x.besieging === "mediolanum"));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1378,16 +1593,14 @@ const C2 = await import("../src/rules/combat.js");
   check("1. tur ilkbahar, 4. tur kış, 5. tur yine ilkbahar", SE.seasonOf(1) === "spring" && SE.seasonOf(4) === "winter" && SE.seasonOf(5) === "spring");
   check("dört tur bir yıl: MÖ 270, 269", SE.yearOf(1) === 270 && SE.yearOf(4) === 270 && SE.yearOf(5) === 269);
 
-  // Fırtına: kışın deniz yolu, yazın asla.
+  // Fırtına: kışın denizden geçen ordu, yazın asla.
   const sail = (turn, seed) => {
     const g = S.newGame("rome", seed);
     g.turn = turn;
     const a = S.formArmy(g, "tarentum", 10, 0);
     a.inf = 50; a.ships = 3;
-    M.order(g, a.id, "syracuse") ; // bağımsız: düşman, yürümez
-    M.order(g, a.id, "epidamnos"); // deniz yolu, bağımsız: yine yürümez
     g.places.epidamnos.owner = "rome";
-    M.order(g, a.id, "epidamnos");
+    M.order(g, a.id, { place: "epidamnos" }); // Adriyatik'in karşısı: denizden
     return { g, a };
   };
   let caught = null;
@@ -1395,7 +1608,7 @@ const C2 = await import("../src/rules/combat.js");
     const r = sail(4, seed);
     if (r.g.storms?.length) caught = r;
   }
-  check("kışın deniz yolunda fırtına olur", !!caught && caught.a.at === "epidamnos");
+  check("kışın denizden geçerken fırtına olur", !!caught);
   check("fırtına: askerin %10'u ve bir gemi", caught && caught.a.inf === 45 && caught.a.ships === 2 && caught.g.storms[0].lost === 5 && caught.g.storms[0].sunk === 1);
   let summer = 0;
   for (let seed = 1; seed < 80; seed++) summer += sail(2, seed).g.storms?.length ?? 0;
@@ -1424,42 +1637,48 @@ section("Yürüyüş animasyonu: ordu yolda yürür, ışınlanmaz");
 
 {
   const A = await import("../src/view/anim.js");
-  const { roadLength, placeAt } = await import("../src/view/draw.js");
-  const step = (army, owner, from, to) => ({ type: "move", army, owner, men: 30, from, to });
-  const short = A.legTime("olbia", "neapolis"), long = A.legTime("antioch", "babylon");
-  check("uzun yol kısa yoldan uzun sürer", long > short, `${short} ${long}`);
-  check("en kısa yol bile yarım saniyeden uzun", short >= 500, short);
-  check("süre yolun uzunluğuyla orantılı (sınırlar içinde)", Math.abs(A.legTime("rome", "ariminum") - Math.max(520, Math.min(1500, roadLength("rome", "ariminum") * 230))) < 1e-9);
+  // İz serbest yürüyüşte nokta dizisi: kurallar kare kare yürür (moves.js advance).
+  const P = (id) => [POS[id].x, POS[id].y];
+  const walk = (s, a, target) => { s.trace = []; M.order(s, a.id, target); const t = s.trace; delete s.trace; return t; };
+  const k = S.newGame("saka", 7);
+  const ka = S.formArmy(k, "olbia", 10, 0);
+  const sakaTrace = walk(k, ka, { place: "tanais" });
+  check("bir yürüyüş, bir iz, Olbia'dan Tanais'e", sakaTrace.length === 1 && sakaTrace[0].path[0][0] === P("olbia")[0] && sakaTrace[0].path.at(-1)[1] === P("tanais")[1]);
+  const short = A.walkTime(0.8), long = A.walkTime(6);
+  check("uzun yürüyüş kısadan uzun sürer", long > short, `${short} ${long}`);
+  check("en kısa yürüyüş bile yarım saniyeden uzun", short >= 500, short);
+  check("süre uzunlukla orantılı (sınırlar içinde)", A.walkTime(3) === 3 * 230 && A.walkTime(100) === 2500);
 
-  // Kalabalık bir tur: rakiplerin 40 hamlesi ve oyuncunun 2 yollu yürüyüşü.
+  // Kalabalık bir tur: rakiplerin 40 hamlesi ve oyuncunun uzun yürüyüşü.
   A.finish();
   const t0 = 1e6;
   A.freeze(t0);
   const trace = [];
-  // Dört medeniyet sırayla: her biri ayrı bölüm, toplam süreyi aşarlar ve sıkıştırılırlar.
+  const step = (army, owner, from, to) => ({ type: "move", army, owner, men: 30, ships: 0, path: [P(from), P(to)] });
   for (let i = 0; i < 40; i++) trace.push(step(100 + i, ["egypt", "macedon", "parthia", "gaul"][i % 4], "alexandria", "memphis"));
-  trace.push(step(7, "saka", "olbia", "neapolis"), step(7, "saka", "neapolis", "tanais"));
+  trace.push({ ...sakaTrace[0], army: 7 });
   A.timeline(trace, t0, () => true, "saka");
   const mine = (t) => { A.freeze(t); return A.shape({ owners: {}, armies: [{ id: 7, owner: "saka", at: "tanais", men: 30 }] }).armies.find((a) => a.id === 7); };
-  // Oyuncunun yürüyüşü ne zaman başlıyor: rakiplerinkinden sonra. İlk görüldüğü andan bitişine.
   let start = null, end = null;
   for (let t = t0; t < t0 + 60000; t += 20) {
     const a = mine(t);
-    const moving = a && a.float && Math.hypot(a.float.x - placeAt("olbia").x, a.float.y - placeAt("olbia").y) > 1e-6;
+    const moving = a && a.float && Math.hypot(a.float.x - POS.olbia.x, a.float.y - POS.olbia.y) > 1e-6;
     if (moving && start === null) start = t;
     if (a && !a.float && start !== null) { end = t; break; }
   }
-  const want = A.legTime("olbia", "neapolis") + A.legTime("neapolis", "tanais");
-  check("kalabalık turda oyuncunun yürüyüşü kısalmaz", start !== null && end !== null && end - start >= want - 60, `${end - start} / ${want}`);
-  const mid = mine(start + want / 2);
-  check("yürüyüş sürerken ordu yolda, varış yerinde değil", mid?.float && Math.hypot(mid.float.x - placeAt("tanais").x, mid.float.y - placeAt("tanais").y) > 0.3);
+  const len = sakaTrace[0].path.slice(1).reduce((n, p, i) => n + Math.hypot(p[0] - sakaTrace[0].path[i][0], p[1] - sakaTrace[0].path[i][1]), 0);
+  const want = A.walkTime(len) * 0.95; // köşeler yumuşatılınca yol biraz kısalır
+  check("kalabalık turda oyuncunun yürüyüşü kısalmaz", start !== null && end !== null && end - start >= want - 80, `${end - start} / ${want}`);
+  const mid = mine(start + (end - start) / 2);
+  check("yürüyüş sürerken ordu yolda, varış yerinde değil", mid?.float && Math.hypot(mid.float.x - POS.tanais.x, mid.float.y - POS.tanais.y) > 0.3 && mid.moving);
+  check("yürürken bıraktığı iz", A.shape({ owners: {}, armies: [] }).fx.some((e) => e.kind === "trail" && e.pts.length >= 2));
   // Hızlandırma: aynı anda konum aynı kalmalı (zıplama yok), sonra daha erken bitmeli.
-  A.freeze(start + want / 3);
-  const before = A.shape({ owners: {}, armies: [] }).armies.find((a) => a.id === 7).float;
+  A.freeze(start + (end - start) / 3);
+  const was = A.shape({ owners: {}, armies: [] }).armies.find((a) => a.id === 7).float;
   A.hurry(4);
-  const after = A.shape({ owners: {}, armies: [] }).armies.find((a) => a.id === 7).float;
-  check("hızlandırınca ordu bulunduğu yerden zıplamaz", Math.hypot(before.x - after.x, before.y - after.y) < 1e-6);
-  A.freeze(start + want / 3 + (want * 2) / 3 / 4 + 50);
+  const now = A.shape({ owners: {}, armies: [] }).armies.find((a) => a.id === 7).float;
+  check("hızlandırınca ordu bulunduğu yerden zıplamaz", Math.hypot(was.x - now.x, was.y - now.y) < 1e-6);
+  A.freeze(start + (end - start) / 3 + ((end - start) * 2) / 3 / 4 + 80);
   check("hızlanan yürüyüş dört kat erken biter", !A.shape({ owners: {}, armies: [] }).armies.some((a) => a.id === 7));
   A.finish();
   A.freeze(null);
@@ -1473,15 +1692,18 @@ section("Tur gösterisi: kamera bütün dünyaya uzaklaşır, rakipler oynar, ge
   A.finish();
   const t0 = 2e6;
   A.freeze(t0);
+  const P = (id) => [POS[id].x, POS[id].y];
   const trace = [
-    { type: "move", army: 1, owner: "egypt", men: 30, from: "alexandria", to: "memphis" }, // görünmeyen yürüyüş
-    { type: "attack", army: 2, owner: "carthage", men: 80, from: "lilybaeum", to: "syracuse", won: true, oldOwner: null }, // sisteki savaş
-    { type: "attack", army: 3, owner: "gaul", men: 90, from: "mediolanum", to: "ariminum", won: false, oldOwner: "rome" }, // oyuncuya saldırı
-    { type: "move", army: 7, owner: "rome", men: 30, from: "rome", to: "tarentum" }, // oyuncunun kendi yürüyüşü
+    { type: "move", army: 1, owner: "egypt", men: 30, path: [P("alexandria"), P("memphis")] }, // görünmeyen yürüyüş
+    { type: "attack", army: 2, owner: "carthage", men: 80, path: [P("lilybaeum"), P("syracuse")], at: "syracuse", won: true, oldOwner: null }, // sisteki savaş
+    { type: "attack", army: 3, owner: "gaul", men: 90, path: [P("mediolanum"), P("ariminum")], at: "ariminum", won: false, oldOwner: "rome" }, // oyuncuya saldırı
+    { type: "move", army: 7, owner: "rome", men: 30, path: [P("rome"), P("tarentum")] }, // oyuncunun kendi yürüyüşü
   ];
+  // Oyuncunun gördüğü: İtalya'nın kuzeyi ve güneyi (bir yer ya da bir nokta).
   const seen = new Set(["rome", "ariminum", "mediolanum", "tarentum"]);
+  const near = (q) => [...seen].some((id) => Math.hypot(POS[id].x - q.x, POS[id].y - q.y) < 0.5);
   const direct = {
-    seen: (id) => seen.has(id),
+    seen: (q) => (typeof q === "string" ? seen.has(q) : near(q)),
     overview: { x: 28, y: 13, scale: 10 },
     home: { x: 9, y: 9, scale: 40 },
     caption: (p) => ({ title: p.owner, sub: "" }),
@@ -1498,12 +1720,20 @@ section("Tur gösterisi: kamera bütün dünyaya uzaklaşır, rakipler oynar, ge
   check("oyuncuya saldırı görünür oynar", march(3).dur > 500 && items.some((i) => i.kind === "clash" && i.at === "ariminum" && i.dur > 0));
   check("bir şey yapan medeniyetin şeridi, sırayla", items.filter((i) => i.kind === "caption").sort((a, b) => a.t0 - b.t0).map((i) => i.owner).join() === "carthage,gaul");
   check("oyuncunun kendi yürüyüşü kamera döndükten sonra, tam sürede", march(7).t0 >= cams[1].t0 + cams[1].dur && march(7).dur > 500);
+  // Meydan muharebesi: çarpışma bir noktada, yer el değiştirmez.
+  A.finish();
+  A.freeze(t0);
+  const pt = { x: POS.mediolanum.x + 0.3, y: POS.mediolanum.y };
+  A.timeline([{ type: "attack", army: 9, owner: "rome", men: 50, path: [P("ariminum"), [pt.x, pt.y]], at: null, point: pt, won: true, oldOwner: "gaul" }], t0, () => true, "rome");
+  A.freeze(t0 + 1e5);
+  const fi = A.cues();
+  check("meydan muharebesi: çarpışma noktada, yer boyanmaz", fi.some((i) => i.kind === "clash" && typeof i.at === "object" && Math.abs(i.at.x - pt.x) < 1e-9) && !fi.some((i) => i.kind === "repaint"));
   // Çok hamlede rakiplerin kısmı kısalır: on medeniyet bölümü, hepsi görünür uzun yürüyüş.
   A.finish();
   A.freeze(t0);
   const many = [];
   const civs = ["egypt", "carthage", "gaul", "macedon", "parthia", "saka", "egypt", "carthage", "gaul", "macedon"];
-  civs.forEach((c, i) => many.push({ type: "attack", army: 100 + i, owner: c, men: 50, from: "antioch", to: "babylon", won: false, oldOwner: "rome" }));
+  civs.forEach((c, i) => many.push({ type: "attack", army: 100 + i, owner: c, men: 50, path: [P("antioch"), P("babylon")], at: "babylon", won: false, oldOwner: "rome" }));
   const e2 = A.timeline(many, t0, () => false, "rome", { ...direct, seen: () => true });
   A.freeze(e2 + 1);
   const c2 = A.cues().filter((i) => i.kind === "camera").sort((a, b) => a.t0 - b.t0);
@@ -1544,8 +1774,19 @@ section("Bot: oyun boyunca değişmezler");
     }
     for (const a of s.armies) {
       if (S.empty(a) || ![...UNITS, ...SHIPS].every((k) => Number.isInteger(a[k]) && a[k] >= 0)) bad.push(`t${s.turn} ordu ${a.id} ${UNITS.map((k) => a[k]).join("/")}`);
-      const k = M.access(s, a.owner, a.at);
-      if (k !== "own" && k !== "ally") bad.push(`t${s.turn} ordu ${a.id} (${a.owner}) yabancı yerde: ${a.at} ${k}`);
+      // Serbest yürüyüş: içindeyse kendi ya da müttefik yeri, tam yerinde; sahadaysa karada asker,
+      // denizde gemi; hareketi eksi değil.
+      if (a.at) {
+        const k = M.access(s, a.owner, a.at);
+        if (k !== "own" && k !== "ally") bad.push(`t${s.turn} ordu ${a.id} (${a.owner}) yabancı yerde: ${a.at} ${k}`);
+        if (a.x !== POS[a.at].x || a.y !== POS[a.at].y) bad.push(`t${s.turn} ordu ${a.id} yerinin dışında: ${a.at}`);
+      } else {
+        const c = MAP.cellOf(a.x, a.y);
+        if (!Number.isFinite(a.x) || !Number.isFinite(a.y)) bad.push(`t${s.turn} ordu ${a.id} yeri yok`);
+        else if (MAP.isLand(c) || MAP.isRoad(c) ? S.men(a) === 0 && !MAP.isRoad(c) : S.fleetOf(a) === 0) bad.push(`t${s.turn} ordu ${a.id} ${MAP.isLand(c) ? "karada askersiz" : "denizde gemisiz"}`);
+        if (MAP.placeAtCell(c)) bad.push(`t${s.turn} ordu ${a.id} yerleşimin karesinde ama içinde değil: ${MAP.placeAtCell(c)}`);
+      }
+      if (!(a.mp >= -1e-9) || a.route.some((c) => !Number.isInteger(c))) bad.push(`t${s.turn} ordu ${a.id} hareketi bozuk ${a.mp}`);
       if (!s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);
       const g = a.general;
       if (g && !(g.level >= 1 && g.level <= 5 && g.xp >= 0 && g.traits.every((t) => GN.TRAITS.includes(t)) && g.traits.length <= 2)) {

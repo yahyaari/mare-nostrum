@@ -114,27 +114,17 @@ export function drawMap(ctx, cam, view, dpr) {
       strokeRoad(ctx, r, px, 2.2, r.sea ? [px(6), px(4)] : [], GOLD_LIGHT);
     }
   }
-  // Seçili ordunun güzergâhı: kalın kesik, koyu kenarlı krem.
-  if (view.route?.length > 1) {
-    for (let i = 1; i < view.route.length; i++) {
-      const r = roadBetween(view.route[i - 1], view.route[i]);
-      strokeRoad(ctx, r, px, 5.6, [px(8), px(5)], "rgba(28,23,18,0.75)");
-      strokeRoad(ctx, r, px, 3, [px(8), px(5)], CREAM);
-    }
-  }
-  // Önizleme: fare bir yerin üstündeyken seçili ordunun oraya gideceği yol, ince altın kesik.
-  if (view.preview?.length > 1) {
-    for (let i = 1; i < view.preview.length; i++) {
-      const r = roadBetween(view.preview[i - 1], view.preview[i]);
-      strokeRoad(ctx, r, px, 4.6, [px(5), px(5)], "rgba(28,23,18,0.55)");
-      strokeRoad(ctx, r, px, 2.4, [px(5), px(5)], GOLD_LIGHT);
-    }
-  }
+  // Seçili ordunun yolu: kalın kesik, koyu kenarlı krem. Önizleme (fare bir yerin üstündeyken
+  // oraya gidecek yol): ince altın kesik.
+  if (view.route?.pts.length > 1) strokeLine(ctx, view.route.pts, px, 6.6, 3.6, [9, 6], CREAM, "rgba(28,23,18,0.8)");
+  if (view.preview?.pts.length > 1) strokeLine(ctx, view.preview.pts, px, 6, 3.2, [7, 5], GOLD_LIGHT, "rgba(28,23,18,0.7)");
   // Yürüyen orduların arkasındaki iz: geçtiği yollar ve şu anki yolun yürüdüğü kısmı, kendi
   // renginde. Ordu yolda yürüyor, bir yerden ötekine zıplamıyor - bunu gözle görülür kılan bu.
   for (const e of view.fx ?? []) if (e.kind === "trail") trail(ctx, e, px);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // Turların bittiği yerler: numaralı halkalar (bu tur yetişilen yeşil, sonrakiler sarı).
+  for (const r of [view.route, view.preview]) if (r) turnMarks(ctx, cam, r.turns);
   const tokens = drawPlaces(ctx, cam, view, L);
   drawEffects(ctx, cam, view.fx ?? []);
   return tokens;
@@ -442,7 +432,7 @@ function still(cam, view, dpr, L) {
   const k = cam.scale;
   const ready = !!(TERRAIN?.complete && TERRAIN.naturalWidth);
   // Sis görülen yerlere bağlı; adlar yazı tiplerine (yüklenince yeniden çizilsin).
-  const fog = view.fog ? [...view.seen].sort().join(",") + "/" + [...view.friends].sort().join(",") : "-";
+  const fog = view.fog ? (view.eyes ?? []).map((e) => `${e.x},${e.y},${e.r}`).join(";") + "/" + [...view.friends].sort().join(",") : "-";
   const fonts = typeof document !== "undefined" ? document.fonts?.status : "";
   const content = [W, H, ready, fog, fonts, view.winter ? "W" : "", PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
   const now = performance.now();
@@ -480,7 +470,7 @@ function still(cam, view, dpr, L) {
     paintTerrain(ctx, view, L, px, { ...cam, w: cam.w * 1.6, h: cam.h * 1.6 });
     // Sis, arazi işaretleri, adlar ve pusula kendi dönüşümlerini kurar: katmanın çözünürlüğüyle.
     const ox = q * (mx + dpr * (cam.w / 2 - cam.x * k)), oy = q * (my + dpr * (cam.h / 2 - cam.y * k));
-    if (view.fog) paintFog(ctx, canvas, L.cells, POS, view.seen, view.friends, ox, oy, k, q * dpr);
+    if (view.fog) paintFog(ctx, canvas, L.cells, view.eyes ?? [], view.friends, ox, oy, k, q * dpr);
     paintGround(ctx, ox, oy, k, q * dpr);
     paintLabels(ctx, ox, oy, k, q * dpr);
     paintCompass(ctx, ox, oy, k, q * dpr);
@@ -540,56 +530,48 @@ function still(cam, view, dpr, L) {
   return layer;
 }
 
-const lengths = {};
-/** İki komşu yerleşim arasındaki yolun uzunluğu, harita biriminde (kıvrımlarıyla). */
-export function roadLength(a, b) {
-  const k = a < b ? a + "|" + b : b + "|" + a;
-  if (k in lengths) return lengths[k];
-  const r = roadBetween(a, b);
-  if (!r) return (lengths[k] = 0);
-  const pts = roadLine(r).map(([lon, lat]) => project(lon, lat));
-  let n = 0;
-  for (let i = 1; i < pts.length; i++) n += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  return (lengths[k] = n);
+/** Bir nokta dizisini kesikli, koyu kenarlı çiz (yol ve önizleme). */
+function strokeLine(ctx, pts, px, outer, inner, dash, color, edge) {
+  const p = new Path2D();
+  pts.forEach((m, i) => (i ? p.lineTo(m.x, m.y) : p.moveTo(m.x, m.y)));
+  ctx.setLineDash(dash.map(px));
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = px(outer);
+  ctx.stroke(p);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = px(inner);
+  ctx.stroke(p);
+  ctx.setLineDash([]);
 }
 
-/**
- * İki komşu yerleşim arasındaki yolun `f` (0..1) kadarındaki nokta, harita biriminde. Yolun
- * kıvrımlarını izler: ordu kıyı boyunca yürür, denizin üstünden kestirmez.
- */
-export function alongRoad(from, to, f) {
-  const r = roadBetween(from, to);
-  if (!r) return POS[to];
-  let pts = roadLine(r).map(([lon, lat]) => project(lon, lat));
-  if (r.a !== from) pts = pts.reverse();
-  let total = 0;
-  const lens = [];
-  for (let i = 1; i < pts.length; i++) {
-    const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-    lens.push(d);
-    total += d;
+/** Yolun üstünde her turun bittiği yer: koyu halka, içinde tur sayısı; bu tur yetişilen yer yeşil. */
+function turnMarks(ctx, cam, turns) {
+  const many = turns.length > 1 || turns[0]?.n > 1;
+  for (const t of turns) {
+    const s = toScreen(cam, t.x, t.y);
+    const r = t.end ? 9 : 7.5;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, 0, TAU);
+    ctx.fillStyle = t.n === 1 ? "rgba(63,122,55,0.92)" : "rgba(168,116,16,0.92)";
+    ctx.fill();
+    ctx.strokeStyle = DARK;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = GOLD_LIGHT;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    if (!many) continue;
+    ctx.fillStyle = CREAM;
+    ctx.font = `bold 10px ${SERIF}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(t.n), s.x, s.y + 0.5);
   }
-  let want = total * Math.max(0, Math.min(1, f));
-  for (let i = 0; i < lens.length; i++) {
-    if (want <= lens[i] || i === lens.length - 1) {
-      const t = lens[i] ? Math.min(1, want / lens[i]) : 1;
-      return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t, y: pts[i].y + (pts[i + 1].y - pts[i].y) * t };
-    }
-    want -= lens[i];
-  }
-  return pts[pts.length - 1];
 }
 
 function trail(ctx, e, px) {
   const p = new Path2D();
-  const at = (from, to, f) => alongRoad(from, to, f);
-  let first = true;
-  const put = (m) => { if (first) { p.moveTo(m.x, m.y); first = false; } else p.lineTo(m.x, m.y); };
-  for (let j = 0; j <= e.k; j++) {
-    const upto = j < e.k ? 1 : e.f;
-    const steps = Math.max(2, Math.ceil(roadLength(e.path[j], e.path[j + 1]) * 3 * upto));
-    for (let s = 0; s <= steps; s++) put(at(e.path[j], e.path[j + 1], (upto * s) / steps));
-  }
+  e.pts.forEach((m, i) => (i ? p.lineTo(m.x, m.y) : p.moveTo(m.x, m.y)));
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -717,6 +699,7 @@ function drawPlaces(ctx, cam, view, L) {
   // (kullanıcı 21.10: "gemiler denizlerde donanma olarak gözüksün, kara ordusu gibi değil").
   const tokens = [];
   const at = {};
+  const beside = {}; // sahada aynı yerde duran orduların kaydırması
   // Sadece gemiden filo: etikette gemi sayısı (kadırgalar zaten gemi olduğunu söylüyor).
   const label = (a) => (a.men <= 0 && a.ships ? String(a.ships) : a.men >= 1000 ? (a.men / 1000).toFixed(1) + "k" : String(a.men));
   ctx.font = `bold 11px ${SERIF}`;
@@ -731,16 +714,20 @@ function drawPlaces(ctx, cam, view, L) {
   });
   for (const a of view.armies ?? []) {
     // Sisin içindeki yabancı ordu görünmez (yürürken de: bulunduğu nokta açık mı).
-    if (view.fog && a.owner !== view.me && !(a.float ? clear(a.float, view.seen, POS) : view.seen.has(a.at))) continue;
-    // Yolda olan (animasyonla yürüyen) ordu bir yerleşime bağlı değil, yolun üstünde.
-    if (a.camp && !a.float) {
-      // Kuşatan ordunun kampı: hedefe giden yolun üstünde, surların önünde.
-      const s = toScreen(cam, a.camp.x, a.camp.y);
-      tokens.push({ x: s.x - 8 * zt, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), camp: true });
-    } else if (a.float) {
+    if (view.fog && a.owner !== view.me && !(a.float ? clear(a.float, view.eyes ?? []) : view.seen.has(a.at))) continue;
+    // Yerleşimin dışındaki ordu (sahada ya da animasyonla yürürken) bulunduğu yerde; aynı yerde
+    // duran ordular yan yana. Kuşatan ordunun yanında kamp çadırları.
+    if (a.float) {
       const s = toScreen(cam, a.float.x, a.float.y);
-      if (a.sea && a.ships > 0) tokens.push(fleetBox(a, s.x, s.y + 6 * zt, { moving: true, flip: a.dir < 0 }));
-      else tokens.push({ x: s.x - 8 * zt, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), moving: true });
+      const spot = a.moving ? null : `${Math.round(a.float.x * 4)},${Math.round(a.float.y * 4)}`;
+      const before = spot ? (beside[spot] ?? 0) : 0;
+      if (a.sea && a.ships > 0) {
+        tokens.push(fleetBox(a, s.x + before, s.y + 6 * zt, { moving: !!a.moving, flip: a.dir < 0 }));
+        if (spot) beside[spot] = before + FLEET.tag * zt + tagW(a) * zt + 3;
+      } else {
+        tokens.push({ x: s.x - 8 * zt + before, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), moving: !!a.moving, camp: !!a.camp });
+        if (spot) beside[spot] = before + width(a) + 3;
+      }
     } else (at[a.at] ??= []).push(a);
   }
   for (const { p, s } of shown) {
@@ -998,7 +985,7 @@ function anchor(ctx, x, y, blockaded = false) {
 function drawEffects(ctx, cam, fx) {
   for (const e of fx) {
     if (!e.at) continue;
-    const m = layers().at[e.at];
+    const m = typeof e.at === "string" ? layers().at[e.at] : e.at;
     const s = toScreen(cam, m.x, m.y);
     if (e.kind === "pulse") {
       // El değiştiren yer: yeni sahibin renginde büyüyüp sönen iki halka.

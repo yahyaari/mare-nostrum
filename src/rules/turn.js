@@ -7,6 +7,7 @@
 
 import { CIVS } from "../data/world.js";
 import { aiTurn } from "./ai.js";
+import { trespass } from "./diplomacy.js";
 import { roll, settleInbox } from "./events.js";
 import { check as checkMissions, issue } from "./missions.js";
 import { tick } from "./loyalty.js";
@@ -67,6 +68,8 @@ export function endTurn(state) {
   }
   // Kuşatmalar bir tur ilerler (üretimden önce: kuşatılan yer bu tur bir şey üretmez).
   tickSieges(state, events);
+  // Tarafsızın toprağında duran ordular o medeniyeti öfkelendirir.
+  trespass(state, events);
   // Kış: garnizonun dışındaki bütün ordular yıpranır (aşağı yuvarlanır: küçük birlik erimez).
   if (isWinter(state.turn)) {
     const lost = {};

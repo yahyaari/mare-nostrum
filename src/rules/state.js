@@ -4,12 +4,13 @@
 // Asker sayıları ADAM olarak tutuluyor; bölük 10 adam. Kaynaklar kesirli olabilir (kalenin
 // yarım silahı), ekran aşağı yuvarlayarak gösteriyor.
 
-import { CIVS, PLACES, ROADS } from "../data/world.js";
+import { CIVS, PLACES } from "../data/world.js";
 import { byId } from "./graph.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { holds } from "./wonders.js";
+import { POS, cellOf, dist, isLand } from "./map.js";
 
-export const VERSION = 9;
+export const VERSION = 10;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -57,6 +58,19 @@ export function migrate(s) {
     for (const u of [...Object.values(s.places), ...s.armies]) { u.trireme ??= 0; u.quinq ??= 0; }
     s.version = 9;
   }
+  if (s.version === 9) {
+    // Serbest yürüyüş: ordular durdukları yerleşimin içinde, tam hareketle; eski yol (yerleşim
+    // listesi) silinir - oyuncu yeniden gönderir.
+    for (const a of s.armies) {
+      const m = POS[a.at];
+      a.x = m.x; a.y = m.y;
+      a.mp = N.march.mp * trait(a.owner, "moves");
+      a.route = [];
+      delete a.moves;
+    }
+    s.anger ??= {};
+    s.version = 10;
+  }
   return s;
 }
 
@@ -98,6 +112,7 @@ export function newGame(player, seed = 1, level = "normal") {
     truce: {}, // "a|b" -> bu tura kadar bilgisayar savaş açmaz (haraç ödendi)
     offered: {}, // "a|b" -> bilgisayarın oyuncuya son teklif ettiği tur
     inbox: [], // oyuncunun karar vermesi gereken olaylar ve teklifler
+    anger: {}, // "kurban>giren" -> tarafsızın toprağında durmanın öfkesi (turn.js trespass)
     missions: [], lastMission: 0, // oyuncunun görevleri (missions.js); kendi zarı mrng
     chronicle: { places: [], men: [] }, annals: [], // kronik (chronicle.js)
     mrng: Math.imul(seed | 0 || 1, 0x9e3779b1) | 0 || 7,
@@ -121,6 +136,7 @@ export function startTroops(civ) {
 export const info = (id) => byId[id];
 export const placesOf = (state, civ) => Object.keys(state.places).filter((id) => state.places[id].owner === civ);
 export const armiesOf = (state, civ) => state.armies.filter((a) => a.owner === civ);
+/** Bir yerleşimin içindeki ordular. */
 export const armiesAt = (state, id) => state.armies.filter((a) => a.at === id);
 export const armyById = (state, id) => state.armies.find((a) => a.id === id) ?? null;
 export const men = (u) => UNITS.reduce((n, k) => n + (u[k] ?? 0), 0);
@@ -159,8 +175,8 @@ export function shipsToCarry(u, n) {
 }
 
 /**
- * Abluka: limanın deniz yollarının öbür ucunda, sahibiyle savaşan birinin, limandakinden
- * fazla gemisi duruyor. Ablukadaki limanın balığı kesilir, vergisi yarıya iner.
+ * Abluka: limanın önünde (N.reach.blockade içinde) denizde, sahibiyle savaşan birinin limandakinden
+ * güçlü bir filosu duruyor. Ablukadaki limanın balığı kesilir, vergisi yarıya iner.
  */
 export function blockaded(state, id) {
   const p = byId[id], pl = state.places[id];
@@ -168,19 +184,13 @@ export function blockaded(state, id) {
   // Liman kalesi limanın gemilerini daha değerli kılar: ablukaya almak için daha çok gemi gerekir.
   const mine = (mightOf(pl) + armiesAt(state, id).filter((a) => a.owner === pl.owner).reduce((n, a) => n + mightOf(a), 0))
     * (1 + (pl.fort ?? 0) * N.port.fortPerLevel);
-  for (const r of seaLanes[id] ?? []) {
-    const other = r.a === id ? r.b : r.a;
-    let theirs = 0;
-    for (const a of armiesAt(state, other)) if (relation(state, pl.owner, a.owner) === "war") theirs += mightOf(a);
-    const op = state.places[other];
-    if (op.owner && relation(state, pl.owner, op.owner) === "war") theirs += mightOf(op);
-    if (theirs > mine) return true;
+  let theirs = 0;
+  for (const a of state.armies) {
+    if (a.at || relation(state, pl.owner, a.owner) !== "war" || isLand(cellOf(a.x, a.y))) continue;
+    if (dist(a, POS[id]) <= N.reach.blockade) theirs += mightOf(a);
   }
-  return false;
+  return theirs > mine;
 }
-
-const seaLanes = {};
-for (const r of ROADS) if (r.sea) { (seaLanes[r.a] ??= []).push(r); (seaLanes[r.b] ??= []).push(r); }
 
 /** Nüfus tavanı. `kind`: "city" ya da "castle". */
 export function popCap(place, kind) {
@@ -434,7 +444,8 @@ export function muster(state, id, want) {
   if (!KEYS.every((k) => Number.isInteger(w[k]) && w[k] >= 0 && w[k] <= (pl[k] ?? 0))) return null;
   if (empty(w)) return null;
   for (const k of KEYS) pl[k] -= w[k];
-  const army = { id: state.nextArmy++, owner: pl.owner, at: id, ...w, moves: trait(pl.owner, "moves"), route: [], general: null };
+  const m = POS[id];
+  const army = { id: state.nextArmy++, owner: pl.owner, at: id, x: m.x, y: m.y, ...w, mp: N.march.mp * trait(pl.owner, "moves"), route: [], general: null };
   state.armies.push(army);
   return army;
 }
@@ -442,21 +453,24 @@ export function muster(state, id, want) {
 /** Kısaca: asker türleri ve kadırga sayısı. */
 export const formArmy = (state, id, inf, arch, cav = 0, siege = 0, ships = 0) => muster(state, id, { inf, arch, cav, siege, ships });
 
-/** Ordu kendi yerleşimindeyse garnizona katılır. */
+/** Ordu kendi yerleşiminin içindeyse garnizona katılır. */
 export function station(state, armyId) {
   const a = armyById(state, armyId);
-  if (!a || state.places[a.at].owner !== a.owner) return false;
+  if (!a || !a.at || state.places[a.at].owner !== a.owner) return false;
   for (const k of KEYS) state.places[a.at][k] += a[k] ?? 0;
   state.armies = state.armies.filter((x) => x !== a);
   return true;
 }
 
+/** İki ordu aynı yerde mi: aynı yerleşimin içinde, ya da dışarıda yan yana (yarım birim). */
+export const together = (a, b) => (a.at || b.at ? a.at === b.at : dist(a, b) <= 0.5);
+
 /** Aynı yerdeki iki ordu birleşir. Kalan hareket, ikisinin azı. */
 export function merge(state, intoId, fromId) {
   const a = armyById(state, intoId), b = armyById(state, fromId);
-  if (!a || !b || a === b || a.at !== b.at || a.owner !== b.owner) return false;
+  if (!a || !b || a === b || !together(a, b) || a.owner !== b.owner || a.besieging || b.besieging) return false;
   for (const k of KEYS) a[k] = (a[k] ?? 0) + (b[k] ?? 0);
-  a.moves = Math.min(a.moves, b.moves);
+  a.mp = Math.min(a.mp, b.mp);
   // İki general varsa daha tecrübelisi komutayı alır, öteki emekli olur (adı yine kullanılabilir).
   if (b.general && (!a.general || b.general.xp > a.general.xp)) a.general = b.general;
   a.route = [];
@@ -477,7 +491,7 @@ export function detach(state, armyId, want) {
   const rest = Object.fromEntries(keys.map((k) => [k, (a[k] ?? 0) - part[k]]));
   if (empty(part) || empty(rest)) return null;
   for (const k of keys) a[k] = rest[k];
-  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, ...part, moves: a.moves, route: [], general: null };
+  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, x: a.x, y: a.y, ...part, mp: a.mp, route: [], general: null };
   state.armies.push(b);
   return b;
 }

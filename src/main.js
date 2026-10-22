@@ -6,8 +6,11 @@
 
 import { CIVS, PLACES } from "./data/world.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rules/diplomacy.js";
-import { neighbours, roadBetween } from "./rules/graph.js";
-import { access, attack, canAttack, canUse, forecast, hostile, menace, needsShips, order, routeTo } from "./rules/moves.js";
+import { roadBetween } from "./rules/graph.js";
+import {
+  access, attack, canAttack, canStrike, forecast, forecastField, hostile, menace, mpMax, nearestPlace, needsShips, order, routeTo, strike, turnsFor,
+} from "./rules/moves.js";
+import { POS, cellOf, centre, dist, isLand, pathCost, regionOf, smooth, stepCost } from "./rules/map.js";
 import {
   VERSION, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, merge, men, migrate, muster, newGame, placesOf, recruit, station, upgrade,
 } from "./rules/state.js";
@@ -18,20 +21,20 @@ import { blockaded } from "./rules/state.js";
 import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
-import { clamp, focus, makeCamera, panBy, resize, zoomAt } from "./view/camera.js";
+import { clamp, focus, makeCamera, panBy, resize, toMap, toScreen, zoomAt } from "./view/camera.js";
 import * as anim from "./view/anim.js";
 import * as sound from "./view/sound.js";
 import { relation } from "./rules/state.js";
-import { sight } from "./rules/sight.js";
+import { eyes, seen as seenBy, sight } from "./rules/sight.js";
 import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
 import { SCENE_MS } from "./view/battle.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
-import { alongRoad, drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
+import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { CARD_H, MODAL_MS, armyTip, drawUI, eventLines, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
+import { CARD_H, MODAL_MS, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
 import { TOP, chipRise } from "./view/hud.js";
-import { SIZE } from "./geo.js";
+import { SIZE, project } from "./geo.js";
 import { trait } from "./rules/numbers.js";
 
 const started = performance.now();
@@ -175,7 +178,9 @@ function cue(c) {
     if (now - lastMarch < 700) return;
     lastMarch = now;
     const walk = Math.min(2.6, c.legs.reduce((a, b) => a + b, 0) / 1000);
-    if (roadBetween(c.path[0], c.path[1])?.sea) sound.row(walk);
+    // Yürüyüşün ortası denizdeyse kürek, karadaysa davul.
+    const mid = c.pts[Math.floor(c.pts.length / 2)];
+    if (!isLand(cellOf(mid.x, mid.y))) sound.row(walk);
     else sound.march(walk);
   } else if (c.kind === "clash") sound.clash();
   else if (c.kind === "repaint" && c.from !== undefined) sound.horn(c.to === game?.player);
@@ -225,9 +230,9 @@ function traced(fn) {
   return [result, trace];
 }
 
-/** Ekranda görünüyor mu (çizelge görünmeyen hamleleri beklemeden geçer). */
-const visible = (id) => {
-  const s = placeOnScreen(cam, id);
+/** Ekranda görünüyor mu - bir yerleşim ya da bir nokta (çizelge görünmeyen hamleleri beklemeden geçer). */
+const visible = (q) => {
+  const s = typeof q === "string" ? placeOnScreen(cam, q) : toScreen(cam, q.x, q.y);
   return s.x > -40 && s.y > -40 && s.x < cam.w + 40 && s.y < cam.h + 40;
 };
 
@@ -247,10 +252,11 @@ function mapView() {
   view.owners = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.owner]));
   view.selected = ui.sel?.kind === "place" ? ui.sel.id : null;
   view.hover = ui.hover ?? null;
-  // Savaş sisi: oyuncunun gördüğü yerler ve dost topraklar.
+  // Savaş sisi: oyuncunun gözleri (yerleşimlerinin ve ordularının çevresi) ve dost topraklar.
   view.me = game.player;
   view.fog = ui.fog;
-  view.seen = sight(game, game.player);
+  view.eyes = eyes(game, game.player);
+  view.seen = sight(game, game.player, view.eyes);
   view.friends = new Set(PLACES.filter((p) => { const o = game.places[p.id].owner; return o === game.player || (o && relation(game, game.player, o) === "ally"); }).map((p) => p.id));
   view.winter = isWinter(game.turn);
   view.levels = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.level]));
@@ -264,38 +270,20 @@ function mapView() {
   view.armies = game.armies.map((a) => ({
     id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0, ships: fleetOf(a),
     selected: ui.sel?.kind === "army" && ui.sel.id === a.id,
-    spent: a.owner === game.player && a.moves <= 0,
-    // Kuşatan ordu kendi yerinde değil, hedefin surlarının önünde kamp kurmuş görünür.
-    camp: a.besieging ? alongRoad(a.at, a.besieging, 0.6) : null,
+    spent: a.owner === game.player && a.mp <= 0.05,
+    // Yerleşimin dışındaki ordu bulunduğu yerde: denizdeyse filo, kuşatıyorsa kampında.
+    float: a.at ? null : { x: a.x, y: a.y },
+    sea: !a.at && !isLand(cellOf(a.x, a.y)),
+    camp: !!a.besieging,
   }));
   view.sieges = Object.fromEntries(game.armies.filter((a) => a.besieging).map((a) => [a.besieging, a.owner]));
   const a = ownArmy();
   if (a) {
     view.marks = {};
-    // Bu tur yürünebilecek yerler, ve yanındaki saldırılabilecek yerler tahmin renginde.
-    let ring = [a.at];
-    const seen = new Set(ring);
-    for (let step = 0; step < a.moves; step++) {
-      const next = [];
-      for (const id of ring) {
-        for (const n of neighbours(id)) {
-          const k = access(game, a.owner, n);
-          if (seen.has(n) || !(k === "own" || k === "ally")) continue;
-          if (!canUse(a, roadBetween(id, n))) continue; // gemisiz deniz yolu, askersiz kara yolu yok
-          seen.add(n);
-          next.push(n);
-          view.marks[n] = "walk";
-        }
-      }
-      ring = next;
-    }
-    if (a.moves > 0) {
-      for (const n of neighbours(a.at)) {
-        if (!canAttack(game, a, n)) continue;
-        view.marks[n] = forecast(game, a, a.owner, n).odds;
-      }
-    }
-    if (a.route.length) view.route = [a.at, ...a.route];
+    // Menzildeki saldırılabilecek yerler tahmin renginde.
+    if (a.mp > 0) for (const id of Object.keys(game.places)) if (canAttack(game, a, id)) view.marks[id] = forecast(game, a, a.owner, id).odds;
+    // Seçili ordunun kalan yolu, her turun sonu işaretli.
+    if (a.route.length) view.route = routeShape(a, [cellOf(a.x, a.y), ...a.route]);
     if (ui.preview) view.preview = ui.preview;
   }
   return view;
@@ -353,8 +341,8 @@ function stepGlide() {
  * Seçim kartı ekranın altında: seçilen yer (ya da ordunun durduğu yer) kartın arkasında
  * kalacaksa harita onu kartın üstündeki boşluğun ortasına kaydırır.
  */
-function keepVisible(id) {
-  const s = placeOnScreen(cam, id);
+function keepVisible(pt) {
+  const s = toScreen(cam, pt.x, pt.y);
   const bottom = cam.h - 12 - CARD_H - 40;
   if (s.y > TOP + 40 && s.y < bottom) return;
   const want = (TOP + bottom) / 2;
@@ -366,8 +354,10 @@ function captionOf(part) {
   const name = civName(part.owner, ui.lang);
   const b = part.onMe[0] ?? part.seenBattles[0];
   if (b) {
-    const where = PLACES.find((p) => p.id === b.path[b.path.length - 1]).name[ui.lang];
-    return { title: name, sub: fill(b.attack.won ? T().capTook : T().capHeld, where) };
+    // Yerleşime saldırı: aldı ya da püskürtüldü; meydan muharebesi: nerede savaştığı.
+    const at = b.attack.at ?? nearestPlace(b.pts[b.pts.length - 1]);
+    const where = PLACES.find((p) => p.id === at).name[ui.lang];
+    return { title: name, sub: fill(!b.attack.at ? T().capField : b.attack.won ? T().capTook : T().capHeld, where) };
   }
   if (part.fogBattles.length) return { title: name, sub: T().capFog };
   return { title: name, sub: T().capMarch };
@@ -538,8 +528,7 @@ function dispatch(act) {
       if (!a) break;
       ui.sel = { kind: "army", id: a.id };
       ui.army = a.id;
-      const mm = placeAt(a.at);
-      glide(mm.x, mm.y, Math.max(cam.scale, cam.min * 2.4));
+      glide(a.x, a.y, Math.max(cam.scale, cam.min * 2.4));
       break;
     }
     case "pickPlace": {
@@ -567,9 +556,9 @@ function dispatch(act) {
       ui.modal = null;
       ui.news = null;
       const before = { ...game.civs[me] };
-      const sawBefore = sight(game, me);
+      const eyesBefore = eyes(game, me), sawBefore = sight(game, me, eyesBefore);
       const [, trace] = traced(() => endTurn(game));
-      const sawAfter = sight(game, me);
+      const eyesAfter = eyes(game, me), sawAfter = sight(game, me, eyesAfter);
       if (ui.sel?.kind === "army" && !armyById(game, ui.sel.id)) ui.sel = null;
       // Gösteri: önce tur şeridi, sonra rakiplerin hamleleri sırayla, en son kendi
       // ordularının güzergâh adımları. Kaynakların artışı üst banttan yükselir.
@@ -579,7 +568,7 @@ function dispatch(act) {
       // savaş bir parıltıyla belli olur), sonra oyuncunun bıraktığı yere döner.
       showHome = { x: cam.x, y: cam.y, scale: cam.scale };
       const showEnd = anim.timeline(trace, t + 300, visible, me, {
-        seen: (id) => !ui.fog || sawBefore.has(id) || sawAfter.has(id),
+        seen: (q) => !ui.fog || (typeof q === "string" ? sawBefore.has(q) || sawAfter.has(q) : seenBy(eyesBefore, q) || seenBy(eyesAfter, q)),
         overview: { x: SIZE.x / 2, y: SIZE.y / 2, scale: cam.min },
         home: showHome,
         caption: captionOf,
@@ -743,6 +732,12 @@ function dispatch(act) {
       save();
       break;
     }
+    case "trespass":
+      // Tarafsızın toprağından geçmek onaylandı: bu medeniyet için bir daha sorulmaz.
+      ui.trespassOk = new Set([...(ui.trespassOk ?? []), ...act.civs]);
+      ui.modal = null;
+      command(act.target);
+      break;
     case "aim":
       // Yürü: sıradaki basış ordunun gideceği yer.
       ui.aim = act.army;
@@ -750,14 +745,13 @@ function dispatch(act) {
       break;
     case "nextArmy": {
       // Hareketi kalan bir sonraki ordu: seçili olanın ardından, sırayla.
-      const mine = game.armies.filter((a) => a.owner === me && a.moves > 0);
+      const mine = game.armies.filter((a) => a.owner === me && a.mp > 0.05);
       if (!mine.length) break;
       const cur = ui.sel?.kind === "army" ? ui.sel.id : -1;
       const next = mine.find((a) => a.id > cur) ?? mine[0];
       ui.sel = { kind: "army", id: next.id };
       ui.army = next.id;
-      const mm = placeAt(next.at);
-      glide(mm.x, mm.y, Math.max(cam.scale, cam.min * 2));
+      glide(next.x, next.y, Math.max(cam.scale, cam.min * 2));
       break;
     }
     case "attackAsk":
@@ -785,7 +779,7 @@ function dispatch(act) {
       if (m?.kind !== "attack") break;
       // Ordu kapıya kadar yürür, kılıçlar çarpışır, sonra sonuç penceresi.
       coachDone("attack");
-      const [ev, trace] = traced(() => attack(game, m.army, m.id));
+      const [ev, trace] = traced(() => (m.target ? strike(game, m.army, m.target) : attack(game, m.army, m.id)));
       record(game, [ev]);
       ui.modal = null;
       anim.timeline(trace, anim.clock(), () => true, me);
@@ -848,97 +842,143 @@ function dispatch(act) {
 
 // ---- haritaya basış ----
 
-/** Sol tık: orduyu ya da yeri seçer. Hiçbir zaman bir şey yürütmez. */
+/** Sol tık: orduyu ya da yeri seçer. Yürü'ye basılmışsa basılan yer ordunun gideceği yer. */
 function tapMap(x, y) {
-  const t = tokenAt(x, y);
   if (ui.aim && ownArmy()?.id === ui.aim) {
     ui.aim = null;
-    if (t) {
-      const b = armyById(game, t.army);
-      if (b.owner !== game.player) return command(b.at);
-    }
-    const p = nearest(x, y);
-    if (p) return command(p.id);
-    return toast(T().aimMiss);
+    return command(targetAt(x, y));
   }
   ui.aim = null;
+  const t = tokenAt(x, y);
   if (t) {
     const a = armyById(game, t.army);
     ui.sel = { kind: "army", id: a.id };
     ui.army = a.owner === game.player ? a.id : null;
-    keepVisible(a.at);
+    keepVisible(a);
     return redraw();
   }
   const p = nearest(x, y);
   // Yer seçilince son seçilen kendi ordu hatırlanır: yerin kartında saldırı tahmini çıkar.
   ui.sel = p ? { kind: "place", id: p.id } : null;
   if (p && game.places[p.id].owner === game.player) coachDone("city");
-  if (p) keepVisible(p.id);
+  if (p) keepVisible(POS[p.id]);
   else ui.army = null;
   redraw();
 }
 
-/** Sağ tık: seçili kendi ordusunu oraya yürüt ya da (yanındaysa) saldırt. */
+/** Sağ tık: seçili kendi ordusunu oraya yürüt ya da (menzildeyse) saldırt. */
 function rightTap(x, y) {
   if (ui.modal || ui.screen !== "game" || !ownArmy()) return;
   if (boxes.some((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)) return;
+  command(targetAt(x, y));
+}
+
+/** Ekrandaki bir noktanın altındaki hedef: bir ordu, bir yerleşim ya da haritada bir nokta. */
+function targetAt(x, y) {
   const t = tokenAt(x, y);
   if (t) {
     const b = armyById(game, t.army);
-    if (b.owner !== game.player) command(b.at);
-    return;
+    if (b.at) return { place: b.at };
+    return b.owner === game.player ? { x: b.x, y: b.y } : { army: b.id };
   }
   const p = nearest(x, y);
-  if (p) command(p.id);
+  if (p) return { place: p.id };
+  return toMap(cam, x, y);
 }
 
-/** Seçili ordunun `id`ye gitmesi ne olurdu: ipucu ve sağ tık aynı hesabı kullanır. */
-function goTo(a, id) {
-  if (id === a.at) return null;
-  const k = access(game, a.owner, id);
-  if (k === null) return { kind: "neutral" };
-  if (hostile(k) && neighbours(a.at).includes(id)) {
-    if (a.moves <= 0) return { kind: "spent" };
-    if (canAttack(game, a, id)) return { kind: "attack", odds: forecast(game, a, a.owner, id).odds };
-    return { kind: "ships" };
+/** Bir yolun ekrandaki şekli: yumuşatılmış çizgi ve her turun bittiği yer (advance ile aynı hesap). */
+function routeShape(a, cells) {
+  const turns = [];
+  let left = a.mp, n = 1;
+  for (let i = 1; i < cells.length; i++) {
+    const c = stepCost(cells[i - 1], cells[i], dist(centre(cells[i - 1]), centre(cells[i])));
+    if (c > left + 1e-9) {
+      if (i > 1) turns.push({ ...centre(cells[i - 1]), n });
+      n++;
+      left = mpMax(a);
+    }
+    left -= c;
   }
-  const route = routeTo(game, a, id);
-  if (route === null) return { kind: needsShips(game, a, id) ? "ships" : "none" };
-  if (!route.length) return null;
-  // Kaç tur: bu turun kalan hareketi, sonra her tur tam hareket (Sakalar ve hızlı general 2).
-  const per = trait(a.owner, "moves") + (a.general?.traits.includes("swift") ? 1 : 0);
-  const turns = route.length <= a.moves ? 1 : Math.ceil((route.length - a.moves) / per) + (a.moves > 0 ? 1 : 0);
-  return { kind: hostile(k) ? "approach" : "walk", turns, route };
+  turns.push({ ...centre(cells[cells.length - 1]), n, end: true });
+  return { pts: smooth(cells), turns };
 }
 
-function command(id) {
+/**
+ * Seçili ordunun bir hedefe gitmesi ne olurdu: ipucu, önizleme ve sağ tık aynı hesabı kullanır.
+ * Dönen: { kind: "walk" | "approach" | "attack" | "strike" | "neutral" | "spent" | "ships" | "none",
+ * turns, cells, shape, trespass } ya da null (zaten orada).
+ */
+function goTo(a, target) {
+  if (target.place) {
+    const id = target.place;
+    if (a.at === id) return null;
+    const k = access(game, a.owner, id);
+    if (k === null) return { kind: "neutral", civ: game.places[id].owner };
+    if (hostile(k) && dist(a, POS[id]) <= N.reach.strike) {
+      if (a.mp <= 0) return { kind: "spent" };
+      if (canAttack(game, a, id)) return { kind: "attack", odds: forecast(game, a, a.owner, id).odds };
+      return { kind: "ships" };
+    }
+  } else if (target.army) {
+    const b = armyById(game, target.army);
+    if (!b) return null;
+    // Savaşmadığın birinin ordusu: yanına yürünür.
+    if (relation(game, a.owner, b.owner) !== "war") return goTo(a, { x: b.x, y: b.y });
+    if (dist(a, b) <= N.reach.strike) {
+      if (a.mp <= 0) return { kind: "spent" };
+      if (canStrike(game, a, b)) return { kind: "strike", odds: forecastField(game, a, b).odds };
+      return { kind: "ships" };
+    }
+  }
+  const r = routeTo(game, a, target);
+  if (!r) return { kind: needsShips(game, a, target) ? "ships" : "none" };
+  if (r.cells.length < 2) return null;
+  // Yol tarafsız birinin toprağından geçiyorsa o medeniyetler (girersen öfkelenir).
+  const trespass = [...new Set(r.cells.map(regionOf).filter(Boolean).map((id) => game.places[id].owner))]
+    .filter((o) => o && o !== a.owner && relation(game, a.owner, o) === "neutral");
+  return { kind: r.kind, turns: turnsFor(a, r.cost), cells: r.cells, cost: r.cost, shape: routeShape(a, r.cells), trespass };
+}
+
+function command(target) {
   const a = ownArmy();
-  const go = a && goTo(a, id);
+  const go = a && goTo(a, target);
   if (!go) return;
   ui.tip = null;
   ui.preview = null;
   hoverKey = "";
   if (go.kind === "attack") {
-    ui.modal = { kind: "attack", army: a.id, id };
+    ui.modal = { kind: "attack", army: a.id, id: target.place };
     return redraw();
   }
-  if (go.kind === "neutral") return toast(fill(T().neutralBlock, civName(game.places[id].owner, ui.lang)));
+  if (go.kind === "strike") {
+    ui.modal = { kind: "attack", army: a.id, target: target.army };
+    return redraw();
+  }
+  if (go.kind === "neutral") return toast(fill(T().neutralBlock, civName(go.civ, ui.lang)));
   if (go.kind === "spent") return toast(T().tipSpent);
   if (go.kind === "ships") return toast(T().needShips);
   if (go.kind === "none") return toast(T().noPath);
+  // Tarafsızın toprağından geçecekse (kullanıcı 22.10: "girilsin ama ilişki bozulsun") önce sorulur;
+  // aynı medeniyet için bu oturumda bir kere.
+  const ask = go.trespass.filter((c) => !ui.trespassOk?.has(c));
+  if (ask.length) {
+    ui.modal = { kind: "confirm", text: fill(T().trespassQ, ask.map((c) => civName(c, ui.lang)).join(", ")), yes: { do: "trespass", target, civs: ask } };
+    return redraw();
+  }
   sound.click();
   coachDone("move");
-  const [, trace] = traced(() => order(game, a.id, id));
+  const [, trace] = traced(() => order(game, a.id, target));
   // Kışın denizde fırtına: oyuncuya hemen söyle (raporda da çıkar).
   const caught = (game.storms ?? []).filter((s) => s.army === a.id && s.turn === game.turn && !s.told);
   for (const s of caught) { s.told = true; toast(fill(T().stormToast, s.lost, s.sunk)); }
   const t0 = anim.clock();
   const arrive = anim.timeline(trace, t0, () => true, game.player) - t0;
+  if (!game.armies.includes(a)) return redraw();
   if (a.route.length) {
     // Yolun kalanı: varış yerinde kaç tur sonra orada olacağı yükselir.
-    const turns = Math.ceil(a.route.length / trait(a.owner, "moves"));
-    anim.rise(a.route[a.route.length - 1], fill(T().eta, turns), INK.ink, arrive);
-  } else if (trace.length) anim.pulse(a.at, INK.ink, arrive);
+    const left = pathCost([cellOf(a.x, a.y), ...a.route]);
+    anim.rise(centre(a.route[a.route.length - 1]), fill(T().eta, Math.max(1, Math.ceil(left / mpMax(a)))), INK.ink, arrive);
+  } else if (trace.length) anim.pulse(a.at ?? { x: a.x, y: a.y }, INK.ink, arrive);
   save();
   redraw();
 }
@@ -946,13 +986,16 @@ function command(id) {
 /**
  * Basılan yerdeki ordu. Uzaktan bakınca bir ordu (ya da limandaki filo) komşu bir şehrin
  * üstüne düşebiliyor: bir şehrin tam üstüne basıldıysa şehir kazanır. Ordu kendi şehrinin
- * sağında durduğu için kendi şehri onu örtmez.
+ * sağında durduğu için kendi şehri onu örtmez. Sahadaki ordu bir şehrin kapısında durabiliyor
+ * (saldırmaya gitti): onun sancağı şehrin maketinin üstüne biner, o yüzden ordu önce gelir.
  */
 function tokenAt(x, y) {
   const t = [...tokens].reverse().find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
   if (!t) return t;
   const pl = nearest(x, y);
-  return pl && reach(cam, pl.id, x, y) < (t.fleet ? 16 : 11) ? null : t;
+  // Sahadaki ordu (bir şehrin kapısında duruyor olabilir) önce gelir: şehir ancak tam üstüne basılınca.
+  const field = !armyById(game, t.army)?.at;
+  return pl && reach(cam, pl.id, x, y) < (field ? 6 : t.fleet ? 16 : 11) ? null : t;
 }
 
 /** Basılan yere en yakın yerleşim (maketi ya da sancağı), yeterince yakınsa. */
@@ -1051,11 +1094,11 @@ function hoverAt(p) {
       const a = armyById(game, t.army);
       if (a) {
         tip = armyTip(game, a, ui.lang);
-        // Seçili ordu varken bir düşman ordusunun üstü: onun durduğu yere saldırı.
+        // Seçili ordu varken bir yabancı ordunun üstü: ona saldırı (ya da yanına yürüyüş).
         if (mine && a.owner !== game.player) {
-          const go = goTo(mine, a.at);
-          if (go) tip = [...tip, placeTip(game, a.at, ui.lang, false, go).at(-1)];
-          preview = go?.route ? [mine.at, ...go.route] : null;
+          const go = goTo(mine, targetAt(p.x, p.y));
+          if (go) tip = [...tip, goLine(go, ui.lang)];
+          preview = go?.shape ?? null;
         }
       }
     } else if (pl) {
@@ -1063,9 +1106,16 @@ function hoverAt(p) {
       hot = true;
       place = pl.id;
       const hid = ui.fog && !sight(game, game.player).has(pl.id);
-      const go = mine ? goTo(mine, pl.id) : null;
+      const go = mine ? goTo(mine, { place: pl.id }) : null;
       tip = placeTip(game, pl.id, ui.lang, hid, go);
-      preview = go?.route ? [mine.at, ...go.route] : null;
+      preview = go?.shape ?? null;
+    } else if (mine) {
+      // Boş arazi ya da deniz: oraya yürüyüş (kare değişince yeniden hesaplanır).
+      const m = toMap(cam, p.x, p.y);
+      key = "c" + cellOf(m.x, m.y);
+      const go = goTo(mine, m);
+      if (go) tip = [isLand(cellOf(m.x, m.y)) ? TEXT[ui.lang].groundHere : TEXT[ui.lang].seaHere, goLine(go, ui.lang)];
+      preview = go?.shape ?? null;
     }
   }
   canvas.style.cursor = ui.aim && !boxes.some((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) ? "crosshair" : hot ? "pointer" : "";
@@ -1200,6 +1250,12 @@ window.MareNostrum = {
     redraw();
   },
   overview() { cam.scale = cam.min; clamp(cam); redraw(); },
+  /** Bir yerleşimin harita birimindeki yeri (araçlar orduyu oraya koyabilsin). */
+  pos(id) { return { ...placeAt(id) }; },
+  /** Kamerayı bir harita noktasına getir (sahadaki ordu için). */
+  lookAt(x, y, zoom = 1) { glideTo = null; focus(cam, x, y, cam.min * zoom); redraw(); },
+  /** Bir enlem/boylamın ekrandaki yeri (araçlar haritanın boş bir yerine basabilsin). */
+  toScreen(lat, lon) { const m = project(lon, lat); return toScreen(cam, m.x, m.y); },
   /** Bir yerleşimin ekrandaki yeri: araç oraya gerçek bir basış gönderebilsin. */
   where(id) { return placeOnScreen(cam, id); },
   /** Fareyi bir noktaya getir (ipucu ve yol önizlemesi için). */

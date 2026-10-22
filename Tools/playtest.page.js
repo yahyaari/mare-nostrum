@@ -59,7 +59,7 @@ window.PT = (() => {
     M.hover(p.x, p.y);
     await frame();
     if (M.ui.tip?.lines?.length) stats.tips++;
-    if (M.ui.preview?.length > 1) stats.previews++;
+    if (M.ui.preview?.pts?.length > 1) stats.previews++;
     M.rightTap(p.x, p.y);
     await frame();
   }
@@ -69,8 +69,9 @@ window.PT = (() => {
     if (!a) return false;
     // Açık bir kart sancağın üstünü örtebilir (telefonda haritanın yarısı): önce kapat.
     if (M.ui.sel) await press((x) => x.do === "deselect");
-    M.look(a.at, 2.4);
-    await frame();
+    M.lookAt(a.x, a.y, 2.4);
+    // Yürüyen ordunun sancağına basılmaz: yürüyüşü bitsin (sancağı yeniden basılabilir olsun).
+    for (let i = 0; i < 900 && !M.tokens().some((x) => x.army === armyId); i++) await frame();
     const t = M.tokens().find((x) => x.army === armyId);
     if (!t) return false;
     M.tap(t.x + t.w / 2, t.y + t.h / 2);
@@ -166,10 +167,11 @@ window.PT = (() => {
 
     // Ordular: yanında kolay hedef varsa saldır, yoksa en yakın alınabilir hedefe yürü.
     for (const a of [...g.armies.filter((x) => x.owner === me)]) {
-      if (!g.armies.includes(a) || a.moves <= 0) continue;
-      if (!(await tapArmy(a.id))) { stats.missed.push("ordu seçilemedi " + a.id); continue; }
+      if (!g.armies.includes(a) || a.mp <= 0.05) continue;
+      if (!(await tapArmy(a.id))) { stats.missed.push(`ordu seçilemedi ${a.id} (${a.at ?? "saha"} ${a.x.toFixed(2)},${a.y.toFixed(2)} gemi ${a.ships} asker ${a.inf} jeton ${M.tokens().length} meşgul ${M.anim.busy()} pencere ${M.ui.modal?.kind ?? "-"} ${JSON.stringify(M.anim.pendingItems().filter((x) => x.army === a.id || x.kind !== "float").slice(0, 4))})`); continue; }
       const odds = (id) => moves.forecast(g, a, me, id).odds;
-      const near = graph.neighbours(a.at).filter((n) => moves.canAttack(g, a, n) && odds(n) === "easy");
+      // Serbest yürüyüş: menzildeki (yanındaki) kolay hedef.
+      const near = Object.keys(g.places).filter((n) => moves.canAttack(g, a, n) && odds(n) === "easy");
       if (near.length) {
         await rightPlace(near[0]);
         if (await press((x) => x.do === "attack", "saldır düğmesi")) {
@@ -182,11 +184,13 @@ window.PT = (() => {
       }
       if (a.route.length) continue;
       const targets = Object.keys(g.places).filter((id) => moves.hostile(moves.access(g, me, id)) && odds(id) !== "hopeless");
-      const reach = targets.map((id) => [id, moves.routeTo(g, a, id)]).filter(([, r]) => r && r.length).sort((x, y) => x[1].length - y[1].length);
+      const reach = targets.map((id) => [id, moves.routeTo(g, a, { place: id })]).filter(([, r]) => r && r.cells.length > 1).sort((x, y) => x[1].cost - y[1].cost);
       if (reach.length) {
         await rightPlace(reach[0][0]);
-        if (a.route.length || a.moves === 0) stats.marches++;
-      } else if (g.places[a.at].owner === me) {
+        // Tarafsızın toprağından geçecekse sorulur: oyuncu geçmez (vazgeçer).
+        if (M.ui.modal?.kind === "confirm") await press((x) => x.do === "close");
+        if (a.route.length || a.mp < 0.05) stats.marches++;
+      } else if (a.at && g.places[a.at].owner === me) {
         await press((x) => x.do === "station");
       }
     }

@@ -9,7 +9,9 @@ await ev(`M.dispatch({ do: "pick", civ: "saka" }); M.dispatch({ do: "start" }); 
 await wait(1500);
 await ev(`  const S = await import("./src/rules/state.js");
   const far = S.formArmy(M.game, "rome", 10, 0); window.__far = far.id;
+  // Yakındaki: Olbia'nın görüş çemberinde, sahada.
   const near = S.formArmy(M.game, "odessos", 10, 0); window.__near = near.id;
+  Object.assign(near, { at: null, x: M.pos("olbia").x - 1, y: M.pos("olbia").y });
   M.overview(); return 1;`);
 await wait(400);
 const on = await ev(`return M.tokens().map((t) => t.army);`);

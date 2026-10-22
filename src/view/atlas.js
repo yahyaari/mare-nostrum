@@ -243,7 +243,7 @@ function mist() {
  * dost toprakları yumuşak kenarla silinir. Doku haritaya bağlı: kaydırınca sisle birlikte kayar.
  * `seen`: görülen yerleşimler, `friends`: kendi ve müttefik yerleşimler, `pos`: harita noktaları.
  */
-export function paintFog(ctx, canvas, cells, pos, seen, friends, ox, oy, k, dpr) {
+export function paintFog(ctx, canvas, cells, eyes, friends, ox, oy, k, dpr) {
   const W = canvas.width, H = canvas.height;
   fogCanvas ??= document.createElement("canvas");
   if (fogCanvas.width !== W || fogCanvas.height !== H) { fogCanvas.width = W; fogCanvas.height = H; }
@@ -258,17 +258,15 @@ export function paintFog(ctx, canvas, cells, pos, seen, friends, ox, oy, k, dpr)
   f.fillStyle = pat;
   f.fillRect(0, 0, W, H);
 
-  // Görülen yerler: çevreleri yumuşakça açılır.
+  // Gözler (yerleşimler ve ordular, rules/sight.js): çemberleri yumuşakça açılır.
   f.globalCompositeOperation = "destination-out";
   f.setTransform(dpr * k, 0, 0, dpr * k, ox, oy);
-  const R1 = 0.9, R2 = 2.1;
-  for (const id of seen) {
-    const p = pos[id];
-    const g = f.createRadialGradient(p.x, p.y, R1, p.x, p.y, R2);
+  for (const e of eyes) {
+    const g = f.createRadialGradient(e.x, e.y, e.r * 0.5, e.x, e.y, e.r);
     g.addColorStop(0, "rgba(0,0,0,1)");
     g.addColorStop(1, "rgba(0,0,0,0)");
     f.fillStyle = g;
-    f.fillRect(p.x - R2, p.y - R2, 2 * R2, 2 * R2);
+    f.fillRect(e.x - e.r, e.y - e.r, 2 * e.r, 2 * e.r);
   }
   // Dost topraklar tamamen açık; kenarı gölge bulanıklığıyla yumuşak.
   f.shadowColor = "rgba(0,0,0,1)";
@@ -284,11 +282,8 @@ export function paintFog(ctx, canvas, cells, pos, seen, friends, ox, oy, k, dpr)
   ctx.restore();
 }
 
-/** Bu harita noktası sisten açık mı (yürüyen ordu sisin içinde görünmesin). */
-export function clear(m, seen, pos) {
-  for (const id of seen) if (Math.hypot(pos[id].x - m.x, pos[id].y - m.y) < 1.6) return true;
-  return false;
-}
+/** Bu harita noktası sisten açık mı (sisin içindeki ordu görünmesin): bir gözün çemberinde. */
+export const clear = (m, eyes) => eyes.some((e) => Math.hypot(e.x - m.x, e.y - m.y) <= e.r);
 
 // ---- bulutlar ----
 //

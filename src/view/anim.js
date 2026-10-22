@@ -6,20 +6,20 @@
 // kurar. Çizelge sürerken harita, durumun SON hâlini değil, çizelgenin o anını gösterir:
 // yürüyen ordunun sancağı yolda, alınan şehir eski renginde - ta ki sıra ona gelene kadar.
 //
-// Ordu yolun UZUNLUĞUNA göre yürür (kısa yol yarım saniye, uzun yol bir buçuk) ve arkasında
-// yolda kendi renginde bir iz bırakır. İlk hâlinde her yol 0.4 saniyeydi, tur arasında da
-// kısalıyordu: oyuncu "ordu ışınlanıyor" dedi.
+// Ordu yürüdüğü yolun UZUNLUĞUNA göre yürür (kısa yürüyüş yarım saniye, uzunu iki buçuk) ve
+// arkasında kendi renginde bir iz bırakır. İlk hâlinde her yol 0.4 saniyeydi, tur arasında da
+// kısalıyordu: oyuncu "ordu ışınlanıyor" dedi. Serbest yürüyüşten beri (kullanıcı 22.10) iz
+// yerleşimlerin değil noktaların dizisi: kurallar kare kare yürür, ekran köşeleri yumuşatır.
 //
 // Hiçbir kuralı değiştirmez. Tur gösterisinde ilk dokunuş hızlandırır (`hurry`), ikincisi
 // bitirir (`finish`).
 
 import { colorOf } from "./kit.js";
-import { roadBetween } from "../rules/graph.js";
-import { alongRoad, placeAt, roadLength } from "./draw.js";
+import { cellOf, isLand, smooth } from "../rules/map.js";
 
-const PER_UNIT = 230; // harita biriminde yol başına ms ...
-const LEG_MIN = 520; // ... ama en kısa yol bile bu kadar sürer ...
-const LEG_MAX = 1500; // ... ve en uzunu bu kadar.
+const PER_UNIT = 230; // harita biriminde ms ...
+const LEG_MIN = 520; // ... ama en kısa yürüyüş bile bu kadar sürer ...
+const LEG_MAX = 2500; // ... ve en uzunu bu kadar.
 const CLASH = 700;
 const MAX = 6000; // rakiplerin hamleleri en fazla bu kadar sürsün; aşarsa onlar hızlanır
 
@@ -38,6 +38,8 @@ export function busy() {
   return items.length > 0;
 }
 export const endsAt = () => items.reduce((m, i) => Math.max(m, i.t0 + i.dur), clock());
+/** Araçlar için: süren parçalar ve bitmelerine kalan süre (ms). */
+export const pendingItems = () => items.map((i) => ({ kind: i.kind, army: i.army, left: Math.round(i.t0 + i.dur - clock()) }));
 
 /**
  * Yeni başlayan animasyon parçaları (sesler için): her biri bir kere döner. Ses, animasyonun
@@ -70,8 +72,21 @@ export function hurry(k = 4) {
 
 const ease = (x) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
 
-/** Bir yolu yürümenin süresi: uzunluğuyla orantılı, sınırlar içinde. */
-export const legTime = (a, b) => Math.max(LEG_MIN, Math.min(LEG_MAX, roadLength(a, b) * PER_UNIT));
+/** Bir yürüyüşün süresi: uzunluğuyla orantılı, sınırlar içinde. */
+export const walkTime = (len) => Math.max(LEG_MIN, Math.min(LEG_MAX, len * PER_UNIT));
+
+/** Noktalar arası uzunluklar. */
+const lengths = (pts) => pts.slice(1).map((p, j) => Math.hypot(p.x - pts[j].x, p.y - pts[j].y));
+
+/** Bir yürüyüşün parçalarının süreleri: toplamı walkTime, her parça uzunluğu oranında. */
+function legsOf(pts, k) {
+  const ls = lengths(pts);
+  const total = ls.reduce((a, b) => a + b, 0);
+  if (!total) return ls.map(() => 0);
+  const dur = walkTime(total) * k;
+  return ls.map((l) => (dur * l) / total);
+}
+
 
 /**
  * Bir izden çizelge kur. Art arda gelen aynı medeniyetin hamleleri bir bölüm: bölümün bütün
@@ -88,20 +103,20 @@ export function timeline(trace, start, visible, own = null, direct = null) {
     let cursor = start;
     for (const seg of segments(trace)) {
       const mine = seg[0]?.owner === own;
-      const seen = mine || seg.some((m) => m.path.some(visible));
+      const seen = mine || seg.some((m) => m.pts.some(visible));
       const k = mine ? 1 : scale;
       let end = cursor;
       for (const m of seg) {
-        const legs = m.path.slice(1).map((to, j) => (seen ? legTime(m.path[j], to) * k : 0));
+        const legs = seen ? legsOf(m.pts, k) : m.pts.slice(1).map(() => 0);
         const walk = legs.reduce((a, b) => a + b, 0);
         const C = seen ? CLASH : 0;
         const dur = walk + (m.attack ? C : 0);
-        out.push({ kind: "march", t0: cursor, dur: Math.max(dur, 1), legs, army: m.army, owner: m.owner, men: m.men, ships: m.ships, path: m.path, attack: m.attack });
+        out.push({ kind: "march", t0: cursor, dur: Math.max(dur, 1), legs, army: m.army, owner: m.owner, men: m.men, ships: m.ships, pts: m.pts, attack: m.attack });
         if (m.attack) {
-          const at = m.path[m.path.length - 1];
+          const at = m.attack.at ?? m.pts[m.pts.length - 1];
           const last = legs[legs.length - 1] ?? 0;
           out.push({ kind: "clash", t0: cursor + walk - last * 0.15, dur: C, at });
-          if (m.attack.won) {
+          if (m.attack.won && m.attack.at) {
             out.push({ kind: "repaint", t0: cursor + walk + C * 0.45, dur: seen ? 1100 : 1, at, from: m.attack.oldOwner, to: m.owner });
           }
         }
@@ -141,9 +156,9 @@ const DWELL = 1100; // şeridi olan bölüm en az bu kadar sürer (okunsun)
 const SHOW_MAX = 8000; // rakiplerin kısmı en fazla bu kadar; aşarsa yürüyüşler hızlanır
 
 function directed(trace, start, own, direct) {
-  const last = (m) => m.path[m.path.length - 1];
+  const last = (m) => m.attack?.at ?? m.pts[m.pts.length - 1];
   const parts = segments(trace).map((seg) => {
-    const walks = seg.filter((m) => m.path.some(direct.seen));
+    const walks = seg.filter((m) => m.pts.some(direct.seen));
     const battles = seg.filter((m) => m.attack);
     return {
       seg, owner: seg[0]?.owner, mine: seg[0]?.owner === own, walks, battles,
@@ -157,15 +172,15 @@ function directed(trace, start, own, direct) {
     const out = [];
     let cursor = start;
     const play = (m, seen, k, at0) => {
-      const legs = m.path.slice(1).map((to, j) => (seen ? legTime(m.path[j], to) * k : 0));
+      const legs = seen ? legsOf(m.pts, k) : m.pts.slice(1).map(() => 0);
       const walk = legs.reduce((a, b) => a + b, 0);
       const C = seen ? CLASH * Math.max(0.5, k) : 0;
       const dur = walk + (m.attack ? C : 0);
-      out.push({ kind: "march", t0: at0, dur: Math.max(dur, 1), legs, army: m.army, owner: m.owner, men: m.men, ships: m.ships, path: m.path, attack: m.attack });
+      out.push({ kind: "march", t0: at0, dur: Math.max(dur, 1), legs, army: m.army, owner: m.owner, men: m.men, ships: m.ships, pts: m.pts, attack: m.attack });
       if (m.attack) {
         const at = last(m), lastLeg = legs[legs.length - 1] ?? 0;
         out.push({ kind: "clash", t0: at0 + walk - lastLeg * 0.15, dur: C, at });
-        if (m.attack.won) out.push({ kind: "repaint", t0: at0 + walk + C * 0.45, dur: seen ? 1100 : 1, at, from: m.attack.oldOwner, to: m.owner });
+        if (m.attack.won && m.attack.at) out.push({ kind: "repaint", t0: at0 + walk + C * 0.45, dur: seen ? 1100 : 1, at, from: m.attack.oldOwner, to: m.owner });
       }
       return at0 + dur;
     };
@@ -180,7 +195,7 @@ function directed(trace, start, own, direct) {
       const segStart = cursor;
       let end = cursor;
       for (const m of x.seg) {
-        end = Math.max(end, play(m, m.path.some(direct.seen), scale, segStart));
+        end = Math.max(end, play(m, m.pts.some(direct.seen), scale, segStart));
         // Sisteki savaş: yer görünmüyor, ama bir şey olduğu belli olsun.
         if (m.attack && !direct.seen(last(m))) out.push({ kind: "fogfight", t0: segStart, dur: DWELL * Math.max(0.7, scale), at: last(m) });
       }
@@ -207,19 +222,34 @@ function directed(trace, start, own, direct) {
   return build(scale, false).end;
 }
 
-/** İzi bölümlere ayırır: [[{ army, owner, men, path, attack }...], ...]. */
+/**
+ * İzi bölümlere ayırır: [[{ army, owner, men, ships, pts, attack }...], ...]. Aynı ordunun art arda
+ * yürüyüşü ve saldırısı tek parça: yürür, sonra kapıda çarpışır. Kare kare yürüyüşün köşeleri
+ * yumuşatılır (map.js smooth); ilk ve son nokta olduğu gibi (yerleşimin tam yeri).
+ */
 function segments(trace) {
   const out = [];
   let seg = null, owner = undefined;
+  const pt = ([x, y]) => ({ x, y });
   for (const e of trace) {
     if (e.owner !== owner) { seg = []; out.push(seg); owner = e.owner; }
-    let m = seg.find((x) => x.army === e.army && x.path[x.path.length - 1] === e.from && !x.attack);
-    if (!m) { m = { army: e.army, owner: e.owner, men: e.men, ships: e.ships ?? 0, path: [e.from], attack: null }; seg.push(m); }
-    m.path.push(e.to);
-    if (e.type === "attack") m.attack = { won: e.won, oldOwner: e.oldOwner };
+    const pts = e.path.map(pt);
+    const tail = (x) => x.pts[x.pts.length - 1];
+    let m = seg.find((x) => x.army === e.army && !x.attack && Math.hypot(tail(x).x - pts[0].x, tail(x).y - pts[0].y) < 1e-6);
+    if (!m) { m = { army: e.army, owner: e.owner, men: e.men, ships: e.ships ?? 0, pts: [pts[0]], attack: null }; seg.push(m); }
+    if (e.type === "move" && pts.length > 2) {
+      const sm = smooth(pts.map((p) => cellOf(p.x, p.y)));
+      sm[0] = pts[0];
+      sm[sm.length - 1] = pts[pts.length - 1];
+      m.pts.push(...sm.slice(1));
+    } else m.pts.push(...pts.slice(1));
+    if (e.type === "attack") m.attack = { won: e.won, oldOwner: e.oldOwner, at: e.at ?? null };
   }
   return out;
 }
+
+/** Bir nokta dizisinde `f` (0..1) kadar ilerideki nokta: parça `k`nin içinde. */
+const lerp = (a, b, f) => ({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f });
 
 /** Bir yerin üstünden yükselen yazı. */
 export function rise(at, text, color, delay = 0, size = 14) {
@@ -257,35 +287,30 @@ export function shape(view) {
     } else if (i.kind === "march") {
       if (p >= 1) continue;
       hidden.add(i.army);
-      const n = i.path.length - 1;
+      const P = i.pts, n = P.length - 1;
       const walk = i.legs.reduce((a, b) => a + b, 0);
       const e = Math.max(0, t - i.t0);
-      let pos, alpha = 1, sea = false, walking = false, dir = 1;
-      // Hangi yöne gidiyor (kadırga o yöne baksın): yolun biraz ilerisi solda mı sağda mı.
-      const heading = (a, b, f) => {
-        const f0 = Math.min(f, 0.97);
-        return alongRoad(a, b, f0 + 0.03).x < alongRoad(a, b, f0).x ? -1 : 1;
-      };
+      let pos, alpha = 1, walking = false, dir = 1;
+      // Yürüyüşün bütünü yumuşak başlar ve durur (parçaların her biri değil).
+      const g = walk > 0 ? ease(Math.min(1, e / walk)) * walk : 0;
+      // Saldırıda son parçanın sonuna, hedefin içine girmez: kapısında durur.
+      const stop = (k) => (i.attack && k === n - 1 ? 0.78 : 1);
       if (n > 0 && e < walk) {
-        // Hangi yoldayız, ve o yolun ne kadarındayız.
         let k = 0, before = 0;
-        while (k < n - 1 && e >= before + i.legs[k]) before += i.legs[k++];
-        const f = ease(Math.min(1, (e - before) / (i.legs[k] || 1)));
-        sea = !!roadBetween(i.path[k], i.path[k + 1])?.sea; // deniz yolunda: gemide
-        // Saldırı yolunda hedefin içine girmez, kapısında durur.
-        const stop = i.attack && k === n - 1 ? 0.78 : 1;
-        pos = alongRoad(i.path[k], i.path[k + 1], f * stop);
-        dir = heading(i.path[k], i.path[k + 1], f * stop);
+        while (k < n - 1 && g >= before + i.legs[k]) before += i.legs[k++];
+        const f = Math.min(1, (g - before) / (i.legs[k] || 1)) * stop(k);
+        pos = lerp(P[k], P[k + 1], f);
+        dir = P[k + 1].x < P[k].x ? -1 : 1;
         walking = e > 0;
-        fx.push({ kind: "trail", path: i.path, k, f: f * stop, color: colorOf(i.owner), sea });
+        fx.push({ kind: "trail", pts: [...P.slice(0, k + 1), pos], color: colorOf(i.owner), sea: !isLand(cellOf(pos.x, pos.y)) });
       } else if (n > 0 && i.attack) {
-        // Kapıda çarpışırken: denizden geldiyse hâlâ gemide.
-        sea = !!roadBetween(i.path[n - 1], i.path[n])?.sea;
-        dir = heading(i.path[n - 1], i.path[n], 0.78);
-        pos = alongRoad(i.path[n - 1], i.path[n], i.attack.won ? 0.78 + 0.22 * Math.min(1, (e - walk) / (i.dur - walk)) : 0.78);
+        // Kapıda çarpışırken; kazanırsa içeri girer, kaybederse söner.
+        dir = P[n].x < P[n - 1].x ? -1 : 1;
+        pos = lerp(P[n - 1], P[n], i.attack.won ? 0.78 + 0.22 * Math.min(1, (e - walk) / (i.dur - walk)) : 0.78);
         if (!i.attack.won) alpha = Math.max(0, 1 - (e - walk) / (i.dur - walk));
-      } else pos = placeAt(i.path[n]);
-      moving.push({ id: i.army, owner: i.owner, men: i.men, ships: i.ships ?? 0, float: pos, alpha, at: null, sea, walking, dir });
+      } else pos = P[n];
+      const sea = !isLand(cellOf(pos.x, pos.y));
+      moving.push({ id: i.army, owner: i.owner, men: i.men, ships: i.ships ?? 0, float: pos, alpha, at: null, sea, walking, dir, moving: true });
     } else if (p >= 0 && p < 1) {
       if (i.kind === "clash") fx.push({ kind: "clash", at: i.at, p });
       else if (i.kind === "fogfight") fx.push({ kind: "fogfight", at: i.at, p });

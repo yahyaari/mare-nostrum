@@ -116,9 +116,10 @@ Her yerleşimin dört yükseltmesi var:
 - **Başlangıç değerleri:** Başkent seviye 2, diğer yerleşimler seviye 1. Sanayi, gıda ve kışla
   her yerde 1. Nüfus tavanın %75'i kadar. Garnizon başkentte 3, şehirde 2, kalede 1 piyade bölüğü.
 - **Küçük medeniyetlerin fazladan askeri (22.10):** inşaat süreli olunca erken yayılma yarışını
-  kaybediyorlardı. Başkentlerinde: Galya 40 piyade + 20 okçu, Partlar 55 + 30, Sakalar 35 + 20;
-  ambarlarına da bu askeri besleyecek yiyecek (40 / 55 / 35). Başta yiyecek dengeleri eksi ama
-  ambar en az 10 tur yeter.
+  kaybediyorlardı. Başkentlerinde: Galya 40 piyade + 20 okçu, Partlar 55 + 30, Sakalar 50 + 25,
+  Makedonya 20 + 10; ambarlarına da bu askeri besleyecek yiyecek (40 / 55 / 45 / 20). Başta yiyecek
+  dengeleri eksi ama ambar en az 10 tur yeter. (Serbest yürüyüşte Sakalar ile Makedonya birbirine
+  bağlandı: biri güçlenince öteki erken düşüyordu; ikisine de destek.)
 
 ---
 
@@ -149,21 +150,48 @@ Bir **bölük** 10 askerdir. Asker basmak şehrin nüfusundan düşer.
   kartında kartlar seçilip *Ayır* ile ayrı ordu, *Garnizona kat* ile şehre bırakılır; *Birleştir*
   aynı yerdeki öteki orduları katar. Her gemi de bir kart. Kurallar türlerin adam sayısını
   tutuyor; kartlar bu sayılardan çıkıyor (state.js `cardsOf`, `chosen`, `detach`).
-- Ordular **sadece yerleşimlerde durur**, yolun ortasında durmaz.
-- **Her ordu her tur bir yol yürür** (Sakalar iki). İki ordun varsa o tur iki hamlen olur.
-- **Otomatik yürüyüş:** Orduya tıkla, sonra uzaktaki bir şehre tıkla. Ordu en kısa yolu bulur ve
-  her tur kendiliğinden bir adım ilerler. Düşmanla karşılaşırsa ya da yol kapanırsa durur ve sana
-  sorar.
-- **Birleşme ve bölünme:** Aynı yerdeki iki ordu birleşebilir, bir ordudan seçilen kartlar ayrılabilir.
-- Kendi şehrinde duran ordu şehri garnizonla birlikte savunur.
-- **Girebileceğin yerler:** kendi yerleşimlerin, müttefiklerinki, savaştığın medeniyetinkiler ve
-  bağımsızlar. **Tarafsız birinin toprağına giremezsin.**
+- **Serbest yürüyüş** (kullanıcı 22.10: "haritadan tıkladığımız yere kaç tur sürecekse yürüsün,
+  sadece şehirlere kalelere değil, ordular etrafta gezebilsin"). Harita 0.25 birimlik (~28 km)
+  karelere bölünmüş (`src/data/grid.js`, `Tools/grid.mjs` üretir; kıyılar ekrandakinin aynısı).
+  Ordu haritanın her yerinde durabilir; bir yerleşimin içindeyse onun savunmasına katılır.
+- **Hareket puanı:** ordu her tur `N.march.mp` (4) puan harcar. Harita biriminin bedeli yolda 1,
+  yol dışında 2.5, denizde 1; karadan gemiye binmek ya da gemiden karaya çıkmak +0.5. Yani yolda
+  turda ~4, yol dışında ~1.6 birim (eskiden her yol bir turdu; yolların ortancası 3.6 birim).
+  Sakalar (bölüm 9) iki kat, hızlı general bir buçuk kat yürür.
+- **Yabancı şehrin çevresi** (0.6 birim): düşman, bağımsız ve tarafsız yerleşimlerin dibinden
+  geçilmez - ya alınır ya dolaşılır (Total War'ın kontrol alanı gibi). Bağımsız şehirler tampon,
+  boğazdaki Bizans kapı. O şehre saldırmaya ya da çevresindeki bir noktaya gidilebilir.
+- **Yürü:** orduyu seç, haritada istediğin yere sağ tıkla (ya da *Yürü*'ye basıp sol tıkla).
+  Fareyi gezdirirken yol ve her turun bittiği yer (numaralı halkalar) görünür. Uzak hedefe giden
+  ordu yolunu saklar, her tur kendiliğinden ilerler.
+- **Önünü kesmek:** savaştığın birinin ordusunun menziline (0.8 birim) giren ordu durur. Düşman
+  yolunu kesebilir; surlarına varmadan meydanda karşılanır.
+- **Menzil:** bir yerleşime ya da yerleşimin dışındaki bir orduya ancak 0.8 birim yakından ve bu
+  turdan hareketi kalmışsa saldırılır. Uzaktaki hedefe sağ tıklayınca ordu önüne kadar yürür.
+- **Birleşme ve bölünme:** yan yana duran (yarım birim) ya da aynı yerleşimin içindeki ordular
+  birleşebilir; bir ordudan seçilen kartlar ayrılabilir.
+- **Girebileceğin yerleşimler:** kendininkiler ve müttefiklerinki (içine girilir), savaştığın
+  medeniyetinkiler ve bağımsızlar (saldırılır). Tarafsız birinin yerleşimine saldırmak için önce
+  savaş ilan edilir.
+- **Tarafsızın toprağı** (kullanıcı 22.10: "girilsin ama ilişki bozulsun"): toprak, haritada
+  çizildiği gibi en yakın yerleşimin (3.2 birime kadar). Tarafsız birinin toprağında (yerleşimin
+  dışında) duran her ordu için o medeniyet turda bir öfkelenir; kimse girmeyince yarım söner. Öfke
+  3 olunca bilgisayar savaş açar - barış süresini beklemeden (gücü oyuncunun en az 0.7 katıysa).
+  Öfkeli medeniyet ittifak istemez. Oyuncu yolu bir tarafsızın toprağından geçerse önce sorulur.
+  Bilgisayar tarafsızların toprağından kaçınır.
+- **Gemiler:** gemileri bütün askerini taşıyabilen ordu kıyıdan denize açılır, istediği kıyıya
+  çıkar; askersiz filo sadece denizde gezer ve limanlara girer. Çanakkale ve İstanbul boğazları
+  açık (Bizans'ın yolu orada feribot).
 
 ---
 
 ## 7. Savaş (otomatik)
 
-Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar.
+Bir ordu menzilindeki (0.8 birim) bir düşman ya da bağımsız yerleşime saldırınca savaş çıkar.
+**Meydan muharebesi** (kullanıcı 22.10: "düşman gelirse kuşatmadan önce meydan muharebesi
+yapabilsin"): yerleşimin dışındaki bir düşman ordusuna saldırmak; aynı hesap, sursuz ve arazisiz.
+İki ordu da denizdeyse deniz savaşı olur, yenilen filo askerleriyle batar. Karadaki ordu denizdeki
+filoya saldıramaz. Kaybeden ordu her zaman yok olur, generali ölür.
 
 **Saldırmadan önce bir tahmin gösterilir:** *Kolay / Zor / Umutsuz.*
 
@@ -238,7 +266,7 @@ Bir ordu, içinde düşman askeri olan bir yerleşime girdiğinde savaş çıkar
 | **Makedonya** | Savunan piyade × 1.5 (falanks) | Nüfus tavanı × 0.9 |
 | **Partlar** | Okçu × 1.5 | Piyade × 0.75 |
 | **Galyalılar** | Bölük para istemez, nüfus artışı × 1.5 | Okçu × 0.7 |
-| **Sakalar** | Ordular turda iki yol yürür, süvari × 1.3 (bozkır atlıları) | Surlu yere saldırı × 0.6 |
+| **Sakalar** | Ordular iki kat yürür, süvari × 1.3 (bozkır atlıları) | Surlu yere saldırı × 0.6 |
 
 Bu sayılar 28 bot oyunuyla ayarlandı. Mısır ve Kartaca hâlâ en sık büyüyenler, Roma ortada
 sıkıştığı için en sık düşen. Tarihe de uyuyor; oyuncu oynadıkça bakılacak.
@@ -353,8 +381,8 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
   ordu denizde kaybolur;** kazanırsa karaya çıkar ve kara savaşı başlar. Saldırı tahmini deniz
   savaşını da sayar.
 - **Alınan limanın gemileri yanar.**
-- **Abluka:** sahibiyle savaşta olan birinin, deniz yolunun öbür ucunda limandakinden güçlü filosu
-  duruyorsa liman ablukadadır: balık gelmez, vergi yarıya iner. Haritada çapası kırmızı.
+- **Abluka:** sahibiyle savaşta olan birinin, limanın önünde denizde (1.2 birim) limandakinden
+  güçlü filosu duruyorsa liman ablukadadır: balık gelmez, vergi yarıya iner. Haritada çapası kırmızı.
 
 > Denge: donanma gelince denizler gerçek bir engel oldu. İlk denemede bilgisayar neredeyse hiç
 > denize açılamadı (gemi için sanayi 2 isteniyordu ve limana bir savunma gemisi bırakıyordu) ve
@@ -505,8 +533,8 @@ Parthenon; Zeus heykeli ve Mozole haritadaki bir yerleşimde değil.)
 
 ## 19. Savaş sisi ve haritanın süsleri
 
-- **Ne görünür:** kendi ve müttefiklerinin yerleri ve orduları, artı bunların bir yol ötesi
-  (`src/rules/sight.js`). Ötesi boyalı bir sisle örtülür: yerleşimler ve sahipleri görünür
+- **Ne görünür:** kendi ve müttefiklerinin yerlerinin (3 birim) ve sahadaki ordularının (2.5
+  birim) çevresindeki çember (`src/rules/sight.js`). Ordu yürüdükçe sis onunla açılır. Ötesi boyalı bir sisle örtülür: yerleşimler ve sahipleri görünür
   (haritalar herkesin elinde) ama soluk; ordular, filolar, limandaki gemiler ve garnizon
   sayıları görünmez. Yabancı kartta garnizon "bilinmiyor (sis)".
 - **Tur gösterisi:** sisin içindeki hamleler gösterilmez, beklemeden geçer; yürüyen ordu sisten
@@ -527,8 +555,8 @@ Surlu bir yere (kale, başkent, 3. seviye ve üstü şehir) **hemen saldırmak y
 (`src/rules/siege.js`). Saldırı penceresinde üç seçenek: Saldır, Kuşat, Vazgeç.
 
 - **Kuşatma başlayınca** ordu o turun hareketini harcar ve hedefin surlarının önüne kamp kurar
-  (haritada hedefe giden yolun üstünde çadırlarıyla; hedefin çevresinde kırmızı halka). Sadece
-  kara yolundan: denizden kuşatma yok (deniz ablukası ayrı, bölüm 15).
+  (haritada durduğu yerde çadırlarıyla; hedefin çevresinde kırmızı halka). Ordu hedefin menzilinde
+  (0.8 birim) ve karada olmalı: denizden kuşatma yok (deniz ablukası ayrı, bölüm 15).
 - **Her tur sonunda:** içerideki bütün askerler (garnizon ve sahibinin oradaki orduları) açlıktan
   **%10** erir, her birimden en az bir adam; her 10 kuşatma makinesi bunu **+%2** hızlandırır, en
   fazla **%25**. Kuşatılan yer **hiçbir şey üretmez** ve sadakati turda **5** düşer. Kamptaki

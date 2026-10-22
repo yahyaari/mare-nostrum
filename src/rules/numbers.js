@@ -80,13 +80,33 @@ export const N = {
     // Partlar ve Sakalar toparlanamıyordu (70 oyunda ilk düşüş 50 -> 29).
     // 70 oyunla ayarlandı: Partlar ile Sakalar komşu - biri fazla güçlenince ötekini yutuyor.
     // Bu hâliyle ilk düşüş 44 (eskisi 50), 150 turda ayakta Partlar 41, Galya 55, Sakalar 31.
+    // Serbest yürüyüşle (22.10 akşam) Sakalar ile Makedonya birbirine bağlandı: Sakalar güçlüyse
+    // Pella'yı erken alıyor, zayıfsa kendileri düşüyor. İkisine birden destek: 70 oyunda ilk
+    // düşüş 55 (en erken 25), ayakta Makedonya 35, Sakalar 32, Partlar 48.
     extra: {
       gaul: { inf: 40, arch: 20, food: 40 },
       parthia: { inf: 55, arch: 30, food: 55 },
-      saka: { inf: 35, arch: 20, food: 35 },
+      saka: { inf: 50, arch: 25, food: 45 },
+      macedon: { inf: 20, arch: 10, food: 20 },
     },
   },
-  moves: 1,
+  // Serbest yürüyüş (bölüm 6; kullanıcı 22.10): ordunun turluk hareket puanı ve bir harita
+  // biriminin bedeli - yolda 1, yol dışında 2.5, denizde 1; gemiye binmek ya da karaya çıkmak ayrıca.
+  // Eskiden her yol bir turdu: yolların ortancası 3.6 birim, dörtte üçü 5.5'ten kısa, yani yolda
+  // turda 5 birim eski hıza yakın.
+  // 70 oyunla ayarlandı: 5 ve 2 iken (yolda turda 5 birim) dünya çok hızlı yanıyordu, ilk düşüş 36.
+  march: { mp: 4, road: 1, land: 2.5, sea: 1, embark: 0.5 },
+  // Uzaklıklar, harita birimi: saldırı menzili (bir yerleşime ya da orduya bu kadar yakından
+  // saldırılır), önünü kesme (yürüyen ordu savaştığı birinin ordusuna bu kadar yaklaşınca durur),
+  // tehdit (bir yerin bu kadar yakınındaki düşman ordusu uyarı), görüş (yerleşim ve ordu), abluka.
+  // hold: yabancı yerleşimin çevresi - içinden geçilmez (yalnızca ona saldırmaya ya da orada
+  // durmaya gidilir). Bunsuz bağımsız şehirler tampon olmaktan çıktı, Sakalar Odessos ile Bizans'ın
+  // yanından geçip 12. turda Pella'yı alıyordu.
+  reach: { strike: 0.8, zoc: 0.8, hold: 0.6, threat: 4.5, sightPlace: 3, sightArmy: 2.5, blockade: 1.2 },
+  // Tarafsızın toprağında durmak (kullanıcı 22.10: "girilsin ama ilişki bozulsun"): her tur öfke
+  // +1, girmeyince -0.5. Öfke `war` olunca o medeniyet savaş açar - barış süresini beklemeden,
+  // ancak karşısındakinin gücünün en az `ratio` katıysa.
+  anger: { war: 3, ratio: 0.7 },
 
   // Bilgisayar
   // Bilgisayarlar arası: bu turdan önce kimse kimseye savaş açmaz (önce bağımsızlar), ve ancak

@@ -3,7 +3,48 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **22.10.2026 gece** (auto-compact öncesi notlar).
+> Son güncelleme: **22.10.2026 akşam** (birlik kartları, gemi türleri, serbest yürüyüş).
+
+## SON EKLENENLER (22.10 akşam) - önce bunu oku
+
+Kullanıcı (22.10): "şehirde garnizon sekmesi olsun, askerler kart şeklinde... seçip komutan atayıp
+dışarı çıkarayım... gemiler için de kadırgalar, savaş gemileri... ordu veya gemiye tıklayalım yürü
+butonu olsun, haritadan tıkladığımız yere kaç tur sürecekse yürüsün, yürüdüğü yerlerde sisler
+açılsın, sadece şehirlere kalelere değil ordular etrafta gezebilsin, düşman gelirse kuşatmadan
+önce meydan muharebesi yapabilsin". Tarafsızın toprağı için sordum: "girilsin ama ilişki bozulsun".
+
+1. **Birlik kartları** (de63e6f): her bölük bir kart (10 asker, eriyen bölük yarım çubuk; her
+   gemi bir kart). Şehir kartında **Garnizon** sekmesi: kart seç, *Dışarı çık* / *Komutanla*.
+   Ordu kartı: solda ordu, sağda kartlar; *Yürü, Ayır, Birleştir, Garnizona kat*. Kartlar kural
+   sayılarından türetiliyor (state.js `cardsOf`, `chosen`, `detach`); eski ordu çıkarma
+   penceresi kalktı.
+2. **Gemi türleri** (926260f): kadırga (eski tek gemi, alanı yine `ships`; taşır 25, güç 1),
+   trireme (tersane 2; taşır 10, güç 2.5), kinkerem (tersane 3; taşır 20, güç 4). Deniz savaşı ve
+   abluka filo GÜCÜYLE. Liman sekmesinde üç düğme. Kayıt 9.
+3. **Serbest yürüyüş** (bu commit): harita 224x104 kare (0.25 birim, `src/data/grid.js`;
+   `node Tools/grid.mjs` üretir, ~7 sn; Çanakkale ve İstanbul boğazları elle açık). Yeni
+   `src/rules/map.js`: kareler, komşular (boğaz/kıstak kesikleri), adım bedeli (yol 1, kara 2,
+   deniz 1, biniş +0.5), toprak (en yakın yerleşim, 3.2'ye kadar - ekrandaki gibi), A* ve sınırlı
+   Dijkstra, yumuşatma (ekran için). Ordu: `x, y`, içindeyse `at`, `mp` (hareket puanı, 5),
+   `route` (kalan kareler). moves.js baştan: routeTo/order/advance (önünü kesme: savaştığın
+   ordunun 0.8 menziline girince durur), canAttack menzille (0.8), **meydan muharebesi**
+   (`canStrike`, `strike`, `forecastField`; denizde filo filoya, yenilen askerleriyle batar),
+   `bySea` (saldıran denizde ya da arada deniz), `terrainOf` noktadan (yolun üstündeyse yolun
+   arazisi), `stepOut` (el değişince/ittifak bozulunca kapının önüne). Sis gözlerle (sight.js
+   `eyes`: yerleşim 3, ordu 2.5 birim çember). Abluka limanın önündeki (1.2) düşman filosu.
+   **Tarafsızın toprağı:** girilir; orada duran ordu için turda öfke +1 (diplomacy.js
+   `trespass`, `angerOf`), 3 olunca bilgisayar savaş açar; oyuncuya önce sorulur; diplomaside
+   "öfke 2/3". Bilgisayar tarafsız toprağı pahalı sayar (`avoidFor`). Kayıt 10.
+   Ekran: sağ tık / Yürü haritanın her yerine; fareyle yol ve her turun sonu numaralı halka;
+   ordu sahada her yerde çizilir; kamp çadırları kuşatanın yanında; meydan muharebesi penceresi;
+   hareket çubuğu; haberlerde meydan muharebesi ve öfke. Yapay zekâ (ai.js ordular bölümü
+   baştan): bu tur yetişebildiği kolay hedefe (yer ya da ordu) yürü-vur, kuşat, garnizon
+   fazlasıyla vur, uzak hedefe A*.
+   Denge: 70 oyunla: hız 5 / yol dışı 2 iken ilk düşüş 36'ya indi (eski 43), Sakalar Odessos ile Bizans'ın yanından geçip 12. turda Pella'yı alıyordu. Çözüm: yabancı yerleşimin çevresinden (0.6) geçilmez (`N.reach.hold`, moves.js `heldFor`) - bağımsızlar yine tampon; hız 4, yol dışı 2.5; Sakalara (50+25) ve Makedonya'ya (20+10) başlangıç desteği. Şimdi ilk düşüş 55 (en erken 25), ayakta Roma 50, Kartaca 57, Mısır 45, Makedonya 35, Partlar 48, Galya 36, Sakalar 32 (eski 60/68/61/36/37/60/35: dünya biraz daha kanlı). Deney aracı: `node Tools/experiment.mjs '{"march.mp":4}' 70` (N ve 'T.saka.moves' gibi özellikler; paralel koşarken her biri ayrı dosyaya yazsın - aynı dosyaya >> ile yazınca birbirini siliyor).
+
+**Sırada:** kullanıcı serbest yürüyüşü oynayıp söyleyecek. Açık kalanlar: dağlar yok (Alpler,
+Toroslar düz kara gibi yürünüyor; arazi verisi yok, istenirse elle çizilir), ordular aynı karede
+üst üste durabiliyor, meydan muharebesinde kaybeden kaçmıyor (yok oluyor).
 
 ## NEREDE KALDIK (22.10 gece) - önce bunu oku
 
@@ -61,7 +102,7 @@ Ekran görüntüsü betikleri `Logs/*shots*.mjs` (gitignore'da) - sunucu `node T
   Pages `master`'dan, push'tan ~1 dakika sonra yayında.
 - **Dil:** Arayüz İngilizce asıl, Türkçe ikinci (sağ üst / menü). Belgeler ve kod yorumları
   Türkçe.
-- **Push'tan önce:** `node Tools/test.mjs` (1924 kontrol, hepsi geçmeli). Kurala dokunduysan
+- **Push'tan önce:** `node Tools/test.mjs` (2000+ kontrol, hepsi geçmeli; serbest yürüyüşten beri birkaç dakika sürüyor - bot oyunları). Kurala dokunduysan
   `node Tools/balance.mjs 70`. Arayüze dokunduysan `node Tools/peek.mjs ...` ve
   `node Tools/playtest.mjs ...` (komutlar `working-on-this.md`'de).
 

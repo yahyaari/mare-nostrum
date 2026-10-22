@@ -169,7 +169,7 @@ export function hanging(ctx, owner, x, y, w, h) {
 
 export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
   const me = game.player;
-  const ready = game.armies.filter((a) => a.owner === me && a.moves > 0).length;
+  const ready = game.armies.filter((a) => a.owner === me && a.mp > 0.05).length;
   const trouble = placesOf(game, me).filter((id) => game.places[id].loyalty < N.loyalty.unrest || menace(game, id) > 0).length;
   const items = [
     ["helmet", T.hudArmies, { do: "open", modal: "armies" }, ready, GOLD, T.tipArmies],
@@ -250,7 +250,7 @@ export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
 
 export function drawRightColumn(ctx, cam, game, ui, boxes, T, view) {
   const { end, mini, next } = rightColumn(cam);
-  const ready = game.armies.filter((a) => a.owner === game.player && a.moves > 0).length;
+  const ready = game.armies.filter((a) => a.owner === game.player && a.mp > 0.05).length;
   if (ready) {
     darkBox(ctx, next, 4, over(next.x, next.y, next.w, next.h));
     // Cinzel'in 1'i Roma rakamı I gibi duruyor: sayı olan yazılar Garamond.

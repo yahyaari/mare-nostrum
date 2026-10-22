@@ -12,12 +12,15 @@
 //   aim:   Yürü'ye basılmış ordu: haritada basılan yer onun gideceği yer
 
 import { CIVS, PLACES } from "../data/world.js";
-import { canDeclare, canPropose } from "../rules/diplomacy.js";
+import { angerOf, canDeclare, canPropose } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
-import { access, canAttack, defenders, forecast, fortOf, hostile, menace, shipsAt, terrainOf, wallsOf } from "../rules/moves.js";
+import {
+  access, bySea, canAttack, canStrike, defenders, forecast, forecastField, fortOf, hostile, menace, mpMax, nearestPlace, shipsAt, terrainOf, wallsOf,
+} from "../rules/moves.js";
+import { POS, cellOf, centre, isLand, placeAtCell } from "../rules/map.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
-  PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -882,7 +885,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   const a = armyById(game, ui.sel.id);
   const mine = a.owner === game.player;
   const g = a.general;
-  const here = armiesAt(game, a.at).filter((b) => b !== a && b.owner === a.owner);
+  const here = game.armies.filter((b) => b !== a && b.owner === a.owner && together(a, b));
   const A = 250, BC = 548;
   const r = cardRect(cam, PAD + A + GAP + BC + PAD, 252);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
@@ -918,11 +921,15 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
     text(ctx, `⛵ ${fleetOf(a)} ${T.ships} · ${fill(T.carry, carryOf(a))}`, x, ly, { size: 13, color: canSail(a) ? INK.ink : INK.bad });
     ly += 20;
   }
-  const maxMoves = trait(a.owner, "moves") + (g?.traits.includes("swift") ? 1 : 0);
-  fit(ctx, `${fill(T.moves, a.moves, maxMoves)} · ${placeName(a.at, ui.lang)}`, x, ly, A, { size: 13, color: INK.soft });
+  fit(ctx, whereText(a, T, ui.lang), x, ly, A, { size: 13, color: INK.soft });
+  if (mine) {
+    ly += 6;
+    moveBar(ctx, boxes, T, a, x, ly, A);
+    ly += 12;
+  }
   if (a.route.length) {
     ly += 20;
-    fit(ctx, fill(T.marching, placeName(a.route[a.route.length - 1], ui.lang)), x, ly, A, { size: 13, italic: true });
+    fit(ctx, routeText(a, T, ui.lang), x, ly, A, { size: 13, italic: true });
   }
   if (a.besieging) {
     ly += 20;
@@ -948,7 +955,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
     if (!a.besieging) {
       acts.push({ label: part ? `${T.detachBtn} (${n})` : T.detachBtn, act: { do: "detach", army: a.id }, off: !part, tip: [T.detachBtn, T.tipDetach, part ? null : [T.pickFirst, "bad"]] });
       acts.push({ label: T.merge, act: { do: "merge", army: a.id }, off: !here.length, tip: [T.merge, T.tipMergeBtn] });
-      if (game.places[a.at].owner === a.owner) acts.push({ label: T.station, act: { do: "station", army: a.id }, tip: [T.station, T.tipStationBtn] });
+      if (a.at && game.places[a.at].owner === a.owner) acts.push({ label: T.station, act: { do: "station", army: a.id }, tip: [T.station, T.tipStationBtn] });
     }
     const bw = (BC - 8 * (acts.length - 1)) / acts.length;
     acts.forEach((b, i) => button(ctx, boxes, { x: x + i * (bw + 8), y: y + H - 46, w: bw, h: 34, size: 13, ...b }));
@@ -1055,15 +1062,53 @@ export function placeTip(game, id, lang, hid, go) {
   if (walls) out.push(`${T.walls}: ${wallsText(walls, T)}`);
   if (wonderAt(id)) out.push([T.wonders[wonderAt(id).id][0], "warn"]);
   if (!go) return out;
-  const when = (n) => (n <= 1 ? T.tipOneTurn : fill(T.tipTurns, n));
-  if (go.kind === "walk") out.push([`${T.tipWalk} · ${when(go.turns)}`, "warn"]);
-  else if (go.kind === "attack") out.push([`${T.tipAttack} · ${T.odds}: ${oddsLabel(go.odds, T)[0]}`, go.odds === "easy" ? "good" : go.odds === "risky" ? "warn" : "bad"]);
-  else if (go.kind === "approach") out.push([`${T.tipWalk} · ${when(go.turns)} → ${T.attack}`, "warn"]);
-  else if (go.kind === "spent") out.push([T.tipSpent, "bad"]);
-  else if (go.kind === "neutral") out.push([fill(T.neutralBlock, owner), "bad"]);
-  else if (go.kind === "ships") out.push([T.needShips, "bad"]);
-  else out.push([T.tipNoWay, "bad"]);
+  out.push(goLine(go, lang));
+  if (go.trespass?.length) out.push([fill(T.tipTrespass, go.trespass.map((c) => civName(c, lang)).join(", ")), "bad"]);
   return out;
+}
+
+/** Seçili ordunun bir hedefe gidişinin tek satırı (main.js goTo): ne olur, kaç tur, tahmin. */
+export function goLine(go, lang) {
+  const T = TEXT[lang];
+  const when = (n) => (n <= 1 ? T.tipOneTurn : fill(T.tipTurns, n));
+  const tone = (o) => (o === "easy" ? "good" : o === "risky" ? "warn" : "bad");
+  if (go.kind === "walk") return [`${T.tipWalk} · ${when(go.turns)}`, "warn"];
+  if (go.kind === "attack") return [`${T.tipAttack} · ${T.odds}: ${oddsLabel(go.odds, T)[0]}`, tone(go.odds)];
+  if (go.kind === "strike") return [`${T.tipStrike} · ${T.odds}: ${oddsLabel(go.odds, T)[0]}`, tone(go.odds)];
+  if (go.kind === "approach") return [`${T.tipWalk} · ${when(go.turns)} → ${T.attack}`, "warn"];
+  if (go.kind === "spent") return [T.tipSpent, "bad"];
+  if (go.kind === "neutral") return [fill(T.neutralBlock, civName(go.civ, lang)), "bad"];
+  if (go.kind === "ships") return [T.needShips, "bad"];
+  return [T.tipNoWay, "bad"];
+}
+
+/** Ordunun nerede olduğu: bir yerleşimin içinde, sahada bir yerleşimin yakınında, ya da denizde. */
+function whereText(a, T, lang) {
+  if (a.at) return fill(T.inPlace, placeName(a.at, lang));
+  const near = placeName(nearestPlace(a), lang);
+  return fill(isLand(cellOf(a.x, a.y)) ? T.inField : T.atSea, near);
+}
+
+/** Yürüdüğü yer: bir yerleşimse adı, değilse en yakın yerleşim; kaç tur kaldığı. */
+function routeText(a, T, lang) {
+  const end = a.route[a.route.length - 1];
+  const pl = placeAtCell(end);
+  return pl ? fill(T.marching, placeName(pl, lang)) : fill(T.marchingNear, placeName(nearestPlace(centre(end)), lang));
+}
+
+/** Hareket çubuğu: bu tur kalan hareket (sahibinin rengi), etiketiyle. */
+function moveBar(ctx, boxes, T, a, x, y, w) {
+  const f = Math.max(0, Math.min(1, a.mp / mpMax(a)));
+  const lw = text(ctx, T.moveLabel, x, y + 8, { size: 12, color: INK.soft });
+  const bx = x + lw + 8, bw = w - lw - 8;
+  ctx.fillStyle = "rgba(90,70,40,0.18)";
+  ctx.fillRect(bx, y + 2, bw, 7);
+  ctx.fillStyle = f > 0.05 ? INK.good : INK.faint;
+  ctx.fillRect(bx, y + 2, bw * f, 7);
+  ctx.strokeStyle = "#5a4630";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx + 0.5, y + 2.5, bw - 1, 6);
+  boxes.push({ x, y: y - 4, w, h: 16, act: null, tip: [T.moveLabel, f > 0.05 ? fill(T.movesLeft, Math.round(f * 100)) : T.spentShort, T.tipMoveBar] });
 }
 
 /** Haritada bir ordunun ipucu. */
@@ -1073,7 +1118,7 @@ export function armyTip(game, a, lang) {
   if (a.general) out.push(`★ ${fill(T.general, a.general.name)} · ${fill(T.rank, a.general.level)}`);
   if (fleetOf(a)) out.push(`⛵ ${fleetOf(a)} ${T.ships}`);
   if (a.besieging) out.push([fill(T.evSiege, civName(a.owner, lang), placeName(a.besieging, lang)), "warn"]);
-  if (a.owner === game.player) out.push([a.moves > 0 ? fill(T.movesLeft, a.moves) : T.spentShort, a.moves > 0 ? "good" : null]);
+  if (a.owner === game.player) out.push([a.mp > 0.05 ? fill(T.movesLeft, Math.round((a.mp / mpMax(a)) * 100)) : T.spentShort, a.mp > 0.05 ? "good" : null]);
   else if (relation(game, game.player, a.owner) === "war") out.push([T.war, "bad"]);
   return out;
 }
@@ -1100,10 +1145,15 @@ const ownPlace = (g, ui) => ui.sel?.kind === "place" && g.places[ui.sel.id]?.own
 const ownArmy = (g, ui) => {
   if (ui.sel?.kind !== "army") return null;
   const a = armyById(g, ui.sel.id);
-  return a && a.owner === g.player && a.moves > 0 ? a : null;
+  return a && a.owner === g.player && a.mp > 0.05 ? a : null;
 };
-/** Seçili ordunun yanında saldırılabilecek, umutsuz olmayan bir yer. */
-const prey = (g, a) => neighbours(a.at).find((n) => canAttack(g, a, n) && forecast(g, a, a.owner, n).odds !== "hopeless");
+/** Seçili ordunun menzilinde saldırılabilecek, umutsuz olmayan bir yer. */
+const prey = (g, a) => Object.keys(g.places).find((n) => canAttack(g, a, n) && forecast(g, a, a.owner, n).odds !== "hopeless");
+/** Bir ordunun ekrandaki yeri (ipucu balonu için). */
+const armySpot = (cam, a) => {
+  const s = toScreen(cam, a.x, a.y);
+  return { x: s.x - 24, y: s.y - 44, w: 48, h: 58, ring: true };
+};
 
 /** Adımlar, öncelik sırasıyla: ne zaman gösterilir, neyi gösterir. */
 const COACH = [
@@ -1113,7 +1163,7 @@ const COACH = [
   { id: "recruit", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "recruit")) },
   { id: "form", when: (g, ui) => ownPlace(g, ui) && men(g.places[ui.sel.id]) >= 40, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "march" && !a.general) ?? findBox(boxes, (a) => a.do === "cardTab" && a.tab === "garrison")) },
   { id: "attack", when: (g, ui) => { const a = ownArmy(g, ui); return !!(a && prey(g, a)); }, at: (g, ui, boxes, cam) => placeSpot(cam, prey(g, ownArmy(g, ui))) },
-  { id: "move", when: (g, ui) => !!ownArmy(g, ui), at: (g, ui, boxes, cam) => placeSpot(cam, ownArmy(g, ui).at) },
+  { id: "move", when: (g, ui) => !!ownArmy(g, ui), at: (g, ui, boxes, cam) => armySpot(cam, ownArmy(g, ui)) },
   { id: "endturn", when: (g, ui, done) => !ui.sel && (done.has("upgrade") || done.has("recruit") || g.turn > 1), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "endTurn")) },
   { id: "news", when: (g, ui) => !!ui.news, at: (g, ui, boxes) => boxSpot(boxes.find((b) => b.act?.do === "open" && b.act.modal === "report" && b.w > 100)) },
   { id: "diplo", when: (g, ui) => !ui.sel && g.turn >= 4, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "open" && a.modal === "diplo")) },
@@ -1212,15 +1262,16 @@ function oneButton(ctx, boxes, r, b) {
 function attackModal(ctx, cam, game, ui, boxes, T, m) {
   const a = armyById(game, m.army);
   if (!a) return;
+  if (m.target) return fieldModal(ctx, cam, game, ui, boxes, T, a, armyById(game, m.target));
   const d = defenders(game, m.id), walls = wallsOf(game, m.id);
   const e = forecast(game, a, a.owner, m.id);
-  const bySea = roadBetween(a.at, m.id)?.sea && shipsAt(game, m.id) > 0;
+  const sea = bySea(a, POS[m.id]) && shipsAt(game, m.id) > 0;
   // Surlu yer: hemen saldırmak yerine kuşatılabilir.
   const sg = canBesiege(game, a, m.id);
   const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id)), 396, { size: 12, italic: true }) : [];
-  const ter = terrainOf(a.at, m.id);
+  const ter = terrainOf(a, m.id);
   const tl = (ter.river ? 1 : 0) + (ter.pass ? 1 : 0);
-  const r = modalFrame(ctx, cam, boxes, 290 + (bySea ? 22 : 0) + tl * 18 + hint.length * 17 + (sg ? 8 : 0));
+  const r = modalFrame(ctx, cam, boxes, 290 + (sea ? 22 : 0) + tl * 18 + hint.length * 17 + (sg ? 8 : 0));
   const x = r.x + 22;
   text(ctx, fill(T.attackQ, placeName(m.id, ui.lang)), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   text(ctx, T.yours, x, r.y + 76, { bold: true, size: 13 });
@@ -1234,7 +1285,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     text(ctx, l, x, r.y + 186 + i * 18, { size: 13, italic: true, color: INK.warn });
   });
   oy += tl * 18;
-  if (bySea) {
+  if (sea) {
     // Önce deniz savaşı: kaybedilirse ordu batar.
     const [sl, sc] = oddsLabel(e.sea, T);
     const sw = text(ctx, fill(T.navalOdds, fleetOf(a), shipsAt(game, m.id)) + " · ", x, r.y + 190 + tl * 18, { size: 13 });
@@ -1257,6 +1308,26 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   button(ctx, boxes, { x: r.x + 36 + 2 * bw, y: by, w: bw, h: 44, size: 15, label: T.cancel, act: { do: "close" } });
 }
 
+/** Meydan muharebesi: yerleşimin dışındaki bir düşman ordusuna saldırı. */
+function fieldModal(ctx, cam, game, ui, boxes, T, a, b) {
+  if (!b) return;
+  const e = forecastField(game, a, b);
+  const r = modalFrame(ctx, cam, boxes, 290);
+  const x = r.x + 22;
+  text(ctx, fill(T.fieldQ, civName(b.owner, ui.lang)), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  fit(ctx, fill(e.sea ? T.atSea : T.inField, placeName(nearestPlace(b), ui.lang)), x, r.y + 62, r.w - 44, { italic: true, size: 12, color: INK.soft });
+  text(ctx, T.yours, x, r.y + 88, { bold: true, size: 13 });
+  text(ctx, e.sea ? `⛵ ${fleetOf(a)} ${T.ships}` : troops(T, a), x, r.y + 108, { size: 13 });
+  text(ctx, T.theirs, x, r.y + 136, { bold: true, size: 13 });
+  text(ctx, e.sea ? `⛵ ${fleetOf(b)} ${T.ships}` : troops(T, b), x, r.y + 156, { size: 13 });
+  if (b.general) text(ctx, `★ ${fill(T.general, b.general.name)} · ${fill(T.rank, b.general.level)}`, x, r.y + 176, { size: 13, color: INK.warn });
+  const [label, color] = oddsLabel(e.odds, T);
+  const ow = text(ctx, `${T.odds}: `, x, r.y + 204, { size: 15 });
+  text(ctx, label, x + ow, r.y + 204, { size: 15, bold: true, color });
+  text(ctx, e.sea ? T.seaFieldHint : fill(T.expect, e.lost, e.killed), x, r.y + 224, { size: 12, italic: true, color: e.sea ? INK.warn : INK.soft });
+  twoButtons(ctx, boxes, r, { label: T.attack, act: { do: "attack" } }, { label: T.cancel, act: { do: "close" } });
+}
+
 function diploModal(ctx, cam, game, ui, boxes, T) {
   const me = game.player;
   const others = CIVS.filter((c) => c.id !== me);
@@ -1276,8 +1347,11 @@ function diploModal(ctx, cam, game, ui, boxes, T) {
     }
     const rel = relation(game, me, c.id);
     const [label, color] = rel === "war" ? [T.war, INK.bad] : rel === "ally" ? [T.ally, INK.good] : [T.neutral, INK.soft];
+    // Toprağına girdiğin tarafsızın öfkesi: sabrı taşınca savaş açar.
+    const mad = angerOf(game, c.id, me);
     const info = `${label} · ${fill(T.soldiers, strength(game, c.id))}` + (narrow ? "" : ` · ${fill(T.placesN, placesOf(game, c.id).length)}`);
-    text(ctx, info, x + 26, y + 40, { italic: true, size: 12, color });
+    const iw = text(ctx, info, x + 26, y + 40, { italic: true, size: 12, color });
+    if (rel === "neutral" && mad > 0) text(ctx, ` · ${fill(T.angry, Math.ceil(mad), N.anger.war)}`, x + 26 + iw, y + 40, { italic: true, bold: true, size: 12, color: INK.bad });
 
     const acts = rel === "neutral"
       ? [[T.declare, { do: "askWar", civ: c.id }, !canDeclare(game, me, c.id)], [T.propose, { do: "ally", civ: c.id }, !canPropose(game, me, c.id)]]
@@ -1311,12 +1385,17 @@ export function eventLines(game, lang) {
     else if (e.type === "broke") out.push([fill(T.evBroke, name(e.by), name(e.with)), mine ? "bad" : null]);
     else if (e.type === "famine" && e.civ === me) out.push([fill(T.evFamine, e.lost), "bad"]);
     else if (e.type === "built" && e.civ === me) out.push([fill(T.evBuilt, placeName(e.place, lang), T[e.what], e.level), "good"]);
-    else if (e.type === "battle" && mine) {
+    else if (e.type === "battle" && mine && e.field) {
+      const [w, l] = e.won ? [e.attacker, e.defender] : [e.defender, e.attacker];
+      out.push([fill(T.evField, name(w), name(l), placeName(e.place, lang)), w === me ? "good" : "bad"]);
+    } else if (e.type === "battle" && mine) {
       const where = placeName(e.place, lang);
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
-    if (e.type === "battle" && e.won && wonderAt(e.place)) {
+    if (e.type === "trespass" && e.by === me) out.push([fill(T.evTrespassBy, name(e.victim), Math.ceil(e.anger), N.anger.war), "bad"]);
+    if (e.type === "trespass" && e.victim === me) out.push([fill(T.evTrespassOn, name(e.by)), "warn"]);
+    if (e.type === "battle" && e.won && !e.field && wonderAt(e.place)) {
       out.push([fill(T.evWonder, name(e.attacker), T.wonders[wonderAt(e.place).id][0]), e.attacker === me ? "good" : e.defender === me ? "bad" : null]);
     }
     if (e.type === "storm" && e.civ === me) out.push([fill(T.evStorm, e.lost, e.sunk), "bad"]);
@@ -1327,7 +1406,7 @@ export function eventLines(game, lang) {
     if (e.type === "surrender" && (e.by === me || e.from === me || wonderAt(e.place))) out.push([fill(T.evSurrender, name(e.by), placeName(e.place, lang)), e.by === me ? "good" : e.from === me ? "bad" : null]);
     if (e.type === "surrender" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
     if (e.type === "battle" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
-    if (e.type === "battle" && e.drowned && e.defender === me) out.push([fill(T.evDrowned, name(e.attacker), placeName(e.place, lang)), "good"]);
+    if (e.type === "battle" && e.drowned && !e.field && e.defender === me) out.push([fill(T.evDrowned, name(e.attacker), placeName(e.place, lang)), "good"]);
     if (e.type === "riot" && e.civ === me) out.push([fill(T.evRiot, placeName(e.place, lang)), null]);
     if (e.type === "revolt" && e.civ === me) out.push([fill(T.evRevolt, placeName(e.place, lang)), "bad"]);
     if (e.type === "revolt" && e.fallen) out.push([fill(T.evFallen, name(e.fallen)), e.fallen === me ? "bad" : null]);
@@ -1367,9 +1446,10 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
   // Üstte savaş sahnesi (battle.js): pencere açıldığından beri geçen süreyle oynar.
   const SH = 180;
   const r = modalFrame(ctx, cam, boxes, 190 + SH + 16 + extra.length * 22);
-  drawBattle(ctx, { x: r.x + 16, y: r.y + 16, w: r.w - 32, h: SH }, e, performance.now() - (m.t0 ?? 0), wallsOf(game, e.place));
+  drawBattle(ctx, { x: r.x + 16, y: r.y + 16, w: r.w - 32, h: SH }, e, performance.now() - (m.t0 ?? 0), e.field ? null : wallsOf(game, e.place));
   const y0 = r.y + SH + 16;
-  text(ctx, e.won ? fill(T.won, where) : fill(T.lost, where), r.x + r.w / 2, y0 + 44, {
+  const head = e.field ? (e.won ? T.fieldWon : T.fieldLost) : e.won ? T.won : T.lost;
+  text(ctx, fill(head, where), r.x + r.w / 2, y0 + 44, {
     title: true, bold: true, size: 19, align: "center", color: e.won ? INK.good : INK.bad,
   });
   text(ctx, fill(T.losses, lost), r.x + r.w / 2, y0 + 78, { size: 14, align: "center" });
@@ -1515,10 +1595,10 @@ function armiesModal(ctx, cam, game, ui, boxes, T, m) {
     listRow(ctx, boxes, r, y, rowH - 2, i, { do: "pickArmy", army: a.id });
     soldier(ctx, a.owner, x + 10, y + rowH - 9, 1, {});
     const g = a.general ? `  ·  ★ ${a.general.name}` : "";
-    text(ctx, placeName(a.at, ui.lang) + g, x + 30, y + 20, { bold: true, size: 15 });
+    fit(ctx, whereText(a, T, ui.lang) + g, x + 30, y + 20, r.w - 220, { bold: true, size: 15 });
     text(ctx, troops(T, a) + (fleetOf(a) ? `  ·  ⛵ ${fleetOf(a)}` : ""), x + 30, y + 39, { size: 13, color: INK.soft });
-    const [state, color] = a.route.length ? [fill(T.marching, placeName(a.route[a.route.length - 1], ui.lang)), INK.ink]
-      : a.moves > 0 ? [fill(T.movesLeft, a.moves), INK.good] : [T.spentShort, INK.faint];
+    const [state, color] = a.route.length ? [routeText(a, T, ui.lang), INK.ink]
+      : a.mp > 0.05 ? [fill(T.movesLeft, Math.round((a.mp / mpMax(a)) * 100)), INK.good] : [T.spentShort, INK.faint];
     text(ctx, state, right, y + 20, { italic: true, size: 13, color, align: "right" });
   });
   pager(ctx, boxes, r, r.y + 62 + pg.rows.length * rowH + 6, pg);

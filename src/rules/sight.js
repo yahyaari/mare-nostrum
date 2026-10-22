@@ -1,20 +1,29 @@
-// Savaş sisi (kurallar.md bölüm 19): oyuncunun ne gördüğü. Kendi ve müttefiklerinin yerleri ve
-// orduları, artı bunların bir yol ötesi. Ötesindeki ordular, filolar ve garnizonlar görünmez;
-// yerleşimler ve sahipleri bilinir (haritalar herkesin elinde).
+// Savaş sisi (kurallar.md bölüm 19): oyuncunun ne gördüğü. Kendi ve müttefiklerinin yerleşimleri
+// ve orduları birer göz: çevrelerinde bir çember (yerleşim N.reach.sightPlace, ordu
+// N.reach.sightArmy) açık. Ordu yürüdükçe sis onunla açılır (kullanıcı 22.10: "yürüdüğü yerlerde
+// sisler açılsın"). Çemberin dışındaki ordular, filolar ve garnizonlar görünmez; yerleşimler ve
+// sahipleri bilinir (haritalar herkesin elinde).
 //
 // Sadece ekran içindir: bilgisayar her şeyi görür (basitlik için, plan.md 2.7), kurallar sisi
 // bilmez.
 
-import { neighbours } from "./graph.js";
+import { N } from "./numbers.js";
+import { POS, dist } from "./map.js";
 import { relation } from "./state.js";
 
-/** Bu medeniyetin gördüğü yerleşimler. */
-export function sight(state, civ) {
+/** Bu medeniyetin gözleri: [{ x, y, r }]. */
+export function eyes(state, civ) {
   const friend = (o) => o === civ || (o && relation(state, civ, o) === "ally");
-  const eyes = new Set();
-  for (const [id, pl] of Object.entries(state.places)) if (friend(pl.owner)) eyes.add(id);
-  for (const a of state.armies) if (friend(a.owner)) eyes.add(a.at);
-  const seen = new Set(eyes);
-  for (const id of eyes) for (const n of neighbours(id)) seen.add(n);
-  return seen;
+  const out = [];
+  for (const [id, pl] of Object.entries(state.places)) if (friend(pl.owner)) out.push({ ...POS[id], r: N.reach.sightPlace });
+  for (const a of state.armies) if (friend(a.owner) && !a.at) out.push({ x: a.x, y: a.y, r: N.reach.sightArmy });
+  return out;
+}
+
+/** Bir nokta gözlerden birinin çemberinde mi. */
+export const seen = (eyesList, pt) => eyesList.some((e) => dist(e, pt) <= e.r);
+
+/** Bu medeniyetin gördüğü yerleşimler. */
+export function sight(state, civ, list = eyes(state, civ)) {
+  return new Set(Object.keys(state.places).filter((id) => seen(list, POS[id])));
 }

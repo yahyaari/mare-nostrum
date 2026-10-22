@@ -179,7 +179,8 @@ export function drawBattle(ctx, r, ev, t, walls) {
   ctx.beginPath();
   ctx.rect(r.x, r.y, r.w, r.h);
   ctx.clip();
-  if (ev.drowned) seaScene(ctx, r, ev, p);
+  // Denizde: limanın önünde batan saldırı ya da denizdeki meydan muharebesi.
+  if (ev.drowned || (ev.field && ev.naval)) seaScene(ctx, r, ev, p);
   else landScene(ctx, r, ev, p, walls);
   ctx.restore();
   ctx.strokeStyle = "#2a2016";
@@ -344,7 +345,13 @@ function seaScene(ctx, r, ev, p) {
     ctx.stroke();
   }
   const mid = r.x + r.w / 2;
-  const na = Math.max(1, Math.min(4, ev.naval?.lost ?? 2)), nd = Math.max(1, Math.min(4, (ev.naval?.sunk ?? 0) + 1));
+  // Kaç gemi çizilir, kaçı batar: meydan muharebesinde iki filonun sayıları biliniyor; limanın
+  // önünde batan saldırıda saldıranın hepsi batar.
+  const nv = ev.naval ?? {};
+  const known = nv.att !== undefined;
+  const na = Math.max(1, Math.min(4, known ? nv.att : nv.lost ?? 2)), nd = Math.max(1, Math.min(4, known ? nv.def : (nv.sunk ?? 0) + 1));
+  const sinkA = known ? Math.round((na * nv.lost) / Math.max(1, nv.att)) : na;
+  const sinkD = known ? Math.round((nd * nv.sunk) / Math.max(1, nv.def)) : nv.sunk ?? 0;
   const ship = (owner, i, n, side, sinking, sunkFrom) => {
     const go = ease(clamp01((p - 0.1) / 0.4)) * 50;
     const x = mid - side * (70 + i * 34) + side * go; // saldıran soldan sağa, savunan sağdan sola
@@ -357,8 +364,8 @@ function seaScene(ctx, r, ev, p) {
     galley(ctx, owner, 0, 0, 0.8, { flip: side < 0, troops: true });
     ctx.restore();
   };
-  for (let i = nd - 1; i >= 0; i--) ship(ev.defender, i, nd, -1, i < (ev.naval?.sunk ?? 0), 0.55);
-  for (let i = na - 1; i >= 0; i--) ship(ev.attacker, i, na, 1, true, 0.55);
+  for (let i = nd - 1; i >= 0; i--) ship(ev.defender, i, nd, -1, i < sinkD, 0.55);
+  for (let i = na - 1; i >= 0; i--) ship(ev.attacker, i, na, 1, i < sinkA, 0.55);
   // Ateş okları
   const q = clamp01((p - 0.35) / 0.25);
   if (q > 0 && q < 1) {

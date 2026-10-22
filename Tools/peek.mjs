@@ -183,7 +183,7 @@ await shot("22_sadakat", `${D({ do: "decide", id: 901, choice: "pay" })}; ${DONE
 await shot("23_sadakat_tr", `${D({ do: "lang", lang: "tr" })}`);
 // General: ata, sonra bir zaferde seviye atlasın.
 await shot("24_general_ata", `${D({ do: "lang", lang: "en" })}; M.game.civs.rome.money = 100;
-  const a = M.game.armies.find((x) => x.owner === 'rome' && x.at === 'mediolanum'); a.moves = 1; a.inf = 160;
+  const a = M.game.armies.find((x) => x.owner === 'rome' && x.at === 'mediolanum'); a.mp = 5; a.inf = 160;
   M.ui.sel = { kind: 'army', id: a.id }; M.look('mediolanum', 2.4)`);
 await shot("25_general_atandi", `${D({ do: "appoint", army: 0 }).replace("0", "M.ui.sel.id")}; ${DONE}`);
 await shot("26_general_zafer", `const a = M.game.armies.find((x) => x.owner === 'rome' && x.at === 'mediolanum'); a.general.xp = 2;
@@ -203,15 +203,15 @@ await shot("30c_liman_tr", `${D({ do: "lang", lang: "tr" })}`);
 await shot("31_gemili_ordu_cikar", `${D({ do: "lang", lang: "en" })}; ${D({ do: "cardTab", tab: "garrison" })}; ${D({ do: "pickAll", of: "p:carthage", all: true, n: 999 })}`);
 await shot("32_denizde", `${D({ do: "march", id: "carthage" })}; ${RIGHT("lilybaeum")}; ${AT(190)}`);
 await shot("33_deniz_saldiri", `${DONE}; const g = M.game; const a = g.armies.find((x) => x.owner === 'carthage');
-  a.at = 'carthage'; a.moves = 1; a.inf = 70; a.ships = 3; a.route = []; M.ui.sel = { kind: 'army', id: a.id }; M.look('carthage', 2.2);
+  Object.assign(a, M.pos('carthage'), { at: 'carthage', mp: 5, inf: 70, ships: 3, route: [] }); M.ui.sel = { kind: 'army', id: a.id }; M.look('carthage', 2.2);
   ${RIGHT("caralis")}`);
 await shot("34_deniz_zafer", `${D({ do: "attack" })}; ${DONE}`);
 await shot("35_abluka", `${D({ do: "close" })}; const g = M.game; g.relations['carthage|rome'] = 'war';
   g.places.lilybaeum.owner = 'carthage'; g.places.syracuse.owner = 'rome';
-  g.armies.push({ id: 990, owner: 'rome', at: 'syracuse', inf: 0, arch: 0, cav: 0, siege: 0, ships: 4, moves: 1, route: [], general: null });
-  g.places.tarentum.ships = 0; g.armies.push({ id: 991, owner: 'carthage', at: 'syracuse', inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, moves: 0, route: [], general: null });
+  g.armies.push({ id: 990, owner: 'rome', at: 'syracuse', ...M.pos('syracuse'), inf: 0, arch: 0, cav: 0, siege: 0, ships: 4, trireme: 0, quinq: 0, mp: 5, route: [], general: null });
+  g.places.tarentum.ships = 0; g.armies.push({ id: 991, owner: 'carthage', at: 'syracuse', ...M.pos('syracuse'), inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, mp: 0, route: [], general: null });
   g.armies = g.armies.filter((x) => x.id !== 991);
-  g.places.syracuse.owner = 'carthage'; g.places.tarentum.owner = 'carthage'; g.armies.find((x) => x.id === 990).at = 'epidamnos';
+  g.places.syracuse.owner = 'carthage'; g.places.tarentum.owner = 'carthage'; Object.assign(g.armies.find((x) => x.id === 990), M.pos('epidamnos'), { at: 'epidamnos' });
   g.places.epidamnos.owner = 'rome';
   M.ui.sel = { kind: 'place', id: 'tarentum' }; M.look('tarentum', 2.4)`);
 await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "en" })}; return true; })()`);

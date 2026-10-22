@@ -5,14 +5,14 @@
 //
 // Kuşatılan yer ordunun `besieging` alanında (`siege` alanı kuşatma makinelerinin sayısı).
 
-import { neighbours, roadBetween } from "./graph.js";
-import { access, canAttack, capture, defenders, hostile, wallsOf } from "./moves.js";
+import { access, bySea, canAttack, capture, defenders, hostile, wallsOf } from "./moves.js";
+import { POS, dist } from "./map.js";
 import { N, UNITS } from "./numbers.js";
 import { armyById, empty, fleetOf, men } from "./state.js";
 
-/** Bu ordu bu yeri kuşatabilir mi: saldırabileceği, surlu, kara yoluyla komşu bir yer. */
+/** Bu ordu bu yeri kuşatabilir mi: saldırabileceği (menzilde), surlu, karadan bir yer. */
 export function canBesiege(state, army, id) {
-  return !!army && canAttack(state, army, id) && !!wallsOf(state, id) && !roadBetween(army.at, id).sea && army.besieging !== id;
+  return !!army && canAttack(state, army, id) && !!wallsOf(state, id) && !bySea(army, POS[id]) && army.besieging !== id;
 }
 
 /** Kuşatmanın turluk erimesi: %10, her 10 kuşatma makinesi +%2, en fazla %25. */
@@ -35,7 +35,7 @@ export function besiege(state, armyId, id, events = null) {
   if (!canBesiege(state, a, id)) return false;
   a.besieging = id;
   a.besiegedSince = state.turn;
-  a.moves = 0;
+  a.mp = 0;
   a.route = [];
   events?.push({ type: "siege", turn: state.turn, by: a.owner, place: id, defender: state.places[id].owner });
   return true;
@@ -61,7 +61,7 @@ export function tickSieges(state, events = []) {
   for (const a of [...state.armies]) {
     const id = a.besieging;
     if (!id) continue;
-    const ok = state.armies.includes(a) && men(a) > 0 && neighbours(a.at).includes(id)
+    const ok = state.armies.includes(a) && men(a) > 0 && !a.at && dist(a, POS[id]) <= N.reach.strike + 1e-9
       && hostile(access(state, a.owner, id)) && !!wallsOf(state, id);
     if (!ok) { lift(state, a.id); continue; }
     const pl = state.places[id];
@@ -77,9 +77,11 @@ export function tickSieges(state, events = []) {
     if (men(defenders(state, id)) > 0) continue;
     // Teslim: kuşatan ordu içeri girer.
     const from = pl.owner;
-    state.trace?.push({ type: "move", army: a.id, owner: a.owner, men: men(a), ships: fleetOf(a), from: a.at, to: id });
+    state.trace?.push({ type: "move", army: a.id, owner: a.owner, men: men(a), ships: fleetOf(a), path: [[a.x, a.y], [POS[id].x, POS[id].y]] });
     capture(state, id, a.owner);
     a.at = id;
+    a.x = POS[id].x;
+    a.y = POS[id].y;
     lift(state, a.id);
     events.push({ type: "surrender", turn: state.turn, by: a.owner, place: id, from, fallen: from && !state.civs[from].alive ? from : null });
   }

@@ -1,12 +1,16 @@
 // Ordu hareketi ve saldırı (kurallar.md bölüm 6-7). Saf kurallar, DOM yok.
 //
-// Ordular sadece yerleşimlerde durur. Her ordu her tur `moves` yol yürür (Sakalar 2).
-// Uzak bir yere gönderilen ordu güzergâhını saklar ve her tur kendiliğinden ilerler; ama
-// yabancı bir yere asla kendi başına girmez - saldırı her zaman açık bir emirdir.
+// Serbest yürüyüş (kullanıcı 22.10): ordu haritanın her yerinde durabilir - yeri (a.x, a.y)
+// harita biriminde; bir yerleşimin içindeyse a.at o yer, değilse null. Her tur hareket puanı
+// (a.mp, N.march.mp; Sakalar iki katı) harcayarak kareden kareye yürür (map.js). Uzaktaki bir
+// yere gönderilen ordu kalan yolunu (a.route: kareler) saklar ve her tur kendiliğinden ilerler.
+// Savaştığı birinin ordusunun önüne gelince durur ("önünü kesti", N.reach.zoc). Saldırı - bir
+// yerleşime ya da yerleşimin dışındaki bir orduya (meydan muharebesi) - her zaman açık bir
+// emirdir ve ancak menzilden (N.reach.strike) yapılır.
 
-import { CIVS } from "../data/world.js";
+import { CIVS, PLACES, ROADS } from "../data/world.js";
 import { estimate, fight, naval, navalOdds, sinkShips } from "./combat.js";
-import { byId, neighbours, path, roadBetween } from "./graph.js";
+import { byId, roadLine } from "./graph.js";
 import { bestAt, bury, has, learn } from "./generals.js";
 import { N, SHIPS, UNITS, trait } from "./numbers.js";
 import { between, random } from "./rng.js";
@@ -14,12 +18,14 @@ import { armiesAt, armyById, canSail, empty, fleetOf, info, men, placesOf, relat
 import { holds } from "./wonders.js";
 import { groundOf } from "./ground.js";
 import { isWinter } from "./season.js";
+import { CELL, H, PLACE_CELL, POS, W, around, cellOf, centre, dist, field, isLand, isRoad, pathNear, pathTo, placeAtCell, regionIndex, rings, stepCost } from "./map.js";
+import { project } from "../geo.js";
 
 /**
  * `civ` buraya girebilir mi, girerse ne olur:
  *   "own" / "ally"  - yürür
  *   "enemy" / "free" - saldırır (savaştığı medeniyet / bağımsız)
- *   null            - giremez (tarafsız birinin toprağı)
+ *   null            - giremez (tarafsız birinin yerleşimi: önce savaş ilan edilmeli)
  */
 export function access(state, civ, id) {
   const owner = state.places[id].owner;
@@ -39,7 +45,7 @@ export function wallsOf(state, id) {
   return info(id).capital || state.places[id].level >= N.cityWallLevel ? "city" : null;
 }
 
-/** Bir yeri savunanlar: garnizon ve sahibinin orada duran orduları. */
+/** Bir yeri savunanlar: garnizon ve sahibinin içinde duran orduları. */
 export function defenders(state, id) {
   const pl = state.places[id];
   const own = armiesAt(state, id).filter((a) => a.owner === pl.owner);
@@ -48,52 +54,113 @@ export function defenders(state, id) {
   return out;
 }
 
+// ---- yürüyüş ----
+
+/** Ordunun turluk hareket puanı: Sakalar iki kat, hızlı general bir buçuk kat. */
+export const mpMax = (a) => N.march.mp * trait(a.owner, "moves") * (has(a.general, "swift") ? 1.5 : 1);
+
 /**
- * Bu ordu bu yolu kullanabilir mi. Deniz yolu, gemiler orduyu taşıyabiliyorsa (`sail`).
- * Askersiz filo karadan yürümez - ancak karada kalmışsa (eski kayıtlarda filolar karadan
- * yürüyebiliyordu) bir limana dönebilsin diye kara yolu açık.
+ * Ordunun yürüyüşü: "both" gemileri bütün askerini taşıyor (karadan da denizden de), "land"
+ * sadece karadan, "sea" askersiz filo (sadece denizden; limana girer).
  */
-export function canUse(army, road, sail = canSail(army)) {
-  if (!road) return false;
-  if (road.sea) return sail;
-  return men(army) > 0 || !byId[army.at]?.port;
+export function modeOf(army) {
+  if (men(army) === 0) return "sea";
+  // Denizdeyken gemisi batıp askerini taşıyamaz olan ordu yine de kıyıya çıkabilsin.
+  if (army.x !== undefined && !isLand(cellOf(army.x, army.y))) return "both";
+  return canSail(army) ? "both" : "land";
 }
 
 /**
- * Bir ordunun `dest`e güzergâhı: aradaki her durak kendi ya da müttefik yeri olmalı.
- * `dest` düşmansa güzergâh onun bir önceki durağında biter (saldırı ayrı emir).
+ * Yabancı (düşman, bağımsız, tarafsız) yerleşimlerin çevresinden (N.reach.hold) geçilmez - Total
+ * War'ın kontrol alanı gibi: ordu ya dolaşır ya da şehri alır. Bağımsız şehirler yine tampon,
+ * boğazdaki Bizans yine kapı. Ordunun şu an içinde durduğu çevreler ve `except` (hedef) hariç.
  */
-export function routeTo(state, army, dest, sail = canSail(army)) {
-  if (army.at === dest) return [];
-  const kind = access(state, army.owner, dest);
-  if (kind === null) return null;
-  const walkable = (id) => {
+function heldFor(state, army, except = []) {
+  const R = rings(N.reach.hold);
+  const mask = new Uint8Array(W * H);
+  const inside = R.at(cellOf(army.x, army.y));
+  for (const id of Object.keys(state.places)) {
+    if (except.includes(id) || inside.includes(id)) continue;
     const k = access(state, army.owner, id);
-    return k === "own" || k === "ally";
-  };
-  const usable = (r) => canUse(army, r, sail);
-  if (hostile(kind)) {
-    // Düşmana komşu, yürünebilir en yakın durak - ve oradan düşmana giden yol da kullanılabilir olmalı.
-    let best = null;
-    for (const n of neighbours(dest)) {
-      if (!usable(roadBetween(n, dest))) continue;
-      const p = n === army.at ? [army.at] : walkable(n) ? path(army.at, n, walkable, usable) : null;
-      if (p && (!best || p.length < best.length)) best = p;
-    }
-    return best ? best.slice(1) : null;
+    if (k === "own" || k === "ally") continue;
+    for (const c of R.of[id]) mask[c] = 1;
   }
-  const p = path(army.at, dest, walkable, usable);
-  return p ? p.slice(1) : null;
+  return mask;
 }
 
-/** Bu orduyu bir yere götürmek gemi istiyor mu: karadan yol yok ama denizden var. */
-export const needsShips = (state, army, dest) => routeTo(state, army, dest) === null && routeTo(state, army, dest, true) !== null;
+/** Bu ordunun girebildiği kareler. Yerleşimin içinden ancak kendi ya da müttefik yeriyse geçilir. */
+function enterFor(state, army, mode = modeOf(army), except = []) {
+  const held = heldFor(state, army, except);
+  return (c) => {
+    if (held[c]) return false;
+    const pl = placeAtCell(c);
+    if (pl) {
+      const k = access(state, army.owner, pl);
+      if (k !== "own" && k !== "ally") return false;
+      return mode !== "sea" || !!byId[pl].port;
+    }
+    // Kara ordusu yoldan (boğazdaki feribottan da) ve karadan; filo sudan.
+    return mode === "both" || (mode === "land" ? isLand(c) || isRoad(c) : !isLand(c));
+  };
+}
+
+/** Bilgisayar tarafsızların toprağından kaçınır (girerse öfkelenirler): o kareler pahalı. */
+export function avoidFor(state, civ) {
+  // Hangi yerleşimlerin toprağı tarafsızın: bir kere, sonra kare başına bir dizi okuması.
+  const bad = new Uint8Array(PLACES.length);
+  PLACES.forEach((p, i) => { const o = state.places[p.id].owner; if (o && relation(state, civ, o) === "neutral") bad[i] = 1; });
+  return (c) => { const i = regionIndex(c); return i >= 0 && bad[i] ? 2.5 : 0; };
+}
 
 /**
- * Kışın deniz yolu: ordu %25 ihtimalle fırtınaya yakalanır, her birliğinden %10 ve bir gemisi
+ * Bir ordunun hedefe yolu. `target`: { place } | { army } | { x, y }. Kendi ya da müttefik
+ * yerine: içine; düşmana (yerleşim ya da ordu): önüne, saldırı menzilinin içine; boş araziye: o
+ * kareye. Dönen: { cells: [şimdiki, ..., son], cost, kind: "walk" | "approach" } ya da null.
+ */
+export function routeTo(state, army, target, o = {}) {
+  const from = cellOf(army.x, army.y);
+  const mode = o.mode ?? modeOf(army);
+  // Hedef bir yerleşimse onun çevresine, bir ordu ya da noktaysa oranın çevresindeki yerleşimlerinkine girilir.
+  const R = rings(N.reach.hold);
+  const except = target.place ? [target.place]
+    : target.army ? (() => { const b = armyById(state, target.army); return b ? R.at(cellOf(b.x, b.y)) : []; })()
+    : Number.isFinite(target.x) ? R.at(cellOf(target.x, target.y)) : [];
+  const opts = { enter: enterFor(state, army, mode, except), extra: o.extra ?? null };
+  const near = N.reach.strike * 0.7;
+  const kinded = (r, kind) => r && { ...r, kind };
+  if (target.place) {
+    const id = target.place, k = access(state, army.owner, id);
+    if (k === null) return null;
+    if (hostile(k)) return kinded(pathNear(from, POS[id], near, opts, o.limit), "approach");
+    if (mode === "sea" && !byId[id].port) return null;
+    return kinded(pathTo(from, PLACE_CELL[id], opts, o.limit), "walk");
+  }
+  if (target.army) {
+    const b = armyById(state, target.army);
+    if (!b) return null;
+    if (b.at) return routeTo(state, army, { place: b.at }, o);
+    return kinded(pathNear(from, b, near, opts, o.limit), "approach");
+  }
+  if (!Number.isFinite(target.x) || !Number.isFinite(target.y)) return null;
+  const to = cellOf(target.x, target.y);
+  if (!opts.enter(to) && to !== from) return null;
+  return kinded(pathTo(from, to, opts, o.limit), "walk");
+}
+
+/** Bu hedefe gitmek gemi istiyor mu: karadan yol yok ama gemileri olsaydı denizden vardı. */
+export const needsShips = (state, army, target) => modeOf(army) === "land" && routeTo(state, army, target) === null && routeTo(state, army, target, { mode: "both" }) !== null;
+
+/** Hedefe kaç tur: bu turun kalan hareketi, sonra her tur tam hareket. */
+export function turnsFor(army, cost) {
+  if (cost <= army.mp + 1e-9) return 1;
+  return 1 + Math.ceil((cost - army.mp - 1e-9) / mpMax(army));
+}
+
+/**
+ * Kışın denizdeki ordu %25 ihtimalle fırtınaya yakalanır, her birliğinden %10 ve bir gemisi
  * gider. Olay state.storms'a yazılır (tur raporu ve ekran oradan okur).
  */
-function storm(state, army, at) {
+function storm(state, army) {
   if (!isWinter(state.turn) || random(state) >= N.season.storm) return;
   let lost = 0;
   for (const k of UNITS) {
@@ -103,72 +170,136 @@ function storm(state, army, at) {
   }
   const sunk = fleetOf(army) > 1 ? 1 : 0;
   sinkShips(army, sunk);
-  (state.storms ??= []).push({ type: "storm", turn: state.turn, civ: army.owner, army: army.id, at, lost, sunk });
+  (state.storms ??= []).push({ type: "storm", turn: state.turn, civ: army.owner, army: army.id, at: nearestPlace(army), lost, sunk });
 }
 
-/** Saldırıda arazi: nehir geçen saldıran ve dağ geçidini tutan savunanın çarpanları. */
-export function terrainOf(from, id) {
-  const g = from ? groundOf(from, id) : { river: false, pass: false };
-  return { att: g.river ? N.ground.river : 1, def: g.pass ? N.ground.pass : 1, river: g.river, pass: g.pass };
+/** Bir noktaya en yakın yerleşim (olaylarda "X yakınında" için). */
+export function nearestPlace(pt) {
+  let best = null, bd = Infinity;
+  for (const [id, m] of Object.entries(POS)) {
+    const d = dist(pt, m);
+    if (d < bd) { bd = d; best = id; }
+  }
+  return best;
 }
 
-/** Güzergâhı koy ve hareketi kalan kadar yürü. Dönen: yürünen adım sayısı. */
-export function order(state, armyId, dest) {
+/** Savaştığı birinin, yerleşimin dışındaki orduları. */
+const foes = (state, army) => state.armies.filter((b) => b !== army && !b.at && relation(state, army.owner, b.owner) === "war");
+
+/** Güzergâhı koy ve hareketi kalan kadar yürü. Dönen: yürünen adım sayısı (-1: gidilemez). */
+export function order(state, armyId, target) {
   const army = armyById(state, armyId);
   if (!army) return -1;
-  const route = routeTo(state, army, dest);
-  if (route === null) return -1;
-  army.route = route;
+  const r = routeTo(state, army, target, army.owner === state.player ? {} : { extra: avoidFor(state, army.owner) });
+  if (r === null) return -1;
+  army.route = r.cells.slice(1);
   return advance(state, army);
 }
 
 /**
- * Ordunun güzergâhında kalan hareketi kadar yürü. Önündeki yer artık yürünemez olduysa
- * (sahibi değişti, savaş çıktı) durur ve güzergâhı siler: "durur ve sana sorar".
+ * Ordunun güzergâhında kalan hareketi kadar yürü. Önündeki kare artık girilemez olduysa (yerin
+ * sahibi değişti, savaş çıktı, gemileri battı) durur ve güzergâhı siler: "durur ve sana sorar".
+ * Savaştığı birinin ordusunun önüne gelince de durur.
  */
 export function advance(state, army) {
-  let steps = 0;
-  while (army.moves > 0 && army.route.length) {
-    const next = army.route[0];
-    const k = access(state, army.owner, next);
-    const road = roadBetween(army.at, next);
-    if (!(k === "own" || k === "ally") || !canUse(army, road)) {
-      army.route = [];
-      break;
-    }
-    // Ekran için iz: kim nereden nereye yürüdü (state.trace sadece ekran isterse var, kayda girmez).
-    state.trace?.push({ type: "move", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), from: army.at, to: next });
-    // Yürüyen ordu kuşatmayı bırakır.
+  if (!army.route?.length) return 0;
+  const enter = enterFor(state, army, modeOf(army), rings(N.reach.hold).at(army.route[army.route.length - 1]));
+  const pts = [[army.x, army.y]];
+  let steps = 0, sea = false;
+  while (army.route.length) {
+    const here = cellOf(army.x, army.y), next = army.route[0];
+    const link = around(here).find(([c]) => c === next);
+    if (!link || !enter(next)) { army.route = []; break; }
+    const c = stepCost(here, next, link[1]);
+    if (c > army.mp + 1e-9) break; // bu turluk bu kadar; yol yarın sürer
+    const watch = foes(state, army).filter((b) => dist(army, b) > N.reach.zoc);
+    army.mp -= c;
+    army.route.shift();
+    // Yürüyen ordu kuşatmayı bırakır, yerleşimden çıkar.
     delete army.besieging;
     delete army.besiegedSince;
-    army.at = next;
-    if (road.sea) storm(state, army, next);
-    army.moves -= 1;
-    army.route.shift();
+    const pl = placeAtCell(next);
+    const m = pl ? POS[pl] : centre(next);
+    army.x = m.x;
+    army.y = m.y;
+    // Bir yerleşimin karesinde durulursa (yolu bitti ya da turu bitti) içindedir; geçip gidince çıkar.
+    army.at = pl ?? null;
+    pts.push([army.x, army.y]);
     steps++;
+    if (!isLand(next)) sea = true;
+    // Önünü kesen düşman: menzile yeni girdiği bir düşman ordusu.
+    if (watch.some((b) => dist(army, b) <= N.reach.zoc)) { army.route = []; break; }
+  }
+  if (steps) {
+    if (sea) storm(state, army);
+    // Ekran için iz: kim nereden nereye yürüdü (state.trace sadece ekran isterse var, kayda girmez).
+    state.trace?.push({ type: "move", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path: pts });
   }
   return steps;
 }
 
-/** Bir yerin yanındaki, sahibinin savaştığı orduların toplam askeri: oyuncuya uyarı için. */
+/** Bir yerin çevresindeki, sahibinin savaştığı orduların toplam askeri: oyuncuya uyarı için. */
 export function menace(state, id) {
   const owner = state.places[id].owner;
+  if (!owner) return 0;
   let n = 0;
-  for (const nb of neighbours(id)) {
-    for (const a of armiesAt(state, nb)) if (owner && relation(state, owner, a.owner) === "war") n += men(a);
-  }
+  for (const a of state.armies) if (relation(state, owner, a.owner) === "war" && !a.at && dist(a, POS[id]) <= N.reach.threat) n += men(a);
   return n;
 }
 
+// ---- saldırı ----
+
+/** Bir ordunun yeri (ordu ya da { at } gibi bir kuvvet). */
+const spot = (u) => (u.x !== undefined ? { x: u.x, y: u.y } : POS[u.at]);
+
+/** Bir noktadan bir hedefe saldırı denizden mi: saldıran denizde, ya da arada deniz var (boğazdaki yol kara sayılır). */
+export function bySea(from, to) {
+  const wet = (c) => !isLand(c) && !isRoad(c);
+  if (wet(cellOf(from.x, from.y))) return true;
+  const n = Math.ceil(dist(from, to) / (CELL / 2));
+  for (let s = 1; s < n; s++) {
+    if (wet(cellOf(from.x + ((to.x - from.x) * s) / n, from.y + ((to.y - from.y) * s) / n))) return true;
+  }
+  return false;
+}
+
 /**
- * Bir saldırının tahmini, generaller dahil: `unit` bir ordu ya da { inf, arch, general? }.
+ * Saldırıda arazi: nehir geçen yoldan saldıran ve dağ geçidini tutan savunanın çarpanları.
+ * Saldıran hedefe giden bir kara yolunun üstündeyse (yarım birim yakınında) o yolun arazisi
+ * sayılır; yoldan gelmeyen (kuşatan, dolaşan) ordu nehri ya da geçidi aşmadan vurur.
+ * `from`: bir yerleşimin kimliği (o yoldan) ya da bir nokta.
+ */
+export function terrainOf(from, id) {
+  let g = { river: false, pass: false };
+  if (typeof from === "string") g = groundOf(from, id);
+  else if (from) {
+    let best = 0.5;
+    for (const r of ROADS) {
+      if (r.sea || (r.a !== id && r.b !== id)) continue;
+      const pts = roadLine(r).map(([lon, lat]) => project(lon, lat));
+      for (let i = 1; i < pts.length; i++) {
+        const d = segDist(from, pts[i - 1], pts[i]);
+        if (d < best) { best = d; g = groundOf(r.a, r.b); }
+      }
+    }
+  }
+  return { att: g.river ? N.ground.river : 1, def: g.pass ? N.ground.pass : 1, river: g.river, pass: g.pass };
+}
+
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y);
+}
+
+/**
+ * Bir saldırının tahmini, generaller dahil: `unit` bir ordu ya da { inf, arch, at, general? }.
  * Arayüz ve bilgisayar bunu kullanır - savaşın kendisiyle aynı sayılar.
  */
 export function forecast(state, unit, civ, id) {
   const pl = state.places[id];
-  const from = unit.at ?? null;
-  const bySea = from && roadBetween(from, id)?.sea;
-  const sea = bySea ? navalOdds({ civ, ...shipsOnly(unit) }, { civ: pl.owner, ...fleetAt(state, id), fort: fortOf(state, id) }) : "easy";
+  const from = spot(unit);
+  const sea = from && bySea(from, POS[id]) ? navalOdds({ civ, ...shipsOnly(unit) }, { civ: pl.owner, ...fleetAt(state, id), fort: fortOf(state, id) }) : "easy";
   const ter = terrainOf(from, id);
   const land = estimate(
     { civ, inf: unit.inf, arch: unit.arch, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null, terrain: ter.att },
@@ -181,11 +312,12 @@ export function forecast(state, unit, civ, id) {
   return { ...land, sea };
 }
 
-/** Saldırabilir mi: komşu, düşman/bağımsız, hareketi var. */
+/** Saldırabilir mi: düşman ya da bağımsız yer, menzilde, hareketi var; denizdense gemileri yetiyor. */
 export function canAttack(state, army, id) {
-  if (!army || army.moves <= 0 || men(army) <= 0) return false;
-  const road = roadBetween(army.at, id);
-  return !!road && (!road.sea || canSail(army)) && hostile(access(state, army.owner, id));
+  if (!army || army.mp <= 0 || men(army) <= 0 || army.at === id) return false;
+  if (!hostile(access(state, army.owner, id))) return false;
+  if (dist(army, POS[id]) > N.reach.strike + 1e-9) return false;
+  return !bySea(army, POS[id]) || canSail(army);
 }
 
 /** Liman kalesinin savunan filoya çarpanı. */
@@ -196,7 +328,7 @@ export const fortOf = (state, id) => {
   return 1 + ((pl.fort ?? 0) + pharos) * N.port.fortPerLevel;
 };
 
-/** Bir yerin gemileri, türleriyle: limandakiler ve sahibinin orada duran ordularınınkiler. */
+/** Bir yerin gemileri, türleriyle: limandakiler ve sahibinin içinde duran ordularınınkiler. */
 export function fleetAt(state, id) {
   const pl = state.places[id];
   const out = shipsOnly(pl);
@@ -208,8 +340,8 @@ export function fleetAt(state, id) {
 export const shipsAt = (state, id) => fleetOf(fleetAt(state, id));
 
 /**
- * Saldırı. Dönen olay: { type: "battle", ... }. Kazanırsa yer saldıranın olur, ordu içeri
- * girer; kaybederse ordu yok olur ve savunanların kayıpları garnizona ve ordulara oranla düşer.
+ * Bir yerleşime saldırı. Dönen olay: { type: "battle", ... }. Kazanırsa yer saldıranın olur, ordu
+ * içeri girer; kaybederse ordu yok olur ve savunanların kayıpları garnizona ve ordulara oranla düşer.
  */
 export function attack(state, armyId, id, luck = null) {
   const army = armyById(state, armyId);
@@ -218,18 +350,21 @@ export function attack(state, armyId, id, luck = null) {
   delete army.besieging;
   delete army.besiegedSince;
   const pl = state.places[id];
+  const from = { x: army.x, y: army.y };
+  const sea = bySea(from, POS[id]);
+  const path = [[army.x, army.y], [POS[id].x, POS[id].y]];
   // Kışın denizden saldıran önce fırtınaya yakalanabilir.
-  if (roadBetween(army.at, id).sea) storm(state, army, army.at);
+  if (sea) storm(state, army);
   // Denizden saldırı: önce limandaki gemilerle deniz savaşı. Filo batarsa ordu denizde kaybolur.
   let navalEv = null;
-  if (roadBetween(army.at, id).sea && shipsAt(state, id) > 0) {
+  if (sea && shipsAt(state, id) > 0) {
     const theirs = fleetAt(state, id);
     const nr = naval({ civ: army.owner, ...shipsOnly(army) }, { civ: pl.owner, ...theirs, fort: fortOf(state, id) }, luck ?? rollLuck(state));
     navalEv = { won: nr.attWins, sunk: fleetOf(theirs) - fleetOf(nr.def), lost: fleetOf(army) - fleetOf(nr.att) };
     sinkAt(state, id, nr.def);
     for (const k of SHIPS) army[k] = nr.att[k];
     if (!nr.attWins) {
-      state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), from: army.at, to: id, won: false, oldOwner: pl.owner });
+      state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path, at: id, won: false, oldOwner: pl.owner });
       bury(state, army.owner, army.general);
       state.armies = state.armies.filter((a) => a !== army);
       return {
@@ -242,18 +377,15 @@ export function attack(state, armyId, id, luck = null) {
   const def = defenders(state, id);
   const walls = wallsOf(state, id);
   const defGen = bestAt(state, id, pl.owner);
-  const ter = terrainOf(army.at, id);
+  const ter = terrainOf(from, id);
   const r = fight({ civ: army.owner, ...pickUnits(army), gen: army.general, terrain: ter.att }, { ...def, gen: defGen, terrain: ter.def }, walls, luck ?? rollLuck(state));
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
     won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },
     after: { att: r.att, def: r.def }, naval: navalEv,
   };
-  state.trace?.push({
-    type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), from: army.at, to: id,
-    won: r.attWins, oldOwner: pl.owner,
-  });
-  army.moves = 0;
+  state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path, at: id, won: r.attWins, oldOwner: pl.owner });
+  army.mp = 0;
   army.route = [];
 
   if (r.attWins) {
@@ -261,6 +393,8 @@ export function attack(state, armyId, id, luck = null) {
     const loser = pl.owner;
     capture(state, id, army.owner);
     army.at = id;
+    army.x = POS[id].x;
+    army.y = POS[id].y;
     ev.fallen = loser && !state.civs[loser].alive ? loser : null;
     if (army.general) ev.gen = { name: army.general.name, ...learn(state, army.general, true, army.owner) };
   } else {
@@ -278,6 +412,74 @@ export function attack(state, armyId, id, luck = null) {
     for (const a of state.armies) if (a.at === id && a.owner === pl.owner && empty(a)) bury(state, a.owner, a.general);
     state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && empty(a)));
   }
+  return ev;
+}
+
+// ---- meydan muharebesi ----
+//
+// Kullanıcı 22.10: "düşman gelirse kuşatmadan önce meydan muharebesi yapabilsin". Yerleşimin
+// dışındaki bir orduya saldırı: karada sursuz bir savaş, ikisi de denizdeyse deniz savaşı.
+// Kaybeden yok olur (yerleşim savaşındaki gibi); denizde kaybeden filo askerleriyle batar.
+
+/** Bu ordu şu orduya saldırabilir mi: savaştığı birinin, yerleşimin dışındaki, menzilde. */
+export function canStrike(state, army, b) {
+  if (!army || !b || army === b || army.mp <= 0 || b.at) return false;
+  if (relation(state, army.owner, b.owner) !== "war") return false;
+  if (dist(army, b) > N.reach.strike + 1e-9) return false;
+  const sa = !isLand(cellOf(army.x, army.y)), sb = !isLand(cellOf(b.x, b.y));
+  if (sa !== sb) return false; // biri denizde biri karada
+  return sa ? fleetOf(army) > 0 : men(army) > 0 && men(b) + fleetOf(b) > 0;
+}
+
+/** Meydan muharebesinin tahmini (karada; denizdeyse deniz savaşının). */
+export function forecastField(state, army, b) {
+  if (!isLand(cellOf(b.x, b.y))) return { odds: navalOdds({ civ: army.owner, ...shipsOnly(army) }, { civ: b.owner, ...shipsOnly(b) }), lost: 0, killed: 0, sea: true };
+  return estimate(
+    { civ: army.owner, ...pickUnits(army), gen: army.general ?? null },
+    { civ: b.owner, ...pickUnits(b), gen: b.general ?? null },
+    null,
+  );
+}
+
+/** Meydan muharebesi. Dönen olay: { type: "battle", field: true, place: en yakın yer, at: { x, y }, ... }. */
+export function strike(state, armyId, targetId, luck = null) {
+  const army = armyById(state, armyId), b = armyById(state, targetId);
+  if (!canStrike(state, army, b)) return null;
+  delete army.besieging;
+  delete army.besiegedSince;
+  const at = { x: b.x, y: b.y };
+  const ev = {
+    type: "battle", field: true, turn: state.turn, attacker: army.owner, defender: b.owner, place: nearestPlace(at), at,
+    before: { att: pickUnits(army), def: pickUnits(b) }, naval: null,
+  };
+  let won;
+  if (!isLand(cellOf(b.x, b.y))) {
+    // Denizde: filo filoya; yenilen filo askerleriyle batar.
+    const nr = naval({ civ: army.owner, ...shipsOnly(army) }, { civ: b.owner, ...shipsOnly(b) }, luck ?? rollLuck(state));
+    won = nr.attWins;
+    ev.naval = { won, sunk: fleetOf(b) - fleetOf(nr.def), lost: fleetOf(army) - fleetOf(nr.att), att: fleetOf(army), def: fleetOf(b) };
+    const winner = won ? army : b;
+    for (const k of SHIPS) winner[k] = (won ? nr.att : nr.def)[k];
+    ev.drowned = !won;
+    ev.after = { att: won ? pickUnits(army) : pickUnits({}), def: won ? pickUnits({}) : pickUnits(b) };
+  } else {
+    const r = fight({ civ: army.owner, ...pickUnits(army), gen: army.general }, { civ: b.owner, ...pickUnits(b), gen: b.general }, null, luck ?? rollLuck(state));
+    won = r.attWins;
+    for (const k of UNITS) (won ? army : b)[k] = (won ? r.att : r.def)[k];
+    ev.after = { att: r.att, def: r.def };
+  }
+  ev.won = won;
+  state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path: [[army.x, army.y], [at.x, at.y]], at: null, point: at, won, oldOwner: b.owner });
+  army.mp = 0;
+  army.route = [];
+  const [winner, loser] = won ? [army, b] : [b, army];
+  bury(state, loser.owner, loser.general);
+  if (loser.general) ev.genFell = loser.general.name;
+  if (winner.general) {
+    const l = learn(state, winner.general, true, winner.owner);
+    if (won) ev.gen = { name: winner.general.name, ...l };
+  }
+  state.armies = state.armies.filter((x) => x !== loser);
   return ev;
 }
 
@@ -300,6 +502,20 @@ function sinkAt(state, id, left) {
 
 const rollLuck = (state) => [between(state, 1 - N.luck, 1 + N.luck), between(state, 1 - N.luck, 1 + N.luck)];
 
+/** Bir yerleşimin içindeki ordu dışarı çıkar: kapısının önündeki bir kareye (gemiliyse denize de). */
+export function stepOut(state, army) {
+  const id = army.at;
+  army.at = null;
+  if (!id) return;
+  const mode = modeOf(army);
+  const ok = (c) => !placeAtCell(c) && (mode === "both" || (mode === "land" ? isLand(c) : !isLand(c)));
+  const out = around(PLACE_CELL[id]).map(([c]) => c).find(ok);
+  const m = out !== undefined ? centre(out) : POS[id];
+  army.x = m.x;
+  army.y = m.y;
+  army.route = [];
+}
+
 /** Yer el değiştirir: savunanlar yok olur, nüfusun dörtte biri kaçar, yapılar kalır. */
 export function capture(state, id, civ) {
   const pl = state.places[id];
@@ -313,42 +529,21 @@ export function capture(state, id, civ) {
   pl.recruited = pl.barracks;
   // Yeni alınan yer huzursuz; bağımsızlığına dönen (isyan eden) yer ise kendi halkının.
   pl.loyalty = civ ? N.loyalty.captured : 100;
-  // Eski sahibin oradaki orduları savunurken öldü; başkalarının (müttefik) orduları en yakın
-  // kendi yerlerine çekilir, yoksa dağılır.
+  // Eski sahibin içerideki orduları savunurken öldü; başkalarının (müttefik) orduları kapının
+  // önüne çıkar.
   for (const a of state.armies) if (a.at === id && a.owner === loser) bury(state, loser, a.general);
   state.armies = state.armies.filter((a) => !(a.at === id && a.owner === loser));
-  for (const a of armiesAt(state, id)) {
-    if (a.owner === civ) continue;
-    const home = nearestOwn(state, a.owner, id);
-    if (home) { a.at = home; a.route = []; } else state.armies = state.armies.filter((x) => x !== a);
-  }
+  for (const a of armiesAt(state, id)) if (a.owner !== civ) stepOut(state, a);
   if (loser && !placesOf(state, loser).length) eliminate(state, loser);
 }
 
-/** İttifak bozulunca birbirinin topraklarında duran ordular evlerine döner. */
+/** İttifak bozulunca birbirinin yerleşimlerinin içindeki ordular kapının önüne çıkar. */
 export function expel(state, a, b) {
   for (const army of state.armies) {
+    if (!army.at) continue;
     const owner = state.places[army.at].owner;
-    if ((army.owner === a && owner === b) || (army.owner === b && owner === a)) {
-      const home = nearestOwn(state, army.owner, army.at);
-      if (home) { army.at = home; army.route = []; } else { for (const k of [...UNITS, ...SHIPS]) army[k] = 0; }
-    }
+    if ((army.owner === a && owner === b) || (army.owner === b && owner === a)) stepOut(state, army);
   }
-  state.armies = state.armies.filter((x) => !empty(x));
-}
-
-function nearestOwn(state, civ, from) {
-  const seen = new Set([from]);
-  for (const q = [from]; q.length;) {
-    const at = q.shift();
-    for (const n of neighbours(at)) {
-      if (seen.has(n)) continue;
-      if (state.places[n].owner === civ) return n;
-      seen.add(n);
-      q.push(n);
-    }
-  }
-  return null;
 }
 
 /** Son yerini kaybeden medeniyet oyundan çıkar: orduları dağılır, ilişkileri silinir. */
@@ -363,5 +558,28 @@ export function eliminate(state, civ) {
 
 /** Bir medeniyetin ordularına turun başında hareketlerini geri ver. */
 export function refresh(state, civ) {
-  for (const a of state.armies) if (a.owner === civ) a.moves = trait(civ, "moves") + (has(a.general, "swift") ? 1 : 0);
+  for (const a of state.armies) if (a.owner === civ) a.mp = mpMax(a);
+}
+
+// ---- bilgisayar için ----
+
+/** Bu ordunun bu tur yetişebildiği her kareye bedel (map.js field): bilgisayar hedefe bakar. */
+export function reachOf(state, army, limit = army.mp) {
+  return field(cellOf(army.x, army.y), { enter: enterFor(state, army), extra: avoidFor(state, army.owner) }, limit);
+}
+
+/** Bir bedel tablosunda bir noktanın `r` yakınındaki en ucuz kare: { cell, cost } (yoksa cost Infinity). */
+export function nearest(f, at, r) {
+  let best = { cell: -1, cost: Infinity };
+  const i0 = Math.floor((at.x - r) / CELL), i1 = Math.floor((at.x + r) / CELL);
+  const j0 = Math.floor((at.y - r) / CELL), j1 = Math.floor((at.y + r) / CELL);
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      const c = cellOf((i + 0.5) * CELL, (j + 0.5) * CELL);
+      if (dist(centre(c), at) > r) continue;
+      const k = f.cost(c);
+      if (k < best.cost) best = { cell: c, cost: k };
+    }
+  }
+  return best;
 }
