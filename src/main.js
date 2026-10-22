@@ -21,8 +21,8 @@ import * as sound from "./view/sound.js";
 import { SCENE_MS } from "./view/battle.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { MODAL_MS, armyTip, drawUI, eventLines, placeTip } from "./view/ui.js";
-import { chipRise, yearOf } from "./view/hud.js";
+import { CARD_H, MODAL_MS, armyTip, drawUI, eventLines, placeTip } from "./view/ui.js";
+import { TOP, chipRise, yearOf } from "./view/hud.js";
 import { SIZE } from "./geo.js";
 
 const started = performance.now();
@@ -303,6 +303,18 @@ function stepGlide() {
   focus(cam, g.from.x + (g.to.x - g.from.x) * e, g.from.y + (g.to.y - g.from.y) * e, scale);
   if (p >= 1) glideTo = null;
   return !!glideTo;
+}
+
+/**
+ * Seçim kartı ekranın altında: seçilen yer (ya da ordunun durduğu yer) kartın arkasında
+ * kalacaksa harita onu kartın üstündeki boşluğun ortasına kaydırır.
+ */
+function keepVisible(id) {
+  const s = placeOnScreen(cam, id);
+  const bottom = cam.h - 12 - CARD_H - 40;
+  if (s.y > TOP + 40 && s.y < bottom) return;
+  const want = (TOP + bottom) / 2;
+  glide(cam.x, cam.y + (s.y - want) / cam.scale);
 }
 
 // ---- eylemler ----
@@ -589,12 +601,14 @@ function tapMap(x, y) {
     const a = armyById(game, t.army);
     ui.sel = { kind: "army", id: a.id };
     ui.army = a.owner === game.player ? a.id : null;
+    keepVisible(a.at);
     return redraw();
   }
   const p = nearest(x, y);
   // Yer seçilince son seçilen kendi ordu hatırlanır: yerin kartında saldırı tahmini çıkar.
   ui.sel = p ? { kind: "place", id: p.id } : null;
-  if (!p) ui.army = null;
+  if (p) keepVisible(p.id);
+  else ui.army = null;
   redraw();
 }
 

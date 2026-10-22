@@ -66,6 +66,8 @@ ama biraz çeşit seçti. Yapılan (kurallar.md baştan yazıldı):
   tahmin. Tarafsız yerin kartında "Savaş ilan et". Enter turu bitirir, Tab sıradaki ordu.
 - **Tepki:** pencereler süzülerek açılır; düğme basılıyken çöker; tur sonu raporu artık
   **pencere açmıyor**, sağ üstte haber olarak belirip soluyor (basınca rapor).
+- **Kart altta ortada** (kullanıcı 22.10, sadeleşmeden sonra: "şehir yükseltmeleri aşağıda ortada
+  çıksın, solda istemiyorum"): yatay sütunlu panel; açıkken alttaki menünün yerini alır.
 - **Bilgisayar:** en ucuz geliştirmeyi önce yapıyor (başkenti bekleyip hiçbir şey yapmayan Galya
   20. turda yıkılıyordu).
 

@@ -210,7 +210,10 @@ Kural katmanının aynısını kullanır (hile yok, sadece zorluğa göre gelir)
   saldırılabilecek yerde tahmin yazar.
 - **Klavye:** Enter turu bitirir, Tab sıradaki orduyu seçer, Esc kapatır, oklar kaydırır, +/-
   yakınlaştırır.
-- **Şehir kartı:** seviye ve Geliştir, turluk gelir, üç asker düğmesi, limanda gemi, Ordu çıkar.
+- **Seçim kartı ekranın altında ortada** (Total War gibi; kullanıcı 22.10: "solda istemiyorum"),
+  yatay sütunlar: şehir (garnizon, gelir, Ordu çıkar) | Geliştir | Asker bas | limanda gemiler.
+  Kart açıkken alttaki menü gizlenir. Seçilen yer kartın arkasında kalacaksa harita onu yukarı
+  kaydırır. Ekran genişse kartın solunda yerin resmi.
 - **Savaş sisi** (menüden kapatılabilir): kendi ve müttefik yerlerinin ve ordularının bir yol
   ötesi görülür; sisteki ordular gizli, garnizonlar bilinmez.
 - **Kronik** (menüden ve oyun sonunda): medeniyetlerin tur tur yer / asker grafiği ve önemli
