@@ -15,7 +15,7 @@ import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import { access, canAttack, defenders, forecast, fortOf, hostile, menace, shipsAt, terrainOf, wallsOf } from "../rules/moves.js";
 import { N, UNITS, trait } from "../rules/numbers.js";
 import {
-  PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -179,9 +179,11 @@ function civPanel(ctx, ui, boxes, T, civ, area) {
   const desc = wrap(ctx, T.civDesc[civ.id], w, { size: 14 });
   const lands = PLACES.filter((p) => p.owner === civ.id).sort((a, b) => (b.capital ? 1 : 0) - (a.capital ? 1 : 0)).map((p) => p.name[ui.lang] + (p.capital ? ` (${T.capital.toLocaleLowerCase(ui.lang)})` : "")).join(" · ");
   const landRows = wrap(ctx, fill(T.startLands, lands), w, { italic: true, size: 12 });
+  const st = startTroops(civ.id);
+  const army = fill(T.startArmy, troops(T, { ...st, cav: 0, siege: 0 }));
   // Alttaki sabit kısım (gezinme, zorluk, başla, devam) ve metin; görsel kalan yeri alır.
   const bottomH = 40 + 14 + 36 + 14 + 48 + (ui.saved ? 54 : 0) + 18;
-  const textH = 44 + 20 + 18 + desc.length * 19 + 14 + 44 + landRows.length * 16 + 10;
+  const textH = 44 + 20 + 18 + desc.length * 19 + 14 + 44 + landRows.length * 16 + 16 + 10;
   const illH = Math.round(Math.max(110, Math.min(300, area.h * 0.32, area.h - 20 - bottomH - textH)));
   const h = 20 + illH + textH + bottomH;
   const r = { x: area.x, y: area.y + Math.max(0, Math.round((area.h - h) / 2)), w: area.w, h: Math.min(area.h, h) };
@@ -206,6 +208,7 @@ function civPanel(ctx, ui, boxes, T, civ, area) {
   text(ctx, "▼ " + bad, x, y + 22, { bold: true, size: 14, color: INK.bad });
   y += 44;
   landRows.forEach((l, i) => text(ctx, l, x, y + i * 16, { italic: true, size: 12, color: INK.soft }));
+  text(ctx, army, x, y + landRows.length * 16, { italic: true, size: 12, color: INK.soft });
   ctx.restore();
 
   // Gezinme: ‹ noktalar ›

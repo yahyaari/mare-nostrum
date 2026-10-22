@@ -182,7 +182,16 @@ değil tur sonunda bitmesi (1 inşaatçı + 1 tur bile 30 veriyor; "anında" 50)
 turda, erken yayılma yarışını kaybedenler (Galya, Partlar, Sakalar) toparlanamıyor. Denenip işe
 yaramayanlar: liman yapılarına +1 tur, bilgisayar turda bir iş, öngörülü bilgisayar, uzun barış
 (18/22). Kışla 2 ile başlamak Galya'yı kurtarıyor ama Partları çökertiyor. Kalan: bilgisayarın
-"tarla tıkalıysa şehir seviyesi" kuralı. Kullanıcıya soruldu.
+"tarla tıkalıysa şehir seviyesi" kuralı.
+**Çözüm (kullanıcı: "küçük medeniyetlere önden asker verelim, dengeyi koruyalım"):** başkentlerinde
+fazladan asker ve onları besleyecek yiyecek - Galya 40 piyade + 20 okçu (+40 yiyecek), Partlar
+55 + 30 (+55), Sakalar 35 + 20 (+35). 70 oyunla ayarlandı: Partlar ile Sakalar komşu, biri fazla
+güçlenince ötekini yutuyor (P60/S15 -> Sakalar 3/70; P45/S35 -> Partlar 16/70). Bu hâliyle ilk
+düşüş 44 (eskisi 50), 150 turda ayakta Roma 57, Kartaca 60, Mısır 60, Makedonya 45, Partlar 41,
+Galya 55, Sakalar 31 (eskisi 61/56/53/47/37/54/27); en büyük çıkan oyundan oyuna değişiyor
+(Makedonya, Partlar, Mısır, Sakalar). Küçüklerin başta yiyecek dengesi eksi (Partlar -5) ama
+verilen yiyecek en az 10 tur yetiyor: başta tarla yapmaya ya da yayılmaya itiyor (ipucu balonu da
+uyarır). Seçim ekranında "Başlangıç ordusu" satırı (`state.startTroops`).
 
 **Sırada (plan sırası): kullanıcı oynasın; iki kişi (hotseat); en son öğretici.**
 

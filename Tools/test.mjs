@@ -186,7 +186,15 @@ const { play } = await import("./bot.mjs");
   check("Roma'nın turluk silahı 2.5", b.weapons === 2.5, b.weapons);
   // Tarentum limanındaki tek geminin yarım yiyecek bakımı: 5 - 0.5.
   check("Roma'nın turluk yiyeceği +4.5", b.food === 4.5, `${b.food} (bakım ${b.upkeep})`);
-  for (const c of CIVS) check(`${c.id}: başlangıçta yiyecek artıda`, S.budget(s, c.id).food > 0, S.budget(s, c.id).food);
+  // Küçük medeniyetlerin fazladan askeri yiyecek yer: dengeleri eksi olabilir, ama verilen yiyecek
+  // en az 10 tur yeter (o arada tarla yapar ya da yayılır). Ötekilerin dengesi artıda.
+  for (const c of CIVS) {
+    const f = S.budget(s, c.id).food, stock = s.civs[c.id].food;
+    if (N.start.extra?.[c.id]) check(`${c.id}: fazladan askerin yiyeceği en az 10 tur yeter`, f > 0 || stock / -f >= 10, `${stock} / ${f}`);
+    else check(`${c.id}: başlangıçta yiyecek artıda`, f > 0, f);
+  }
+  check("küçük medeniyetlerin başkentinde fazladan asker", ["gaul", "parthia", "saka"].every((c) => { const cap = PLACES.find((p) => p.owner === c && p.capital).id; return s.places[cap].inf === N.start.garrison.capital + N.start.extra[c].inf && s.places[cap].arch === N.start.extra[c].arch; }) && s.places.rome.arch === 0);
+  check("seçim ekranındaki başlangıç ordusu kurulan oyunla aynı", CIVS.every((c) => { const t = S.startTroops(c.id); const ps = S.placesOf(s, c.id); return t.inf === ps.reduce((n, id) => n + s.places[id].inf, 0) && t.arch === ps.reduce((n, id) => n + s.places[id].arch, 0); }));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -205,12 +213,12 @@ section("Yükseltme ve asker");
   check("kale en fazla seviye 3", (s.places.ariminum.level = 3, S.upgradeInfo(s, "ariminum", "level").why === "max"));
 
   const t = S.newGame("gaul", 7);
-  const before = { ...t.civs.gaul }, pop = t.places.bibracte.pop;
+  const before = { ...t.civs.gaul }, pop = t.places.bibracte.pop, inf0 = t.places.bibracte.inf;
   check("okçu için kışla 2 gerek", S.recruitInfo(t, "bibracte", "arch").why === "needBarracks");
   check("piyade basılıyor", S.recruit(t, "bibracte", "inf"));
   check("Galyalılar bölük için para vermez", t.civs.gaul.money === before.money);
   check("bölük 1 silah 1 yiyecek", t.civs.gaul.weapons === before.weapons - 1 && t.civs.gaul.food === before.food - 1);
-  check("nüfustan 10 kişi", t.places.bibracte.pop === pop - 10 && t.places.bibracte.inf === 40);
+  check("nüfustan 10 kişi", t.places.bibracte.pop === pop - 10 && t.places.bibracte.inf === inf0 + 10);
   check("kışla 1: turda bir bölük", S.recruitInfo(t, "bibracte", "inf").why === "done");
   const r = S.newGame("rome", 7);
   S.recruit(r, "rome", "inf");

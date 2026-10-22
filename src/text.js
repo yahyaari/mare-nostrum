@@ -7,6 +7,7 @@ export const TEXT = {
     era: "270 BC",
     chooseCiv: "Choose your civilisation",
     startLands: "Starting lands: {0}",
+    startArmy: "Starting army: {0}",
     civSub: {
       rome: "Senatus Populusque Romanus",
       carthage: "Queen of the Western Sea",
@@ -386,6 +387,7 @@ export const TEXT = {
     era: "MÖ 270",
     chooseCiv: "Medeniyetini seç",
     startLands: "Başlangıç toprakları: {0}",
+    startArmy: "Başlangıç ordusu: {0}",
     civSub: {
       rome: "Senatus Populusque Romanus",
       carthage: "Batı Denizi'nin Kraliçesi",

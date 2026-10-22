@@ -115,6 +115,10 @@ Her yerleşimin dört yükseltmesi var:
   (Bölüm 7).
 - **Başlangıç değerleri:** Başkent seviye 2, diğer yerleşimler seviye 1. Sanayi, gıda ve kışla
   her yerde 1. Nüfus tavanın %75'i kadar. Garnizon başkentte 3, şehirde 2, kalede 1 piyade bölüğü.
+- **Küçük medeniyetlerin fazladan askeri (22.10):** inşaat süreli olunca erken yayılma yarışını
+  kaybediyorlardı. Başkentlerinde: Galya 40 piyade + 20 okçu, Partlar 55 + 30, Sakalar 35 + 20;
+  ambarlarına da bu askeri besleyecek yiyecek (40 / 55 / 35). Başta yiyecek dengeleri eksi ama
+  ambar en az 10 tur yeter.
 
 ---
 

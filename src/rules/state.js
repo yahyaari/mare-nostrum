@@ -60,6 +60,7 @@ export function migrate(s) {
 export function newGame(player, seed = 1, level = "normal") {
   const civs = {};
   for (const c of CIVS) civs[c.id] = { ...N.start.stock, alive: true };
+  for (const [c, e] of Object.entries(N.start.extra ?? {})) civs[c].food += e.food ?? 0;
   const places = {};
   for (const p of PLACES) {
     const free = p.owner === null;
@@ -76,6 +77,9 @@ export function newGame(player, seed = 1, level = "normal") {
     place.pop = Math.round(popCap(place, p.kind) * N.startPop);
     if (free) { place.inf = start.inf; place.arch = start.arch; }
     else place.inf = N.start.garrison[p.capital ? "capital" : p.kind];
+    // Küçük medeniyetin fazladan askeri başkentinde.
+    const extra = p.capital ? N.start.extra?.[p.owner] : null;
+    if (extra) { place.inf += extra.inf ?? 0; place.arch += extra.arch ?? 0; }
     // Limanlarda başlangıç gemileri: Kartaca ilk turdan Sicilya'ya geçebilsin.
     if (p.port) place.ships = N.navy.start[free ? (p.big ? "freeBig" : "free") : p.capital ? "capital" : "port"];
     places[p.id] = place;
@@ -94,6 +98,17 @@ export function newGame(player, seed = 1, level = "normal") {
     mrng: Math.imul(seed | 0 || 1, 0x9e3779b1) | 0 || 7,
     events: [], over: null,
   };
+}
+
+/** Bir medeniyetin başlangıç askeri (bütün yerlerinin garnizonu, küçüklerin fazlası dahil). */
+export function startTroops(civ) {
+  let inf = 0, arch = 0;
+  for (const p of PLACES) {
+    if (p.owner !== civ) continue;
+    inf += N.start.garrison[p.capital ? "capital" : p.kind];
+    if (p.capital) { inf += N.start.extra?.[civ]?.inf ?? 0; arch += N.start.extra?.[civ]?.arch ?? 0; }
+  }
+  return { inf, arch };
 }
 
 // ---- sorular ----

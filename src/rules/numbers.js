@@ -68,6 +68,17 @@ export const N = {
       // Antakya ve Babil Mısır'ın doğuya kapısı; ikisi de sursuz kapılardan çok hızlı büyüyordu.
       big: { level: 3, inf: 40, arch: 20 },
     },
+    // Küçük medeniyetlere başkentlerinde fazladan asker, ve onları birkaç tur besleyecek yiyecek
+    // (kullanıcı 22.10: "küçük medeniyetlere önden asker verelim, dengeyi koruyalım"). İnşaatçılar
+    // gelince yükseltmeler aynı tur işe yaramaz oldu; erken yayılma yarışını kaybeden Galya,
+    // Partlar ve Sakalar toparlanamıyordu (70 oyunda ilk düşüş 50 -> 29).
+    // 70 oyunla ayarlandı: Partlar ile Sakalar komşu - biri fazla güçlenince ötekini yutuyor.
+    // Bu hâliyle ilk düşüş 44 (eskisi 50), 150 turda ayakta Partlar 41, Galya 55, Sakalar 31.
+    extra: {
+      gaul: { inf: 40, arch: 20, food: 40 },
+      parthia: { inf: 55, arch: 30, food: 55 },
+      saka: { inf: 35, arch: 20, food: 35 },
+    },
   },
   moves: 1,
 
