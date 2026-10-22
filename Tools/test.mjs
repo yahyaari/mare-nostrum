@@ -736,6 +736,42 @@ section("İnşaatçılar: süreli yükseltmeler");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Birlik kartları: her bölük bir kart");
+
+{
+  const u = { inf: 37, arch: 20, cav: 0, siege: 0, ships: 2 };
+  const cards = S.cardsOf(u);
+  check("37 piyade dört kart: 10, 10, 10, 7", cards.filter((c) => c.type === "inf").map((c) => c.men).join(",") === "10,10,10,7");
+  check("kartlar türlerin sırasıyla, gemiler sonda", cards.map((c) => c.type).join(",") === "inf,inf,inf,inf,arch,arch,ships,ships", cards.map((c) => c.type).join(","));
+  check("asker yoksa kart yok", S.cardsOf({ inf: 0, arch: 0, cav: 0, siege: 0, ships: 0 }).length === 0);
+  check("kartların toplamı askerlerin toplamı", cards.filter((c) => c.type !== "ships").reduce((n, c) => n + c.men, 0) === 57);
+  const want = S.chosen(u, [0, 3, 4, 6]);
+  check("seçilen kartlar: 10 + 7 piyade, 10 okçu, 1 gemi", want.inf === 17 && want.arch === 10 && want.ships === 1 && want.cav === 0);
+  check("olmayan kart seçilemez", S.men(S.chosen(u, [99, -1])) === 0);
+
+  const s = S.newGame("rome", 7);
+  s.places.rome.inf = 40;
+  s.places.rome.arch = 20;
+  const pick = S.chosen(s.places.rome, [0, 1, 4]);
+  const a = S.formArmy(s, "rome", pick.inf, pick.arch, pick.cav, pick.siege, pick.ships);
+  check("seçilen kartlar dışarı çıkar, gerisi garnizonda", a && a.inf === 20 && a.arch === 10 && s.places.rome.inf === 20 && s.places.rome.arch === 10);
+  a.general = { name: "Scipio", level: 1, xp: 0, traits: [] };
+  a.moves = 1;
+  const b = S.detach(s, a.id, { inf: 10, arch: 10 });
+  check("ayrılan kartlar yeni ordu: aynı yerde, aynı hareketle", b && b.at === "rome" && b.inf === 10 && b.arch === 10 && b.moves === 1 && s.armies.length === 2);
+  check("kalan ordu ve generali yerinde", a.inf === 10 && a.arch === 0 && a.general?.name === "Scipio" && !b.general);
+  check("hepsi ayrılmaz", S.detach(s, a.id, { inf: 10 }) === null && a.inf === 10);
+  check("hiçbiri ayrılmaz", S.detach(s, b.id, {}) === null);
+  check("olandan fazlası ayrılmaz", S.detach(s, b.id, { inf: 20 }) === null && b.inf === 10);
+  b.besieging = "massalia";
+  check("kuşatan ordu bölünmez", S.detach(s, b.id, { inf: 10 }) === null);
+  delete b.besieging;
+  b.ships = 2;
+  const c = S.detach(s, b.id, { ships: 2 });
+  check("gemiler ayrı bir filo olabilir", c && c.ships === 2 && S.men(c) === 0 && b.ships === 0 && b.inf === 10);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Liman yapıları (bölüm 16)");
 
 {

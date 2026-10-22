@@ -430,17 +430,45 @@ export function merge(state, intoId, fromId) {
   return true;
 }
 
-/** Orduyu ikiye böler: her türün yarısı (bölük hesabıyla) yeni orduya. */
-export function split(state, armyId) {
+/**
+ * Ordudan seçilen kartlar (`want`: { inf, arch, cav, siege, ships }) ayrı bir ordu olur, aynı
+ * yerde ve aynı kalan hareketle. Hepsi ya da hiçbiri ayrılmaz; kuşatan ordu bölünmez.
+ */
+export function detach(state, armyId, want) {
   const a = armyById(state, armyId);
-  if (!a) return null;
-  const half = (n) => Math.floor(n / N.company / 2) * N.company;
-  const part = Object.fromEntries(UNITS.map((k) => [k, half(a[k])]));
-  if (men(part) <= 0) return null;
-  for (const k of UNITS) a[k] -= part[k];
-  const ships = Math.floor(a.ships / 2);
-  a.ships -= ships;
-  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, ...part, ships, moves: a.moves, route: [], general: null };
+  if (!a || a.besieging) return null;
+  const keys = [...UNITS, "ships"];
+  const part = Object.fromEntries(keys.map((k) => [k, want[k] ?? 0]));
+  if (!keys.every((k) => Number.isInteger(part[k]) && part[k] >= 0 && part[k] <= (a[k] ?? 0))) return null;
+  const rest = Object.fromEntries(keys.map((k) => [k, (a[k] ?? 0) - part[k]]));
+  if (empty(part) || empty(rest)) return null;
+  for (const k of keys) a[k] = rest[k];
+  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, ...part, moves: a.moves, route: [], general: null };
   state.armies.push(b);
   return b;
+}
+
+// ---- birlik kartları ----
+//
+// Total War gibi (kullanıcı 22.10): askerler kart kart görünür, her kart bir bölük (10 adam);
+// oyuncu kartları seçip ordu çıkarır, böler. Kartlar sayılardan çıkar - kurallar her türün adam
+// sayısını tutmaya devam ediyor: 37 piyade 10, 10, 10 ve 7 kişilik dört kart. Savaşta eriyen
+// bölük küçülür; yarım bölükler birleşince tamamlanır. Her gemi de bir kart.
+
+/** Bir garnizonun ya da ordunun kartları, türlerin sırasıyla: [{ type, men }]. Gemiler sonda. */
+export function cardsOf(u) {
+  const out = [];
+  for (const type of UNITS) {
+    for (let n = u[type] ?? 0; n > 0; n -= N.company) out.push({ type, men: Math.min(N.company, n) });
+  }
+  for (let i = 0; i < (u.ships ?? 0); i++) out.push({ type: "ships", men: 1 });
+  return out;
+}
+
+/** Seçilen kartların (`picks`: kartların sıraları) toplamı: { inf, arch, cav, siege, ships }. */
+export function chosen(u, picks) {
+  const cards = cardsOf(u);
+  const want = { inf: 0, arch: 0, cav: 0, siege: 0, ships: 0 };
+  for (const i of picks) if (cards[i]) want[cards[i].type] += cards[i].men;
+  return want;
 }

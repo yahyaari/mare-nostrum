@@ -3,11 +3,13 @@
 //
 // `ui` görünüm durumu: { screen, lang, pick, saved, sel, modal, toast }.
 //   sel:   { kind: "place" | "army", id }
-//   modal: { kind: "attack" | "form" | "diplo" | "report" | "battle" | "menu" | "help" |
+//   modal: { kind: "attack" | "diplo" | "report" | "battle" | "menu" | "help" |
 //            "confirm" | "over", ... }
 //   army:  oyuncu bir yabancı yere bakarken son seçtiği kendi ordusu (kartta saldırı tahmini için)
 //   news:  { lines, since } tur sonunda sağ üstte beliren haberler (pencere açmadan)
 //   tip:   { lines, since } farenin altındaki şeyin açıklaması
+//   cards: { of, sig, picks, page } seçili birlik kartları (kart çizimi: cardGrid)
+//   aim:   Yürü'ye basılmış ordu: haritada basılan yer onun gideceği yer
 
 import { CIVS, PLACES } from "../data/world.js";
 import { canDeclare, canPropose } from "../rules/diplomacy.js";
@@ -15,7 +17,7 @@ import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import { access, canAttack, defenders, forecast, fortOf, hostile, menace, shipsAt, terrainOf, wallsOf } from "../rules/moves.js";
 import { N, UNITS, trait } from "../rules/numbers.js";
 import {
-  PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, cardsOf, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -27,7 +29,7 @@ import {
   INK, SERIF, TAU, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, over, panel, pointer, text, wrap,
 } from "./kit.js";
 import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal } from "./hud.js";
-import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shield, soldier, wonderMark } from "./pieces.js";
+import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, galley, roundRect, shade, shield, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { sight } from "../rules/sight.js";
@@ -289,7 +291,7 @@ function langToggle(ctx, cam, ui, boxes, y) {
 // solda yerin manzarası.
 
 /** En yüksek kartın boyu: main.js seçilen yeri bunun üstüne kaydırır. */
-export const CARD_H = 256;
+export const CARD_H = 270;
 const PAD = 16, GAP = 18;
 
 /** Kartın yeri: altta ortada; sağ alttaki sütuna (sıradaki ordu, mini harita, Turu bitir) değmez. */
@@ -350,25 +352,166 @@ function whyText(why, T) {
 
 const UNIT_TIP = { inf: "tipInf", arch: "tipArch", cav: "tipCav", siege: "tipSiege" };
 
+// ---- birlik kartları ----
+//
+// Her bölük bir kart (rules/state.js cardsOf): üstte sahibinin renginde gök, önünde o türün
+// askerleri; altta kaç kişi kaldığı ve gücünü gösteren çubuk. Seçili kart altın çerçeveli ve
+// biraz kalkık. Seçim ui.cards'ta: { of: "p:rome" | "a:12", sig, picks: Set(kart sırası), page }.
+// `sig` askerlerin sayısı: biri değişince (asker basıldı, ordu çıktı) eski seçim düşer.
+
+const cardSig = (u) => [...UNITS, "ships"].map((k) => u[k] ?? 0).join(",");
+
+/** Bu garnizonun ya da ordunun seçili kartları (başka bir şeyinkiyse ya da sayılar değiştiyse boş). */
+export const picksOf = (ui, of, u) => (ui.cards?.of === of && ui.cards.sig === cardSig(u) ? ui.cards.picks : new Set());
+
+/** Kartın yüzü. `act` yoksa (yabancı ordu) seçilemez ama ipucu yine çıkar. */
+function unitCard(ctx, boxes, T, c, owner, x, y, w, h, on, act) {
+  const hot = !!act && over(x, y, w, h);
+  const lift = on ? 4 : hot ? 2 : 0;
+  const k = w / 52;
+  const strip = Math.round(15 * Math.max(0.85, k));
+  ctx.save();
+  ctx.fillStyle = "rgba(25,18,10,0.3)";
+  roundRect(ctx, x + 1.5, y + 2.5, w, h, 4);
+  ctx.fill();
+  const top = y - lift;
+  roundRect(ctx, x, top, w, h, 4);
+  ctx.fillStyle = DARK;
+  ctx.fill();
+  // Resim: sahibinin renginde gök, ufukta açılır; altında toprak (gemide deniz).
+  const ix = x + 3, iy = top + 3, iw = w - 6, ih = h - strip - 5;
+  const ground = iy + ih * 0.8;
+  ctx.save();
+  roundRect(ctx, ix, iy, iw, ih, 2);
+  ctx.clip();
+  const sky = ctx.createLinearGradient(0, iy, 0, ground);
+  sky.addColorStop(0, shade(colorOf(owner), -0.35));
+  sky.addColorStop(1, shade(colorOf(owner), 0.45));
+  ctx.fillStyle = sky;
+  ctx.fillRect(ix, iy, iw, ih);
+  ctx.fillStyle = c.type === "ships" ? "#55777e" : "#9c8559";
+  ctx.fillRect(ix, ground, iw, iy + ih - ground);
+  const cx = ix + iw / 2;
+  if (c.type === "ships") galley(ctx, owner, cx, ground + 1 * k, 0.8 * k);
+  else if (c.type === "cav") trooper(ctx, "cav", owner, cx - 4 * k, ground + 4 * k, -1, 1.2 * k);
+  else if (c.type === "siege") trooper(ctx, "siege", owner, cx - 3 * k, ground + 3 * k, -1, 1.4 * k);
+  else {
+    // Üç asker: arkada iki, önde bir.
+    trooper(ctx, c.type, owner, cx - 11 * k, ground - 1 * k, -1, 1.1 * k);
+    trooper(ctx, c.type, owner, cx + 10 * k, ground - 1 * k, -1, 1.1 * k);
+    trooper(ctx, c.type, owner, cx - 1 * k, ground + 5 * k, -1, 1.3 * k);
+  }
+  ctx.restore();
+  // Alt şerit: kaç kişi, ve gücü (yarım bölük yarım çubuk).
+  const sy = top + h - strip;
+  if (c.type === "ships") text(ctx, T.shipCard, x + w / 2, sy + strip / 2 + 1, { bold: true, size: Math.max(9, 10 * k), color: CREAM, align: "center", base: "middle" });
+  else {
+    const full = c.men >= N.company;
+    text(ctx, String(c.men), x + 5, sy + strip / 2 + 1, { bold: true, size: Math.max(10, 12 * k), color: full ? CREAM : GOLD_LIGHT, base: "middle" });
+    const bx = x + w * 0.45, bw = w * 0.55 - 5, by = sy + strip / 2 - 2;
+    ctx.fillStyle = "rgba(243,231,201,0.18)";
+    ctx.fillRect(bx, by, bw, 4);
+    ctx.fillStyle = full ? GOLD : INK.warn;
+    ctx.fillRect(bx, by, (bw * c.men) / N.company, 4);
+  }
+  roundRect(ctx, x + 0.5, top + 0.5, w - 1, h - 1, 4);
+  ctx.strokeStyle = on ? GOLD_LIGHT : hot ? GOLD : GOLD_DARK;
+  ctx.lineWidth = on ? 2.2 : 1.2;
+  if (on) { ctx.shadowColor = "rgba(255,200,90,0.85)"; ctx.shadowBlur = 8; }
+  ctx.stroke();
+  if (on) {
+    // Seçili: sağ üst köşede altın bir onay.
+    const mx = x + w - 8 * Math.max(0.8, k), my = top + 8 * Math.max(0.8, k), mr = 6.5 * Math.max(0.8, k);
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(mx, my, mr, 0, TAU);
+    ctx.fillStyle = GOLD_LIGHT;
+    ctx.fill();
+    ctx.strokeStyle = DARK;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mx - mr * 0.5, my);
+    ctx.lineTo(mx - mr * 0.1, my + mr * 0.42);
+    ctx.lineTo(mx + mr * 0.55, my - mr * 0.45);
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+  }
+  ctx.restore();
+  const name = c.type === "ships" ? T.shipCard : T[c.type][0].toLocaleUpperCase() + T[c.type].slice(1);
+  const tip = c.type === "ships"
+    ? [name, fill(T.tipShipCard, N.navy.carry), act ? T.cardPick : null]
+    : [name, fill(T.cardMen, c.men, N.company), T[UNIT_TIP[c.type]], act ? T.cardPick : null];
+  boxes.push({ x, y: top, w, h: h + lift, act, tip, want: act });
+}
+
 /**
- * Kendi şehrinin kartı, üç sütun: şehir (nüfus, garnizon, üretim, sadakat, Ordu çıkar) |
- * yükseltmeler (limanda Şehir / Liman sekmeli) | asker bas ya da (Liman sekmesinde) gemi yap.
+ * Kartları bir alana dizer: sığmazsa küçültür; en küçüğüyle de sığmazsa sayfa sayfa (‹ ›).
+ * `of`: seçimin kime ait olduğu; `mine` değilse kartlar seçilemez.
+ */
+function cardGrid(ctx, boxes, T, ui, u, owner, of, r, mine) {
+  const cards = cardsOf(u);
+  const picks = picksOf(ui, of, u);
+  const gap = 6;
+  let cw = 0, ch = 0, cols = 1, rows = 1;
+  for (const [w, h] of [[52, 70], [46, 62], [40, 54], [36, 48]]) {
+    cw = w; ch = h;
+    cols = Math.max(1, Math.floor((r.w + gap) / (w + gap)));
+    rows = Math.max(1, Math.floor((r.h - 4 + gap) / (h + gap)));
+    if (cols * rows >= cards.length) break;
+  }
+  const per = cols * rows;
+  const pages = Math.max(1, Math.ceil(cards.length / per));
+  const page = Math.min(pages - 1, ui.cards?.of === of ? ui.cards.page ?? 0 : 0);
+  if (!cards.length) text(ctx, T.noTroops, r.x, r.y + 24, { italic: true, size: 13, color: INK.soft });
+  cards.slice(page * per, page * per + per).forEach((c, j) => {
+    const i = page * per + j;
+    unitCard(ctx, boxes, T, c, owner, r.x + (j % cols) * (cw + gap), r.y + 4 + Math.floor(j / cols) * (ch + gap), cw, ch, picks.has(i), mine ? { do: "pickCard", of, i } : null);
+  });
+  return { pages, page, count: cards.length, picked: picks.size };
+}
+
+/** Kartların başlığı: ad, kaç asker / kaç birlik; sağda Hepsi / Hiçbiri ve sayfa okları. */
+function gridHead(ctx, boxes, T, u, of, title, x, y, w, g, mine) {
+  const tw = text(ctx, title, x, y + 15, { bold: true, size: 14 });
+  let right = x + w;
+  if (g.pages > 1) {
+    button(ctx, boxes, { x: right - 26, y, w: 26, h: 22, label: "›", size: 15, off: g.page >= g.pages - 1, act: { do: "cardPage", of, by: 1 } });
+    text(ctx, `${g.page + 1}/${g.pages}`, right - 44, y + 15, { size: 12, color: INK.soft, align: "center" });
+    button(ctx, boxes, { x: right - 88, y, w: 26, h: 22, label: "‹", size: 15, off: g.page <= 0, act: { do: "cardPage", of, by: -1 } });
+    right -= 96;
+  }
+  if (mine && g.count) {
+    const all = g.picked === g.count;
+    button(ctx, boxes, { x: right - 74, y, w: 74, h: 22, label: all ? T.pickNone : T.pickAll, size: 12, act: { do: "pickAll", of, all: !all, n: g.count } });
+    right -= 82;
+  }
+  const ships = u.ships ? ` · ${u.ships} ${T.ships}` : "";
+  fit(ctx, fill(T.menUnits, men(u), g.count - (u.ships ?? 0)) + ships, x + tw + 10, y + 15, right - x - tw - 14, { italic: true, size: 12, color: INK.soft });
+}
+
+/**
+ * Kendi şehrinin kartı, üç sütun: şehir (nüfus, garnizon, üretim, sadakat; altta ordu
+ * çıkarma) | sekmeler: Şehir (yükseltmeler, asker bas), Liman (liman yapıları, gemi yap),
+ * Garnizon (askerler kart kart: seç, dışarı çık).
  */
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const tab = p.port && ui.cardTab === "port" ? "port" : "city";
+  const tabs = ["city", ...(p.port ? ["port"] : []), "garrison"];
+  const tab = tabs.includes(ui.cardTab) ? ui.cardTab : "city";
   const wonder = wonderAt(id);
-  const A = 214, B = 300, C = 230;
-  const body = A + GAP + B + GAP + C + PAD;
+  const A = 214, B = 300, C = 230, BC = B + GAP + C;
+  const body = A + GAP + BC + PAD;
   const V = vignetteWidth(cam, PAD + body, 128);
   const left = V ? 8 + V + GAP : PAD;
-  const r = cardRect(cam, left + body, 238 + (wonder ? 18 : 0));
+  const r = cardRect(cam, left + body, 252 + (wonder ? 18 : 0));
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   if (V) drawVignette(ctx, id, pl.owner, { x: r.x + 8, y: r.y + 8, w: V, h: r.h - 16 }, pl.level);
   const y = r.y, H = r.h;
   let x = r.x + left;
+  const of = "p:" + id;
 
-  // Şehir: ad, türü, (harika), nüfus, garnizon, turluk üretim, sadakat; altta Ordu çıkar.
+  // Şehir: ad, türü, (harika), nüfus, garnizon, turluk üretim, sadakat.
   text(ctx, p.name[ui.lang], x, y + 32, { title: true, bold: true, size: 19 });
   fit(ctx, kindLine(id, game, T, true), x, y + 50, A, { italic: true, size: 12, color: INK.soft });
   let ay = y + 72;
@@ -379,37 +522,61 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const pw = amount(ctx, "pop", `${pl.pop} / ${Math.round(popCap(pl, p.kind))}`, x, ay, { size: 13 });
   const note = besieged(game, id) ? T.besiegedNote : blockaded(game, id) ? T.blockadeNote : null;
   if (note) fit(ctx, note, x + pw + 10, ay, A - pw - 10, { italic: true, bold: true, size: 11, color: INK.bad });
-  const gl = lines(ctx, `${T.garrison}: ${troops(T, pl)}`, x, ay + 20, A, { size: 13 }, 2, 16);
+  // Garnizon sekmesinde askerler zaten kart kart görünüyor: satırın yerine iki düğme.
+  const gl = tab === "garrison" ? 0 : lines(ctx, `${T.garrison}: ${troops(T, pl)}`, x, ay + 20, A, { size: 13 }, 2, 16);
   ay += 20 + gl * 16 + 4;
   const o = output(game, id);
   let cx = x;
   for (const k of ["money", "weapons", "food"]) cx += amount(ctx, k, delta(o[k]), cx, ay, { size: 13 }) + 12;
   loyaltyRow(ctx, game, boxes, T, id, x, ay + 12, A);
-  button(ctx, boxes, {
-    x, y: y + H - 44, w: A, h: 32, label: T.formArmy, main: true, size: 14,
-    off: men(pl) === 0 && !pl.ships, act: { do: "formOpen", id }, tip: [T.formArmy, T.tipForm],
-  });
+  if (tab === "garrison") {
+    // Seçili kartlar dışarı çıkar; istersen başlarına bir general geçer (fiyatıyla).
+    const n = picksOf(ui, of, pl).size;
+    const cost = N.generals.cost, rich = game.civs[game.player].money >= cost;
+    const pick = n ? null : [T.pickFirst, "bad"];
+    const gb = { x, y: y + H - 82, w: A, h: 30 };
+    button(ctx, boxes, {
+      ...gb, label: "", off: !n || !rich,
+      act: { do: "march", id, general: true }, tip: [T.withGeneral, T.tipWithGeneral, pick ?? (rich ? null : [T.whyMoney, "bad"])],
+    });
+    const c = !n || !rich ? INK.faint : INK.ink;
+    const lw = measure(ctx, "★ " + T.withGeneral, { bold: true, size: 13 });
+    const total = lw + 6 + 13 + 3 + measure(ctx, String(cost), { bold: true, size: 13 });
+    const sx = gb.x + (gb.w - total) / 2;
+    text(ctx, "★ " + T.withGeneral, sx, gb.y + 20, { bold: true, size: 13, color: c });
+    amount(ctx, "money", cost, sx + lw + 6, gb.y + 20, { size: 13, bold: true, color: c });
+    button(ctx, boxes, {
+      x, y: y + H - 44, w: A, h: 32, label: n ? fill(T.marchOutN, n) : T.marchOut, main: true, size: 14, off: !n,
+      act: { do: "march", id }, tip: [T.marchOut, T.tipMarchOut, pick],
+    });
+  } else {
+    button(ctx, boxes, {
+      x, y: y + H - 44, w: A, h: 32, label: T.formArmy, main: true, size: 14,
+      off: men(pl) === 0 && !pl.ships, act: { do: "cardTab", tab: "garrison" }, tip: [T.formArmy, T.tipForm],
+    });
+  }
 
-  // Yükseltmeler: limanda iki sekme.
+  // Sekmeler: ikinci ve üçüncü sütunun üstünde.
   x += A + GAP;
   vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-  let by = y + 14;
-  buildersRow(ctx, game, boxes, T, id, x, by, B);
-  by += 26;
-  if (p.port) {
-    const tw = (B - 8) / 2;
-    [["city", T.tabCity], ["port", "⚓ " + T.tabPort]].forEach(([k, label], i) => {
-      button(ctx, boxes, { x: x + i * (tw + 8), y: by, w: tw, h: 28, label, size: 13, main: tab === k, act: { do: "cardTab", tab: k } });
-    });
-    by += 36;
+  const label = { city: T.tabCity, port: "⚓ " + T.tabPort, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
+  const tw = (BC - 8 * (tabs.length - 1)) / tabs.length;
+  tabs.forEach((k, i) => {
+    button(ctx, boxes, { x: x + i * (tw + 8), y: y + 14, w: tw, h: 28, label: label[k], size: 13, main: tab === k, act: { do: "cardTab", tab: k } });
+  });
+  const top = y + 50;
+  if (tab === "garrison") {
+    const g = cardGrid(ctx, boxes, T, ui, pl, pl.owner, of, { x, y: top + 26, w: BC, h: y + H - 12 - (top + 26) }, true);
+    gridHead(ctx, boxes, T, pl, of, T.garrison, x, top, BC, g, true);
+  } else {
+    buildersRow(ctx, game, boxes, T, id, x, top, B);
+    (tab === "port" ? PORT_UPGRADES : UPGRADES).forEach((what, i) => upgradeRow(ctx, game, boxes, T, id, what, x, x + B, top + 26 + i * 40));
+    // Asker bas ya da gemi yap.
+    const xc = x + B + GAP;
+    vrule(ctx, xc - GAP / 2, top + 4, y + H - 14);
+    if (tab === "port") fleetBlock(ctx, game, boxes, T, id, xc, y + 32, C, H - 32);
+    else recruitBlock(ctx, game, boxes, T, id, xc, y + 32, C);
   }
-  (tab === "port" ? PORT_UPGRADES : UPGRADES).forEach((what, i) => upgradeRow(ctx, game, boxes, T, id, what, x, x + B, by + i * 40));
-
-  // Asker bas ya da gemi yap.
-  x += B + GAP;
-  vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-  if (tab === "port") fleetBlock(ctx, game, boxes, T, id, x, y, C, H);
-  else recruitBlock(ctx, game, boxes, T, id, x, y, C);
   closeX(ctx, boxes, r);
   return r;
 }
@@ -690,75 +857,84 @@ function placeCard(ctx, cam, game, ui, boxes, T) {
 const oddsLabel = (odds, T) => (odds === "easy" ? [T.easy, INK.good] : odds === "risky" ? [T.risky, INK.warn] : [T.hopeless, INK.bad]);
 
 /**
- * Ordu kartı: ordu (askerleri, gemileri, hareketi, kuşatması) | general, kendi ordunsa nasıl
- * yürütüleceği ve eylemler.
+ * Ordu kartı: ordu (sahibi, generali, kaç asker, gemileri, hareketi, yolu, kuşatması) |
+ * birlikleri kart kart; kendi ordunsa kartları seçip ayırır, şehre bırakırsın; altta Yürü,
+ * Ayır, Birleştir, Şehre gir (kuşatıyorsa Saldır, Kuşatmayı kaldır).
  */
 function armyCard(ctx, cam, game, ui, boxes, T) {
   const a = armyById(game, ui.sel.id);
   const mine = a.owner === game.player;
   const g = a.general;
   const here = armiesAt(game, a.at).filter((b) => b !== a && b.owner === a.owner);
-  const A = 270, B = mine || g ? 300 : 0;
-  const r = cardRect(cam, PAD + A + (B ? GAP + B : 0) + PAD, 156);
+  const A = 250, BC = 548;
+  const r = cardRect(cam, PAD + A + GAP + BC + PAD, 252);
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   const y = r.y, H = r.h;
   let x = r.x + PAD;
+  const of = "a:" + a.id;
 
   shield(ctx, a.owner, x, y + 15, 17);
   text(ctx, `${T.army} · ${civName(a.owner, ui.lang)}`, x + 24, y + 32, { title: true, bold: true, size: 17 });
-  let ly = y + 56 + (lines(ctx, troops(T, a), x, y + 56, A, { size: 14 }, 2, 18) - 1) * 18;
-  if (a.ships) {
-    ly += 20;
-    text(ctx, `⛵ ${a.ships} ${T.ships} · ${fill(T.carry, a.ships * N.navy.carry)}`, x, ly, { size: 13, color: canSail(a) ? INK.ink : INK.bad });
+  let ly = y + 56;
+  if (g) {
+    // General: yıldızlar seviyesi kadar, adı, ve yetenekleri.
+    const sw = text(ctx, "★".repeat(g.level), x, ly, { size: 13, color: INK.warn, bold: true });
+    fit(ctx, `${fill(T.general, g.name)} · ${fill(T.rank, g.level)}`, x + sw + 6, ly, A - sw - 6, { size: 14, bold: true });
+    if (g.traits.length) { ly += 18; fit(ctx, g.traits.map((t) => T.skills[t][0] + " (" + T.skills[t][1] + ")").join(", "), x, ly, A, { size: 12, italic: true, color: INK.soft }); }
+    ly += 24;
+  } else if (mine) {
+    // "General ata" ve fiyatı: yazı + para simgesi ortada.
+    const ai = appointInfo(game, a.id);
+    const off = ai.why === "money";
+    const b = { x, y: ly - 18, w: A, h: 30, label: "", act: { do: "appoint", army: a.id }, off, tip: [T.appoint, T.tipAppoint, off ? [T.whyMoney, "bad"] : null] };
+    button(ctx, boxes, b);
+    const c = off ? INK.faint : INK.ink;
+    const lw = measure(ctx, "★ " + T.appoint, { bold: true, size: 13 });
+    const total = lw + 6 + 13 + 3 + measure(ctx, String(ai.cost), { bold: true, size: 13 });
+    const sx = b.x + (b.w - total) / 2;
+    text(ctx, "★ " + T.appoint, sx, b.y + 20, { bold: true, size: 13, color: c });
+    amount(ctx, "money", ai.cost, sx + lw + 6, b.y + 20, { size: 13, bold: true, color: c });
+    ly += 30;
   }
-  ly += 20;
+  ly += (lines(ctx, troops(T, a), x, ly, A, { size: 13 }, 2, 16) - 1) * 16 + 20;
+  if (a.ships) {
+    text(ctx, `⛵ ${a.ships} ${T.ships} · ${fill(T.carry, a.ships * N.navy.carry)}`, x, ly, { size: 13, color: canSail(a) ? INK.ink : INK.bad });
+    ly += 20;
+  }
   const maxMoves = trait(a.owner, "moves") + (g?.traits.includes("swift") ? 1 : 0);
-  text(ctx, `${fill(T.moves, a.moves, maxMoves)} · ${placeName(a.at, ui.lang)}`, x, ly, { size: 13, color: INK.soft });
+  fit(ctx, `${fill(T.moves, a.moves, maxMoves)} · ${placeName(a.at, ui.lang)}`, x, ly, A, { size: 13, color: INK.soft });
   if (a.route.length) {
     ly += 20;
     fit(ctx, fill(T.marching, placeName(a.route[a.route.length - 1], ui.lang)), x, ly, A, { size: 13, italic: true });
   }
   if (a.besieging) {
     ly += 20;
-    fit(ctx, fill(T.siegeLine, placeName(a.besieging, ui.lang), game.turn - a.besiegedSince + 1, men(defenders(game, a.besieging))), x, ly, A, { size: 13, bold: true, color: INK.warn });
-  }
+    lines(ctx, fill(T.siegeLine, placeName(a.besieging, ui.lang), game.turn - a.besiegedSince + 1, men(defenders(game, a.besieging))), x, ly, A, { size: 13, bold: true, color: INK.warn }, 2, 16);
+  } else if (mine) lines(ctx, T.cardsHint, x, y + H - 34, A, { size: 12, italic: true, color: INK.soft }, 2, 15);
 
-  if (!B) { closeX(ctx, boxes, r); return r; }
+  // Birlikler: kart kart; kendi ordunsa altta eylemler.
   x += A + GAP;
   vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-  let by = y + 30;
-  if (g) {
-    // General: yıldızlar seviyesi kadar, adı, ve yetenekleri.
-    const sw = text(ctx, "★".repeat(g.level), x, by, { size: 13, color: INK.warn, bold: true });
-    fit(ctx, `${fill(T.general, g.name)} · ${fill(T.rank, g.level)}`, x + sw + 6, by, B - sw - 6, { size: 14, bold: true });
-    if (g.traits.length) fit(ctx, g.traits.map((t) => T.skills[t][0] + " (" + T.skills[t][1] + ")").join(", "), x, by + 18, B, { size: 12, italic: true, color: INK.soft });
-    by += g.traits.length ? 40 : 22;
-  } else if (mine) {
-    // "General ata" ve fiyatı: yazı + para simgesi ortada.
-    const ai = appointInfo(game, a.id);
-    const off = ai.why === "money";
-    const b = { x, y: y + 14, w: B, h: 30, label: "", act: { do: "appoint", army: a.id }, off };
-    button(ctx, boxes, b);
-    const c = off ? INK.faint : INK.ink;
-    const lw = measure(ctx, T.appoint, { bold: true, size: 13 });
-    const total = lw + 8 + 13 + 3 + measure(ctx, String(ai.cost), { bold: true, size: 13 });
-    const sx = b.x + (b.w - total) / 2;
-    text(ctx, "★ " + T.appoint, sx - 8, b.y + 20, { bold: true, size: 13, color: c });
-    amount(ctx, "money", ai.cost, sx + lw + 14, b.y + 20, { size: 13, bold: true, color: c });
-    by = y + 64;
-  }
+  const gy = y + 18;
+  const bottom = mine ? y + H - 56 : y + H - 12;
+  const grid = cardGrid(ctx, boxes, T, ui, a, a.owner, of, { x, y: gy + 26, w: BC, h: bottom - gy - 26 }, mine);
+  gridHead(ctx, boxes, T, a, of, T.units, x, gy, BC, grid, mine);
   if (mine) {
-    lines(ctx, T.armyHint, x, by, B, { size: 12, italic: true, color: INK.soft }, 2, 15);
+    const n = grid.picked;
+    const part = n > 0 && n < grid.count;
     const acts = [];
-    // Kuşatan ordu: saldır ya da kuşatmayı kaldır (garnizona katılmak, bölünmek sonra).
     if (a.besieging) {
-      if (canAttack(game, a, a.besieging)) acts.push([T.attack, { do: "attackAsk", army: a.id, id: a.besieging }]);
-      acts.push([T.liftSiege, { do: "lift", army: a.id }]);
-    } else if (game.places[a.at].owner === a.owner) acts.push([T.station, { do: "station", army: a.id }]);
-    if (!a.besieging && men(a) >= 2 * N.company) acts.push([T.split, { do: "split", army: a.id }]);
-    if (!a.besieging && here.length) acts.push([T.merge, { do: "merge", army: a.id, from: here[0].id }]);
-    const bw = (B - 16) / 3;
-    acts.forEach(([label, act], i) => button(ctx, boxes, { x: x + i * (bw + 8), y: y + H - 48, w: bw, h: 34, label, act, size: 13 }));
+      if (canAttack(game, a, a.besieging)) acts.push({ label: T.attack, act: { do: "attackAsk", army: a.id, id: a.besieging }, main: true });
+      acts.push({ label: T.liftSiege, act: { do: "lift", army: a.id } });
+    }
+    acts.push({ label: "➜ " + T.marchBtn, act: { do: "aim", army: a.id }, main: !a.besieging, tip: [T.marchBtn, T.tipMarchBtn] });
+    if (!a.besieging) {
+      acts.push({ label: part ? `${T.detachBtn} (${n})` : T.detachBtn, act: { do: "detach", army: a.id }, off: !part, tip: [T.detachBtn, T.tipDetach, part ? null : [T.pickFirst, "bad"]] });
+      acts.push({ label: T.merge, act: { do: "merge", army: a.id }, off: !here.length, tip: [T.merge, T.tipMergeBtn] });
+      if (game.places[a.at].owner === a.owner) acts.push({ label: T.station, act: { do: "station", army: a.id }, tip: [T.station, T.tipStationBtn] });
+    }
+    const bw = (BC - 8 * (acts.length - 1)) / acts.length;
+    acts.forEach((b, i) => button(ctx, boxes, { x: x + i * (bw + 8), y: y + H - 46, w: bw, h: 34, size: 13, ...b }));
   }
   closeX(ctx, boxes, r);
   return r;
@@ -918,7 +1094,7 @@ const COACH = [
   { id: "food", when: (g) => budget(g, g.player).food < 0, at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.food)) },
   { id: "upgrade", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "upgrade")) },
   { id: "recruit", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "recruit")) },
-  { id: "form", when: (g, ui) => ownPlace(g, ui) && men(g.places[ui.sel.id]) >= 40, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "formOpen")) },
+  { id: "form", when: (g, ui) => ownPlace(g, ui) && men(g.places[ui.sel.id]) >= 40, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "march" && !a.general) ?? findBox(boxes, (a) => a.do === "cardTab" && a.tab === "garrison")) },
   { id: "attack", when: (g, ui) => { const a = ownArmy(g, ui); return !!(a && prey(g, a)); }, at: (g, ui, boxes, cam) => placeSpot(cam, prey(g, ownArmy(g, ui))) },
   { id: "move", when: (g, ui) => !!ownArmy(g, ui), at: (g, ui, boxes, cam) => placeSpot(cam, ownArmy(g, ui).at) },
   { id: "endturn", when: (g, ui, done) => !ui.sel && (done.has("upgrade") || done.has("recruit") || g.turn > 1), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "endTurn")) },
@@ -999,7 +1175,7 @@ function modalFrame(ctx, cam, boxes, h, wMax = 440) {
 function drawModal(ctx, cam, game, ui, boxes, T) {
   const m = ui.modal;
   const f = {
-    attack: attackModal, form: formModal, diplo: diploModal, report: reportModal, battle: battleModal,
+    attack: attackModal, diplo: diploModal, report: reportModal, battle: battleModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
     armies: armiesModal, cities: citiesModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
@@ -1062,33 +1238,6 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   button(ctx, boxes, { x: r.x + 20, y: by, w: bw, h: 44, size: 15, main: true, label: T.attack, act: { do: "attack" } });
   button(ctx, boxes, { x: r.x + 28 + bw, y: by, w: bw, h: 44, size: 15, label: T.besiege, act: { do: "besiege" } });
   button(ctx, boxes, { x: r.x + 36 + 2 * bw, y: by, w: bw, h: 44, size: 15, label: T.cancel, act: { do: "close" } });
-}
-
-function formModal(ctx, cam, game, ui, boxes, T, m) {
-  const pl = game.places[m.id];
-  // Garnizonda olan türler (piyade ve okçu her zaman).
-  const rows = UNITS.filter((k) => k === "inf" || k === "arch" || pl[k] > 0).map((k) => [k, T[k]]);
-  if (pl.ships > 0) rows.push(["ships", T.ships]);
-  const r = modalFrame(ctx, cam, boxes, 146 + rows.length * 52 + (pl.ships > 0 ? 22 : 0));
-  const x = r.x + 22, right = r.x + r.w - 22;
-  text(ctx, `${T.formArmy} · ${placeName(m.id, ui.lang)}`, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 19, align: "center" });
-  rows.forEach(([type, label], i) => {
-    const y = r.y + 64 + i * 52;
-    const max = pl[type];
-    const step = type === "ships" ? 1 : N.company;
-    text(ctx, label[0].toLocaleUpperCase(ui.lang) + label.slice(1), x, y + 26, { bold: true, size: 14 });
-    const bx = right - 210;
-    button(ctx, boxes, { x: bx, y, w: 40, h: 38, label: "−", size: 18, off: m[type] <= 0, act: { do: "formStep", type, by: -step } });
-    text(ctx, `${m[type]} / ${max}`, bx + 80, y + 25, { bold: true, size: 14, align: "center" });
-    button(ctx, boxes, { x: bx + 120, y, w: 40, h: 38, label: "+", size: 18, off: m[type] >= max, act: { do: "formStep", type, by: step } });
-    button(ctx, boxes, { x: bx + 166, y, w: 44, h: 38, label: T.all, size: 11, off: m[type] >= max, act: { do: "formStep", type, by: Infinity } });
-  });
-  if (pl.ships > 0) {
-    // Seçilen gemiler seçilen askeri taşıyor mu: denize açılabilir mi.
-    const ok = (m.ships ?? 0) * N.navy.carry >= men(m);
-    text(ctx, fill(T.carry, (m.ships ?? 0) * N.navy.carry) + " · " + T.shipHint, r.x + r.w / 2, r.y + r.h - 76, { size: 12, italic: true, align: "center", color: ok ? INK.soft : INK.warn });
-  }
-  twoButtons(ctx, boxes, r, { label: T.march, act: { do: "formOk" }, off: men(m) <= 0 && !(m.ships > 0) }, { label: T.cancel, act: { do: "close" } });
 }
 
 function diploModal(ctx, cam, game, ui, boxes, T) {

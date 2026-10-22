@@ -10,7 +10,7 @@ await page.evaluate(`(async () => {
   M.dispatch({ do: "pick", civ: "saka" }); M.dispatch({ do: "start" }); M.dispatch({ do: "close" });
   await f();
   const a = M.game.armies.length ? M.game.armies[0] : null;
-  M.dispatch({ do: "formOpen", id: "olbia" }); M.dispatch({ do: "formOk" });
+  M.dispatch({ do: "pickAll", of: "p:olbia", all: true, n: 999 }); M.dispatch({ do: "march", id: "olbia" });
   M.look("neapolis", 2.4); M.anim.finish(); await f();
   window.T0 = performance.now();
   M.anim.freeze(window.T0);

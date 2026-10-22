@@ -128,6 +128,8 @@ window.PT = (() => {
       await tapPlace(id);
       if (M.ui.sel?.kind !== "place" || M.ui.sel.id !== id) { stats.missed.push("şehir seçilemedi " + id); continue; }
       // Limanda önce Liman sekmesi: bir liman yapısı (sırayla) ve bir gemi; sonra Şehir sekmesine dön.
+      // (Önceki şehirde Garnizon sekmesi açık kalmış olabilir.)
+      await press((a) => a.do === "cardTab" && a.tab === "city");
       let upgraded = false;
       if (await press((a) => a.do === "cardTab" && a.tab === "port")) {
         const order = ["trade", "fishery", "shipyard", "fort"];
@@ -153,11 +155,12 @@ window.PT = (() => {
       }
       const pl = g.places[id];
       if (pl.inf + pl.arch >= 60) {
-        await press((a) => a.do === "formOpen" && a.id === id, "ordu çıkar düğmesi");
-        // Garnizonda 20 piyade kalsın.
-        await press((a) => a.do === "formStep" && a.type === "inf" && a.by < 0);
-        await press((a) => a.do === "formStep" && a.type === "inf" && a.by < 0);
-        if (await press((a) => a.do === "formOk", "yola çık düğmesi")) stats.armies++;
+        // Garnizon sekmesi: bütün kartları seç, ilk iki piyade kartı (20 asker) kalsın, Dışarı çık.
+        await press((a) => a.do === "cardTab" && a.tab === "garrison", "garnizon sekmesi");
+        await press((a) => a.do === "pickAll" && a.all, "hepsi düğmesi");
+        await press((a) => a.do === "pickCard" && a.i === 0, "ilk kart");
+        await press((a) => a.do === "pickCard" && a.i === 1);
+        if (await press((a) => a.do === "march" && !a.general, "dışarı çık düğmesi")) stats.armies++;
       }
     }
 

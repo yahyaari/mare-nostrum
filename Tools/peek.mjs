@@ -144,8 +144,8 @@ await shot("03_basla_yardim", `${D({ do: "lang", lang: "en" })}; ${D({ do: "pick
 await shot("04_harita", D({ do: "close" }));
 await shot("05_sehir_karti", TAP("rome"));
 await shot("05b_ipucu", "const b = M.boxes().find((x) => x.act?.do === 'upgrade' && x.act.what === 'barracks'); M.hover(b.x + b.w / 2, b.y + b.h / 2); M.ui.tip.since = 0");
-await shot("06_ordu_cikar", D({ do: "formOpen", id: "rome" }));
-await shot("07_ordu_secili", D({ do: "formOk" }));
+await shot("06_ordu_cikar", D({ do: "cardTab", tab: "garrison" }));
+await shot("07_ordu_secili", `${D({ do: "pickAll", of: "p:rome", all: true, n: 999 })}; ${D({ do: "march", id: "rome" })}`);
 await shot("07b_yol_onizleme", `M.look('ariminum', 2.2); ${HOVER("ariminum")}`);
 await shot("08_yolda", `${RIGHT("ariminum")}; ${AT(200)}`);
 await shot("08b_vardi", DONE);
@@ -191,7 +191,7 @@ await shot("26_general_zafer", `const a = M.game.armies.find((x) => x.owner === 
 await shot("28_dort_tur", `M.ui.modal = null; const r = M.game.places.rome; r.level = 3; r.barracks = 3; r.industry = 3; r.cav = 20; r.siege = 10;
   r.upgraded = false; r.recruited = 0; M.game.civs.rome.money = 90; M.game.civs.rome.weapons = 30; M.game.civs.rome.food = 30;
   M.ui.sel = { kind: 'place', id: 'rome' }; M.look('rome', 2.2)`);
-await shot("29_ordu_cikar_dort", D({ do: "formOpen", id: "rome" }));
+await shot("29_ordu_cikar_dort", `${D({ do: "cardTab", tab: "garrison" })}; ${D({ do: "pickAll", of: "p:rome", all: true, n: 999 })}`);
 await evaluate(`(() => { const M = window.MareNostrum; M.dispatch({ do: "close" }); return true; })()`);
 await shot("27_general_kart", `${D({ do: "close" })}; const a = M.game.armies.find((x) => x.owner === 'rome' && x.general);
   M.ui.sel = { kind: 'army', id: a.id }; M.redraw()`);
@@ -200,8 +200,8 @@ await shot("30_kartaca_liman", `M.ui.modal = null; ${D({ do: "newGame" })}; ${D(
   ${D({ do: "close" })}; M.game.civs.carthage.money = 80; M.ui.sel = { kind: 'place', id: 'carthage' }; M.look('carthage', 2.4)`);
 await shot("30b_liman_sekmesi", `${D({ do: "cardTab", tab: "port" })}; M.game.places.carthage.fishery = 1; M.game.places.carthage.trade = 1`);
 await shot("30c_liman_tr", `${D({ do: "lang", lang: "tr" })}`);
-await shot("31_gemili_ordu_cikar", `${D({ do: "lang", lang: "en" })}; ${D({ do: "cardTab", tab: "city" })}; ${D({ do: "formOpen", id: "carthage" })}`);
-await shot("32_denizde", `M.ui.modal.ships = 2; ${D({ do: "formOk" })}; ${RIGHT("lilybaeum")}; ${AT(190)}`);
+await shot("31_gemili_ordu_cikar", `${D({ do: "lang", lang: "en" })}; ${D({ do: "cardTab", tab: "garrison" })}; ${D({ do: "pickAll", of: "p:carthage", all: true, n: 999 })}`);
+await shot("32_denizde", `${D({ do: "march", id: "carthage" })}; ${RIGHT("lilybaeum")}; ${AT(190)}`);
 await shot("33_deniz_saldiri", `${DONE}; const g = M.game; const a = g.armies.find((x) => x.owner === 'carthage');
   a.at = 'carthage'; a.moves = 1; a.inf = 70; a.ships = 3; a.route = []; M.ui.sel = { kind: 'army', id: a.id }; M.look('carthage', 2.2);
   ${RIGHT("caralis")}`);

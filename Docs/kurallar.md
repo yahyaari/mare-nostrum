@@ -143,12 +143,18 @@ Bir **bölük** 10 askerdir. Asker basmak şehrin nüfusundan düşer.
 
 - **Ordu çıkarmak:** Garnizondan bölükler seçilip ordu kurulur. Şehri tamamen boşaltmak da
   mümkündür, ama riskli.
+- **Birlik kartları** (kullanıcı 22.10, Total War gibi): her bölük bir kart (10 asker; savaşta
+  eriyen bölük küçülür, 7 kişilik kart yarım çubuklu). Şehrin **Garnizon** sekmesinde kartlar
+  seçilir, *Dışarı çık* (ya da *Komutanla*: başına bir general, 30 para) ile ordu olur. Ordunun
+  kartında kartlar seçilip *Ayır* ile ayrı ordu, *Garnizona kat* ile şehre bırakılır; *Birleştir*
+  aynı yerdeki öteki orduları katar. Her gemi de bir kart. Kurallar türlerin adam sayısını
+  tutuyor; kartlar bu sayılardan çıkıyor (state.js `cardsOf`, `chosen`, `detach`).
 - Ordular **sadece yerleşimlerde durur**, yolun ortasında durmaz.
 - **Her ordu her tur bir yol yürür** (Sakalar iki). İki ordun varsa o tur iki hamlen olur.
 - **Otomatik yürüyüş:** Orduya tıkla, sonra uzaktaki bir şehre tıkla. Ordu en kısa yolu bulur ve
   her tur kendiliğinden bir adım ilerler. Düşmanla karşılaşırsa ya da yol kapanırsa durur ve sana
   sorar.
-- **Birleşme ve bölünme:** Aynı yerdeki iki ordu birleşebilir, bir ordu da ikiye bölünebilir.
+- **Birleşme ve bölünme:** Aynı yerdeki iki ordu birleşebilir, bir ordudan seçilen kartlar ayrılabilir.
 - Kendi şehrinde duran ordu şehri garnizonla birlikte savunur.
 - **Girebileceğin yerler:** kendi yerleşimlerin, müttefiklerinki, savaştığın medeniyetinkiler ve
   bağımsızlar. **Tarafsız birinin toprağına giremezsin.**
@@ -401,9 +407,11 @@ oyundan çıkar.
 
 - **Üst bant:** Tur sayısı, para, silah, yiyecek (her birinin yanında turluk + / −).
 - **Şehre tıklayınca:** panel **ekranın altında ortada** açılır (Total War gibi; kullanıcı 22.10:
-  "solda istemiyorum"): şehir (nüfus, garnizon, üretim, sadakat, Ordu çıkar) | yükseltmeler
-  (limanda Şehir / Liman sekmeli) | asker bas ya da gemi yap. Panel açıkken alttaki menü gizlenir;
+  "solda istemiyorum"): şehir (nüfus, garnizon, üretim, sadakat, Ordu çıkar) | sekmeler: Şehir
+  (yükseltmeler, asker bas), Liman (liman yapıları, gemi yap), Garnizon (askerler kart kart). Panel açıkken alttaki menü gizlenir;
   seçilen yer panelin arkasında kalacaksa harita onu yukarı kaydırır.
+- **Ordu kartı:** solda ordu (general, askerler, hareket), sağda birlik kartları; altta Yürü, Ayır,
+  Birleştir, Garnizona kat. **Yürü**'ye basınca haritada basılan yer ordunun gideceği yer olur.
 - **Sol tık seçer, sağ tık yürütür:** orduya tıkla, gideceği yere sağ tıkla; yanındaki düşmana
   sağ tık saldırı penceresini açar. Ordu seçiliyken bir yerin üstüne gelince yol çizilir ve kaç
   tur süreceği yazar; saldırılabilecek yerde tahmin.

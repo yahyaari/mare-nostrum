@@ -9,7 +9,7 @@ import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rule
 import { neighbours, roadBetween } from "./rules/graph.js";
 import { access, attack, canAttack, canUse, forecast, hostile, menace, needsShips, order, routeTo } from "./rules/moves.js";
 import {
-  VERSION, armyById, buildShip, canSail, cancelBuild, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, split, station, upgrade,
+  VERSION, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, formArmy, holdGames, merge, men, migrate, newGame, placesOf, recruit, station, upgrade,
 } from "./rules/state.js";
 import { resolve as answer } from "./rules/events.js";
 import { appoint } from "./rules/generals.js";
@@ -29,7 +29,7 @@ import { SCENE_MS } from "./view/battle.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { alongRoad, drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { CARD_H, MODAL_MS, armyTip, drawUI, eventLines, missionText, placeTip, startLayout } from "./view/ui.js";
+import { CARD_H, MODAL_MS, armyTip, drawUI, eventLines, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
 import { TOP, chipRise } from "./view/hud.js";
 import { SIZE } from "./geo.js";
 import { trait } from "./rules/numbers.js";
@@ -397,6 +397,14 @@ function stepCiv(by) {
 
 // ---- eylemler ----
 
+/** Bir kart seçiminin sahibi: "p:<yer>" garnizon, "a:<ordu>" ordu. */
+function unitOf(of) {
+  if (!game) return null;
+  const [k, id] = [of.slice(0, 1), of.slice(2)];
+  return k === "p" ? game.places[id] ?? null : armyById(game, Number(id));
+}
+const sigOf = (u) => ["inf", "arch", "cav", "siege", "ships"].map((k) => u[k] ?? 0).join(",");
+
 const T = () => TEXT[ui.lang];
 
 function dispatch(act) {
@@ -406,6 +414,7 @@ function dispatch(act) {
   ui.tip = null;
   ui.preview = null;
   hoverKey = "";
+  if (act.do !== "aim") ui.aim = null;
   switch (act.do) {
     case "sound":
       sound.setSound(act.on);
@@ -659,46 +668,85 @@ function dispatch(act) {
       }
       save();
       break;
-    case "formOpen": {
+    case "pickCard": {
+      // Kart seç / bırak. Seçim bir yerin ya da ordunun, o anki askerleriyle (sayılar değişince düşer).
+      const u = unitOf(act.of);
+      if (!u) break;
+      const picks = new Set(picksOf(ui, act.of, u));
+      if (picks.has(act.i)) picks.delete(act.i); else picks.add(act.i);
+      ui.cards = { of: act.of, sig: sigOf(u), picks, page: ui.cards?.of === act.of ? ui.cards.page : 0 };
+      break;
+    }
+    case "pickAll": {
+      const u = unitOf(act.of);
+      if (!u) break;
+      ui.cards = { of: act.of, sig: sigOf(u), picks: new Set(act.all ? [...Array(act.n).keys()] : []), page: ui.cards?.of === act.of ? ui.cards.page : 0 };
+      break;
+    }
+    case "cardPage": {
+      const u = unitOf(act.of);
+      if (!u) break;
+      const keep = ui.cards?.of === act.of ? ui.cards : { of: act.of, sig: sigOf(u), picks: new Set(), page: 0 };
+      ui.cards = { ...keep, page: Math.max(0, (keep.page ?? 0) + act.by) };
+      break;
+    }
+    case "march": {
+      // Garnizondan seçili kartlar dışarı çıkar: ordu (istenirse generalli).
       const pl = game.places[act.id];
-      ui.modal = { kind: "form", id: act.id, inf: pl.inf, arch: pl.arch, cav: pl.cav, siege: pl.siege, ships: pl.ships };
+      const want = chosen(pl, picksOf(ui, "p:" + act.id, pl));
+      const a = formArmy(game, act.id, want.inf, want.arch, want.cav, want.siege, want.ships);
+      if (!a) break;
+      coachDone("form");
+      sound.muster();
+      const g = act.general ? appoint(game, a.id) : null;
+      if (g) anim.rise(a.at, fill(T().general, g.name), INK.warn);
+      ui.cards = null;
+      ui.sel = { kind: "army", id: a.id };
+      ui.army = a.id;
+      anim.pulse(a.at, colorOf(a.owner));
+      save();
       break;
     }
-    case "formStep": {
-      const max = game.places[m.id][act.type];
-      m[act.type] = act.by === Infinity ? max : Math.max(0, Math.min(max, m[act.type] + act.by));
-      break;
-    }
-    case "formOk": {
-      const a = formArmy(game, m.id, m.inf, m.arch, m.cav ?? 0, m.siege ?? 0, m.ships ?? 0);
-      ui.modal = null;
-      if (a) {
-        coachDone("form");
-        sound.muster();
-        ui.sel = { kind: "army", id: a.id };
-        ui.army = a.id;
-        anim.pulse(a.at, colorOf(a.owner));
-      }
+    case "detach": {
+      // Seçili kartlar ayrı bir ordu olur ve o seçilir.
+      const a = armyById(game, act.army);
+      const b = a && detach(game, a.id, chosen(a, picksOf(ui, "a:" + a.id, a)));
+      if (!b) break;
+      sound.muster();
+      ui.cards = null;
+      ui.sel = { kind: "army", id: b.id };
+      ui.army = b.id;
+      anim.pulse(b.at, colorOf(b.owner));
       save();
       break;
     }
     case "station": {
-      const at = armyById(game, act.army)?.at;
-      if (station(game, act.army)) anim.pulse(at, INK.ink);
-      ui.sel = null;
-      ui.army = null;
+      // Bütün ordu ya da sadece seçili kartlar garnizona katılır.
+      const a = armyById(game, act.army);
+      if (!a) break;
+      const at = a.at;
+      const want = chosen(a, picksOf(ui, "a:" + a.id, a));
+      const part = men(want) + want.ships > 0 ? detach(game, a.id, want) : null;
+      if (station(game, (part ?? a).id)) anim.pulse(at, INK.ink);
+      ui.cards = null;
+      if (!part) { ui.sel = null; ui.army = null; }
       save();
       break;
     }
-    case "split": {
-      const b = split(game, act.army);
-      if (b) { ui.sel = { kind: "army", id: b.id }; ui.army = b.id; }
+    case "merge": {
+      // Aynı yerdeki öteki ordular bu orduya katılır.
+      const a = armyById(game, act.army);
+      if (!a) break;
+      for (const b of armiesAt(game, a.at).filter((x) => x !== a && x.owner === a.owner)) merge(game, a.id, b.id);
+      ui.cards = null;
+      anim.pulse(a.at, colorOf(a.owner));
       save();
       break;
     }
-    case "merge":
-      merge(game, act.army, act.from);
-      save();
+    case "aim":
+      // Yürü: sıradaki basış ordunun gideceği yer.
+      ui.aim = act.army;
+      toast(T().aimHint);
       break;
     case "nextArmy": {
       // Hareketi kalan bir sonraki ordu: seçili olanın ardından, sırayla.
@@ -803,6 +851,17 @@ function dispatch(act) {
 /** Sol tık: orduyu ya da yeri seçer. Hiçbir zaman bir şey yürütmez. */
 function tapMap(x, y) {
   const t = tokenAt(x, y);
+  if (ui.aim && ownArmy()?.id === ui.aim) {
+    ui.aim = null;
+    if (t) {
+      const b = armyById(game, t.army);
+      if (b.owner !== game.player) return command(b.at);
+    }
+    const p = nearest(x, y);
+    if (p) return command(p.id);
+    return toast(T().aimMiss);
+  }
+  ui.aim = null;
   if (t) {
     const a = armyById(game, t.army);
     ui.sel = { kind: "army", id: a.id };
@@ -1009,7 +1068,7 @@ function hoverAt(p) {
       preview = go?.route ? [mine.at, ...go.route] : null;
     }
   }
-  canvas.style.cursor = hot ? "pointer" : "";
+  canvas.style.cursor = ui.aim && !boxes.some((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) ? "crosshair" : hot ? "pointer" : "";
   if (key !== hoverKey) {
     hoverKey = key;
     ui.hover = place;
@@ -1084,7 +1143,7 @@ window.addEventListener("keydown", (e) => {
     ArrowRight: () => panBy(cam, -step, 0),
     ArrowUp: () => panBy(cam, 0, step),
     ArrowDown: () => panBy(cam, 0, -step),
-    Escape: () => { if (ui.modal) dispatch({ do: "close" }); else { ui.sel = null; ui.army = null; } },
+    Escape: () => { if (ui.modal) dispatch({ do: "close" }); else if (ui.aim) ui.aim = null; else { ui.sel = null; ui.army = null; } },
     // Başlangıç ekranında oklar medeniyetler arasında gezer.
     ...(ui.screen === "start" && !ui.modal ? {
       ArrowLeft: () => stepCiv(-1), ArrowRight: () => stepCiv(1), ArrowUp: () => stepCiv(-1), ArrowDown: () => stepCiv(1),
