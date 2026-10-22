@@ -4,6 +4,10 @@
 
 > **Önce `Docs/plan.md`'yi oku:** yapılanların özeti, sıradaki işler (tasarım taslaklarıyla),
 > açık riskler, çalışma düzeni. Aşağısı ayrıntılı geçmiş.
+>
+> **22.10.2026: oyun SADELEŞTİ** (plan.md, kurallar.md). Aşağıdaki geçmişin çoğu (sadakat,
+> olaylar, generaller, kuşatma, silah, nüfus, liman yapıları...) artık oyunda yok; o sürüm git'te
+> `detayli-surum` etiketinde. Komutlar ve tuzaklar hâlâ geçerli.
 
 **20.10.2026 — oyun oynanabilir.** Yayında: https://yahyaari.github.io/mare-nostrum/ (master'a
 push bir dakikada yayınlanır). Medeniyet seçimi, şehir yükseltme, asker basma, ordu çıkarma,

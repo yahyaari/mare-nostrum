@@ -3,16 +3,17 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **21.10.2026**.
+> Son güncelleme: **22.10.2026** (sadeleşme).
 
 ---
 
 ## 0. Nasıl çalışıyoruz
 
 - **Kullanıcı:** Unity geliştiricisi, Türkçe konuşuyor. Oyunu keyfi için yapıyor, satış ya da
-  portal derdi yok. Tasarımın sahibi o; oyunun çekirdeğini (şehirler, nüfus/sanayi/gıda/kışla,
-  sıra tabanlı, otomatik savaş, patikada yürüyen ordular, gerçek harita ve medeniyetler) o
-  istedi.
+  portal derdi yok. Tasarımın sahibi o. **22.10'da yönü netleştirdi:** "basit olsun, kaynak ve
+  yemek yap, ordu oluştur ve savaş, çok detaylandırmadan. Oynaması kolay ve anlaşılır olsun."
+  İleride **arkadaşlarla** oynanabilsin; önce sade tek kişilik. Yeni özellik eklemeden önce
+  "bu oyunu karıştırır mı" diye sor: bir kere karıştırdık, geri sadeleştirdik.
 - **Çalışma düzeni (kullanıcının sözü):** "Bana bir şey sormana gerek yok, devam et; büyük
   değişikliklerde git'ten push'la, ben kontrol ederim." Her büyük adımda commit + push, kullanıcı
   canlı sitede bakar. Tasarım kararı gerektiren (yeni kural) şeylerde seçenek sunulur.
@@ -20,7 +21,7 @@
   Pages `master`'dan, push'tan ~1 dakika sonra yayında.
 - **Dil:** Arayüz İngilizce asıl, Türkçe ikinci (sağ üst / menü). Belgeler ve kod yorumları
   Türkçe.
-- **Push'tan önce:** `node Tools/test.mjs` (1897 kontrol, hepsi geçmeli). Kurala dokunduysan
+- **Push'tan önce:** `node Tools/test.mjs` (1683 kontrol, hepsi geçmeli). Kurala dokunduysan
   `node Tools/balance.mjs 70`. Arayüze dokunduysan `node Tools/peek.mjs ...` ve
   `node Tools/playtest.mjs ...` (komutlar `working-on-this.md`'de).
 
@@ -41,192 +42,61 @@
 | 21.10 | Donanma | Gemiler, deniz yolu için gemi şartı (1 gemi = 25 asker), deniz savaşı, abluka; Kartaca gemi × 1.5. |
 | 21.10 | Liman | Balıkçılık, tersane, ticaret, liman kalesi; liman kartı iki sekmeli; Roma liman oldu (Ostia). |
 | 21.10 | Yürüyüş | Ordular yol uzunluğuna göre yürüyor, iz bırakıyor; dokunuş önce hızlandırır, sonra bitirir. |
+| 21-22.10 | Görünüm ve süs | Total War tarzı arayüz, donanma görünüşü, görevler, harikalar, ses ve müzik, sis, kuşatma, büyüyen şehirler, kronik, savaş sahnesi, arazi ve mevsim. Hepsi `detayli-surum` etiketinde. |
+| 22.10 | **Sadeleşme** | Kullanıcı: "ham, ne olduğunu anlamıyorum, kontrol hantal, tepki az; çok karıştırdık". Aşağıda. |
 
-**Şu anki durum (21.10 akşam):** kayıt sürümü 7 (eskiler kendiliğinden yükseltiliyor), 1897 kontrol geçiyor,
-70 bot oyununda ilk medeniyetin düşüşü ortalama 51. tur (en erken 25), her oyunda savaş çıkıyor,
-"en büyük" çıkan medeniyet oyundan oyuna değişiyor.
+### Sadeleşme (22.10)
+
+Kullanıcı oyunu beğendi ama "hamlık var, tam anlayamadım" dedi; üç şikâyet seçti: **ne olduğunu
+anlamıyorum, kontrol hantal, tepki az / donuk**. Ve: "yine çok karıştırdık... basit olsun". Sade
+ama biraz çeşit seçti. Yapılan (kurallar.md baştan yazıldı):
+
+- **Kurallar:** sadece **altın ve yemek**. Şehirde tek yükseltme: **Geliştir** (seviye; altın,
+  yemek ve asker hakkı artar, 3. seviyede sur). **Piyade / okçu / süvari** üçgeni (yendiğine
+  ×1.5). Gemi: 50 asker taşır, deniz savaşı yok. Savaş, barış, ittifak. Her medeniyetin tek
+  güçlü yanı. Kaldırılanlar: silah, nüfus, sadakat, olaylar, mektuplar, görevler, generaller,
+  kuşatma ve makinesi, harikalar, arazi, mevsim, liman yapıları, abluka. Kayıt sürümü 8: eski
+  kayıtlar sade kurallara dönüp devam eder (makineler piyadeye).
+- **Anlamak:** her düğmenin, kaynağın, yerin ve ordunun **ipucu** (fareyle üstüne gel); kapalı
+  düğme neden kapalı olduğunu söyler; yemek azalıyorsa kaç turda biteceği. Şehir kartı tek
+  sayfa: seviye + Geliştir (kazancı yazılı), turluk gelir, üç asker düğmesi ve altında üçgen,
+  limanda gemi, Ordu çıkar. Yardım 7 satır.
+- **Kontrol:** Total War gibi **sol tık seçer, sağ tık yürütür / saldırtır**. Ordu seçiliyken
+  bir yerin üstüne gelince **yol çizilir ve kaç tur** süreceği yazar; saldırılabilecek yerde
+  tahmin. Tarafsız yerin kartında "Savaş ilan et". Enter turu bitirir, Tab sıradaki ordu.
+- **Tepki:** pencereler süzülerek açılır; düğme basılıyken çöker; tur sonu raporu artık
+  **pencere açmıyor**, sağ üstte haber olarak belirip soluyor (basınca rapor).
+- **Bilgisayar:** en ucuz geliştirmeyi önce yapıyor (başkenti bekleyip hiçbir şey yapmayan Galya
+  20. turda yıkılıyordu).
+
+**Şu anki durum (22.10):** 1683 kontrol geçiyor; 21 bot oyununda ilk düşüş en erken 26, ortanca
+50. tur; her oyunda savaş çıkıyor. Tarayıcıda oynayan test temiz (konsol hatası yok, kayıttan
+dönüş aynı, ipucu ve yol önizlemesi çalışıyor, tur sonunda pencere açılmıyor).
 
 ---
 
-## 2. Yapılacaklar (kullanıcı "hepsi güzel" dedi)
+## 2. Yapılacaklar
 
-Kullanıcı 21.10'da 12 önerinin hepsini beğendi. **Öğretici EN SONA** (kullanıcı, 21.10:
-"öğreticiyi sona bırakalım, her şey bitsin onların üstüne kuralım"): oyun değiştikçe öğretici
-de değişeceği için en son yazılır. **Sıra:**
+1. **Kullanıcı oynasın:** sade sürüm anlaşılır mı, kontrol rahat mı? Geri bildirime göre.
+2. **Arkadaşlarla oynamak** (kullanıcının asıl isteği, sonraya bıraktı): aynı bilgisayarda sıra
+   ile (hotseat) en kolayı; internetten oynamak sunucu ister. Kural katmanı tek oyuncu
+   varsayıyor (`state.player`): en büyük iş bu.
+3. **Öğretici:** en son (kullanıcı 21.10: "öğreticiyi sona bırakalım").
 
-1. **Görevler** — oyuncuya yön verir ("şimdi ne yapsam" sorusu).
-2. **Dünya harikaları** — haritada ele geçirilmeye değer yerler.
-3. **Ses ve müzik** — ucuz, hissi çok değiştirir.
-4. Sonra: kuşatma, büyüyen şehirler, kronik, savaş sahnesi, sis, arazi/mevsim, aynı cihazda
-   iki kişi. (Telefona kurma çıktı: kullanıcı "mobil yok" dedi.)
-5. **Öğretici** — en son, her şey bittikten sonra.
-
-**Görünüm (21.10, konuşuluyor):** kullanıcı Total War tarzı boyalı bir arayüz görseli gönderdi
-(parşömen panel, boyalı arazi, direkli sancaklar, alt menü, mini harita) ve "böyle bir arayüz
-yapabilir miyiz" diye sordu. Bkz. bölüm 2.0.
-
-**Ama önce:** kullanıcıdan 15-20 dakika gerçek oyun istendi (aşağıda, açık riskler 1). Geri
-bildirim gelirse sıra ona göre değişir.
-
-### 2.0 Görünüm: Total War tarzı arayüz (kullanıcı ONAYLADI, sırada ilk bu)
-
-**Kullanıcı (21.10): "tamam dediğin gibi yapalım, mobil için yapma, mobil yok".** Oyun artık
-yalnızca geniş ekran (masaüstü) için; telefon düzeni yapılmıyor, telefonla denenmiyor.
-Aşağıdaki dört aşama sırayla, her biri ayrı push.
-
-Kullanıcının görseli (21.10): Sakalar, Neapolis seçili, Karadeniz. Üstte koyu-altın bant
-(sancaklı arma, kaynaklar + değişim, "İlkbahar 12, MÖ 247", menü); solda parşömen şehir paneli
-(üstünde liman tablosu, sekmeler, sadakat çubuğu, maliyet düğmeleri); boyalı arazi (dağ, orman,
-çöl), yarı saydam ülke renkleri; şehirler direkli sancak + küçük şehir maketi + isim levhası;
-altta 5 yuvarlak düğmeli menü (Ordu, Şehirler, Diplomasi, Harita, Görevler); sağ altta mini
-harita ve "Turu bitir". Görseldeki şehirlerin hepsi bizde de var.
-
-**1. aşama YAPILDI (21.10):** arazi artık varsayılan (`?terrain` bayrağı kalktı); kesim 4 derece
-payla (kenar bandı yok), ton "sönük" (toprak kara, koyu camgöbeği deniz). Topraklar kıvrımlı
-sınırlı (`regions.js` wobble), göller delik. `src/view/pieces.js`: armalar (Roma kartal, Kartaca
-Tanit, Mısır ankh, Makedonya Vergina güneşi, Partlar yay-ok, Galya tekerlek, Saka geyik,
-bağımsız kule), direkli sancak, şehir/kale maketi, isim levhası (Cinzel), asker figürü, gemi.
-Yazı tipleri Google Fonts'tan (index.html). Basış sancağa da tutar (`reach`).
-
-**2. ve 3. aşama YAPILDI (21.10):** `src/view/hud.js`: üst bant (asılı sancak, para/buğday/silah/nüfus, MÖ yıl + tur, rapor ve menü madalyonları), alt menü (Ordu ve Şehirler listeleri - yeni pencereler `armies`/`cities`, Diplomasi, Harita = uzaklaş/başkente dön), sağ altta sıradaki ordu, mini harita (basınca oraya kayar), Turu bitir. `kit.js`: parşömen panel (dokulu kâğıt, koyu çerçeve, altın iç çizgi, köşe baklavaları), kabarık kâğıt düğmeler, asıl eylem koyu-altın; yazı EB Garamond (boy x1.12), başlıklar Cinzel. Kartın başında şehrin çevresinin arazisi ve büyük maketi (`drawVignette`, ekranda yer varsa). Renkli kareler yerine armalı kalkan (`shield`). Tur şeridi koyu-altın. 1 tur = 1 yıl (MÖ 270'ten geri).
-
-**4. aşama YAPILDI (21.10):** ormanlık yerlere ağaç kümeleri (`Tools/terrain.py` ham renkten
-orman bulur, `src/data/trees.js` 5367 ağaç; uzakta seyrekleşir, yerleşim dibinde yok). Fare
-üstüne gelince düğme/madalyon/levha parlar, imleç el olur (`kit.pointer`, `main.js hoverAt`).
-Durağan katman ekrandan %30 büyük çiziliyor, kaydırırken sadece yeri değişiyor (başsız Edge'de
-kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sabit.
-
-**Donanma görünüşü (21.10, kullanıcı: "gemiler denizlerde donanma olarak gözüksün, kara ordusu gibi değil, denizden yürüsün"):** gemili ordu limanda denizde filo (1-3 kadırga, `pieces.galley/fleet`), deniz yolunda kadırga olarak yüzer (yönüne bakar, köpük izi), karada asker; limanda bekleyen gemiler demirli, yelkeni sarılı. Limanın denize bakan yönü kıyı verisinden (`draw.js seaDir`). Kural düzeltmesi: askersiz filo artık denize açılır, karadan yürümez (`canSail`, `moves.canUse`; kurallar.md 15).
-
-**Görünüm bitti.**
-
-**Görevler YAPILDI (21.10, kullanıcı "devam et"):** `src/rules/missions.js`, kurallar.md 17. Sekiz tür (sefer, donanma, dostluk, bayındırlık, büyük ordu, komutan, huzur, savunma), meclis adları medeniyete göre (Sakalarda Kurultay), kabul/ret penceresi, alt menüde Görevler listesi, haritada hedef madalyonu, yapılınca anında ödül. Görev zarı ayrı (`state.mrng`): dünya aynı yürür. 41 yeni kontrol.
-
-**Dünya harikaları YAPILDI (21.10):** `src/rules/wonders.js`, kurallar.md 18. Altı harika (Fener ve Piramitler Mısır'ın, Asma Bahçeler/Babil, Artemis/Efes, Rodos Heykeli, Parthenon/Atina bağımsız); şehri tutanın bütün ülkesine armağan. Haritada altın tapınak madalyonu, kartta satır, raporda haber. 15 yeni kontrol (1836). Denge: ilk düşüş 52 → 61.
-
-**Ses ve müzik YAPILDI (21.10):** `src/view/sound.js`, dosyasız (WebAudio, kodla). Efektler: düğme tıkı, yükseltmede çekiç+çan, asker basmada ayak, ordu çıkınca davul, gemi suya iner, yürüyüşte davul / denizde kürek, çarpışmada kılıç, yer el değiştirince boru, tur geçişinde boru çağrısı, zafer/yenilgi ezgisi, görevde zil, mektupta kâğıt, savaş ilanında ağır davul, oyunlarda kalabalık. Animasyon sesleri `anim.cues()` ile animasyonun kendi saatinden (hızlanınca erken, atlanınca sessiz). Müzik: D-A dem sesi + D Dor dizisinde seyrek lir notaları, yankılı; oyuncu savaştaysa altta yavaş davul. Menüde Ses / Müzik aç-kapa (tarayıcıda saklanır). Ölçüm: `node Tools/soundcheck.mjs` çevrimdışı ses bağlamına çaldırıp dalga ölçüldü (sessiz/kapalı 0, efektler tepe 0.19 patlamasız, müzik notalı, savaşta davul).
-
-**Savaş sisi ve süsler YAPILDI (21.10, kullanıcı "fog ve görsel güzellikler"):** kurallar.md 19. `rules/sight.js` (kendi+müttefik yer ve orduların bir yol ötesi), `view/atlas.js` (sis dokusu haritaya bağlı, dost toprak yumuşak kenarla açık; Latince deniz/bölge adları; pusula gülü; bulut gölgeleri sprite ile). Sancaklar dalgalanır; harita 20 kare/sn canlı. Menüde Savaş sisi aç-kapa. 8 yeni kontrol (1844). Tarayıcıda: sis uzak orduyu saklıyor, görülen ordu görünüyor, sis kapalıyken hepsi görünüyor (`Tools/fogcheck.mjs` - ilk denemede kamera kaymasını beklemediğim için yanlış ölçtü).
-
-**Kuşatma YAPILDI (21.10, kullanıcı "devam et"):** `rules/siege.js`, kurallar.md 20. Surlu yere Saldır / Kuşat / Vazgeç; kamp hedefin yolunda çadırlarla, hedefte kırmızı halka; turda %10 erime (makineyle +%2/10, en çok %25), üretim yok, sadakat −5, kamp −%3; teslim; yürüyünce/saldırınca/barışta kalkar. Bilgisayar sadece "zor" hedefi kuşatır (dengeyi bu tuttu: ilk düşüş 51). 21 yeni kontrol (1865). Ordu alanı `besieging` (`siege` kuşatma makinesi sayısı - isim çakışmasına dikkat).
-
-**Büyüyen şehirler YAPILDI (21.10):** maket seviyeyle büyür (`pieces.cityModel(…, level)`): 1 ahşap çit + iki ev, 2 taş sur + iki kule, 3 arka sıra evler + ortada yüksek kule, 4+ geniş sur + dört kule ve bir boy büyük; kale 2. seviyede ikinci kule. Kartın manzarası da seviyeyi gösterir.
-
-**Kronik YAPILDI (22.10):** `rules/chronicle.js`, kurallar.md 21. Tur tur yer/asker grafiği + yıllık (menüden ve oyun sonundan). Kayıt sürümü 7. 15 yeni kontrol (1880).
-
-**Savaş sahnesi YAPILDI (22.10):** `view/battle.js`. Savaş sonucu penceresinin üstünde 2.9 sn: okçular ok yağdırır, süvari hücum eder, saflar çarpışır, kayıp oranında figür düşer, kaybeden çekilir, kazananın sancağı yükselir; surlu yerde savunanlar mazgallı burcun ardında; ordu battıysa denizde kadırgalar batar. Sesler sahneyle senkron (ok vızıltısı, kılıç, sonuç). Rastgele değil: aynı savaş hep aynı oynar.
-
-**Arazi ve mevsim YAPILDI (22.10):** `rules/ground.js` (nehir geçişleri harita verisinden hesaplanır, 14 yol; 12 dağ geçidi elle), `rules/season.js` (tur = mevsim, 4 tur = yıl; kışın denizde %25 fırtına, ordular %3 yıpranır), kurallar.md 22. Haritada geçit tepeleri, köprüler, kışın beyaz örtü ve kar; üst bantta mevsim. 17 yeni kontrol (1897). Denge: ilk düşüş 50; Sakalar 27/70 ayakta (izlenecek).
-
-**Sırada (plan sırası): iki kişi (hotseat); en son öğretici.**
-
-**İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
-(kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`
-(3355×1560, ~800 KB). Kıyılarımızla aynı veri olduğu için birebir oturuyor; en yakın zumda bile
-yeterince net. Eksik: kamera haritanın dışını gösterince arazi bitiyor (üst/alt bant) → kesimi
-birkaç derece payla yap ya da dışını çerçeveyle kapat.
-
-**Değerlendirme:**
-- Kodla yapılır: üst bant, alt menü, mini harita, Turu bitir, parşömen dokusu, altın çerçeve,
-  direkli sancak, isim levhası, yazı tipi (Cinzel/EB Garamond gibi, Türkçe harfleri olan),
-  şehir/kale/liman için çizgi maket, asker figürü, dağ/ağaç simgeleri.
-- Ressam işi (kodla aynısı olmaz): elle boyanmış 3B şehir maketleri, paneldeki liman tablosu.
-  Yol: ya çizgi/vektör sade hâli, ya kullanıcı yapay zekâ ile resim üretir ben yerleştiririm
-  (şeffaf arka plan, aynı açı ve ışık).
-- Telefon: sol panel + alt menü + mini harita dikey ekrana sığmaz; telefonda panel alttan
-  açılan sayfa olur.
-- Önerilen aşamalar: (1) arazi + ülke renkleri + sancaklar, (2) çerçeve: üst bant, alt menü,
-  mini harita, yazı tipi, (3) panel: parşömen + sekmeler, (4) süs: ağaçlar, maketler, resimler.
-
-### 2.1 Öğretici (EN SONA alındı)
-
-- İlk oyunda (ya da menüden "Öğretici") ilk ~6 turda adım adım balonlar: şehrine bas → tarla
-  yükselt → asker bas → ordu çıkar → orduya bas, yanındaki gri şehre bas → saldır → turu bitir.
-  Sonra: deniz yolları ve gemi, diplomasi, sadakat.
-- Her adım bir koşulla ilerler (oyunun durumuna bakarak: "Roma'nın tarlası 2 mi?"), bir ok ya da
-  halka ilgili düğmeyi gösterir. Geç / kapat düğmesi.
-- Kolay zorlukta önerilsin. Kural katmanına dokunmaz; `ui` durumunda bir adım sayacı.
-
-### 2.2 Görevler (Rome TW'deki senato görevleri gibi)
-
-- Birkaç turda bir bir görev gelir (karar penceresi gibi, ama kapatılabilir; aynı anda en fazla
-  bir-iki). Süresi ve ödülü var.
-- Örnek türler: "X'i N turda al" (komşu bağımsız ya da düşman yer), "N gemilik filo kur",
-  "Y ile ittifak kur", "Z şehrini seviye 3'e çıkar", "Haraç ödemeden N tur dayan", "Bir generali
-  3. seviyeye çıkar".
-- Ödül: para, silah, paralı asker, bedava general; bazen sadakat. Başarısızlıkta ceza yok ya da
-  küçük (sadakat −5).
-- Kural katmanında (`src/rules/missions.js`), seçim tohumlu rastgele; bilgisayarlar görev almaz.
-  Test: her görev türünün tamamlanma koşulu ve ödülü.
-
-### 2.3 Dünya harikaları
-
-- Belirli şehirlere bağlı, o şehri elinde tutanın bonusu:
-  - **İskenderiye Kütüphanesi** (İskenderiye): generaller iki kat tecrübe kazanır.
-  - **İskenderiye Feneri** (İskenderiye): bütün limanlarına liman kalesi +1 gibi.
-  - **Rodos Heykeli** (Rodos): ticaret × 1.5 her limanda.
-  - **Parthenon** (Atina): bütün şehirlerinde sadakat +3/tur.
-  - **Babil'in Asma Bahçeleri** (Babil): nüfus artışı × 1.25.
-  - **Kartaca'nın Kothon limanı** (Kartaca): tersane hakkı +1, gemi ucuz.
-  - **Roma Forumu** (Roma): para × 1.1 ya da asker maliyeti azalır.
-  - (Belki inşa edilebilir harikalar da: pahalı, birkaç tur sürer.)
-- Haritada harika olan şehirde küçük bir simge; şehir kartında satır; tur raporunda "X harikayı
-  ele geçirdi".
-- Denge: harikalar bilgisayarı da güçlendirir; 70 oyunla ölçülmeli.
-
-### 2.4 Ses ve müzik
-
-- Shadow Tower'daki gibi kodla üretilen (WebAudio) sesler: yürüyüş davulu, kılıç çarpışması,
-  dalga, gemi, tur geçişinde kısa fanfar, yükseltme "tık"ı. Müzik: sade bir drone + seyrek
-  notalar, savaşta gerilim artar.
-- Menüde ses/müzik aç-kapa. İlk dokunuşa kadar ses başlamaz (tarayıcı kuralı).
-
-### 2.5 Kuşatma
-
-- Surlu yere (kale, başkent, seviye 3+ şehir) saldırı ya hemen (bugünkü gibi) ya da "kuşat":
-  ordu yerin önünde durur, her tur içerideki asker açlıktan erir (%10) ve sadakat düşer; kuşatma
-  makinesi süreyi kısaltır. Kuşatma kalkarsa erime durur.
-- Kaleleri gerçekten zor lokma yapar. Bilgisayarın da kuşatmayı kullanması gerekir.
-
-### 2.6 Arazi ve mevsim
-
-- Nehir geçen yollarda saldırana ceza (× 0.85), dağ geçitlerinde savunana bonus. (Yollara
-  `river`/`pass` işareti; haritada küçük simge.)
-- Mevsim: her 4 turda bir kış; kışın deniz yolları tehlikeli (gemi kaybı ihtimali), kara yolları
-  yavaş değil ama ordu yıpranır (%3).
-
-### 2.7 Savaş sisi
-
-- Sadece kendi topraklarının ve ordularının 1-2 yol yakınını görürsün; ötesindeki ordular ve
-  garnizonlar görünmez (yerleşimler görünür, sahipleri bilinir).
-- Saldırı tahmini görünmeyen yerde "bilinmiyor" olur. Bilgisayar hile yapmaz mı? (Basitlik için
-  bilgisayar her şeyi görebilir; sadece oyuncu sisli.)
-
-### 2.8 Görsel: savaş sahnesi, büyüyen şehirler, kronik
-
-- **Savaş sahnesi:** savaş penceresinde 2-3 saniyelik çizgi asker çarpışması (iki sıra, ok
-  yağmuru, süvari hücumu), sonuç sayıları.
-- **Büyüyen şehirler:** işaret seviyeyle büyür (kule sayısı), limanda gemi silüeti, harika simgesi.
-- **Kronik:** oyun sonunda topraklarının tur tur grafiği, önemli olayların zaman çizelgesi
-  (`state` her tur küçük bir özet saklar).
-
-### 2.9 Platform
-
-- **Telefona kurma (PWA):** manifest + service worker; ana ekrana eklenir, internetsiz açılır.
-- **Aynı cihazda iki kişi (hotseat):** birden çok oyuncu medeniyeti; tur sırası; ekranda "Sıra
-  Kartaca'da" geçiş ekranı. Kural katmanı tek oyuncu varsayıyor (`state.player`); en büyük iş bu.
+Detaylı sürümden geri getirilebilecekler (kullanıcı isterse, birer birer, "karıştırır mı"
+diye sorarak): görevler, harikalar, generaller. Kod `detayli-surum` etiketinde.
 
 ---
 
 ## 3. Açık riskler ve bilinenler
 
-1. **Hiçbir insan oynamadı.** Bütün denge bot ölçümü (bilgisayar kendi kendine). Kullanıcıdan
-   15-20 dakika oynayıp "sıkıcı / zor / anlaşılmayan" söylemesi istendi (21.10), henüz cevap yok.
+1. **Sade sürümü henüz insan oynamadı.** Bütün denge bot ölçümü. Detaylı sürümü kullanıcı
+   oynadı: "ham, anlaşılmıyor, hantal, donuk" (22.10) - sadeleşmenin sebebi.
 2. **Normal zorluk zor olabilir.** Test oyuncusu (zayıf bir oyuncu) normalde 20-35. turda sık sık
    düşüyor. Kolay öneriliyor.
-3. **Limansız medeniyetler** (Galya, Partlar) liman yapılarından yararlanamıyor. Ölçümde şimdilik
-   sorun değil (Partlar sık sık en büyük), izlenmeli.
-4. **Mısır** hâlâ en sık büyüyenlerden.
+3. **Sakalar** sade sürümde en sık ilk düşen (21 oyunun 10'unda). İzlenmeli.
+4. **Yemek dar:** başlangıçta yemek askerine ancak yetiyor; büyümenin yolu Geliştir. Bilerek
+   böyle (kaynak - ordu döngüsü), ama oyuncu "asker basamıyorum" derse ilk bakılacak yer.
 5. **Dünyanın donması:** güçler dengelenince bilgisayarlar savaşmayı bırakabiliyor; çare
    zamanla düşen savaş eşiği (1.5 → 1.1). Yeni sistemler eklerken `balance.mjs` ile her oyunda
    savaş çıktığına bakılmalı (test.mjs de bakıyor).
@@ -248,7 +118,7 @@ birkaç derece payla yap ya da dışını çerçeveyle kapat.
 | `node Tools/strength.mjs .` | 20. turda ortalama güç, yer, gelir, gemi |
 | `node Tools/diverge.mjs <kök>` | İki sürümü aynı tohumla oynatıp ilk ayrılığı bulmak için |
 | `node Tools/bot.mjs 7 150` | 7 oyunun kısa özeti |
-| `node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720` | Ekran fotoğrafları (telefon: 390 844) |
+| `node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720` | Ekran fotoğrafları |
 | `node Tools/playtest.mjs "http://localhost:8060/?seed=31" carthage 40 normal` | Tarayıcıda, düğmelere basarak oynayan test |
 | `node Tools/film.mjs` | Bir yürüyüşün film şeridi |
 

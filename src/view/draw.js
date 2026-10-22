@@ -13,9 +13,8 @@ import { BOUNDS, LON_SCALE } from "../data/bounds.js";
 import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
-import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, ship, soldier, wonderMark } from "./pieces.js";
-import { wonderAt } from "../rules/wonders.js";
-import { clear, drawClouds, drawSnow, paintCompass, paintFog, paintGround, paintLabels } from "./atlas.js";
+import { CREAM, DARK, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, plaque, roundRect, ship, soldier } from "./pieces.js";
+import { clear, drawClouds, paintCompass, paintFog, paintLabels } from "./atlas.js";
 import { regions } from "./regions.js";
 import { TREES } from "../data/trees.js";
 
@@ -75,7 +74,8 @@ const MARK = { walk: INK.ink, easy: INK.good, risky: INK.warn, hopeless: INK.bad
  * Haritayı çiz. `view`:
  *   lang, owners {id: civ|null}, selected (yer id), armies [{id, owner, at, men, selected}],
  *   threats {id: asker} (oyuncunun tehdit altındaki yerleri),
- *   marks {id: "walk"|"easy"|"risky"|"hopeless"}, route [id, id, ...] (seçili ordunun yolu)
+ *   marks {id: "walk"|"easy"|"risky"|"hopeless"}, route [id, id, ...] (seçili ordunun yolu),
+ *   preview [id, id, ...] (farenin gösterdiği yere gidecek yol: henüz emir değil)
  * Dönen: ordu işaretlerinin kutuları [{ x, y, w, h, army }].
  */
 export function drawMap(ctx, cam, view, dpr) {
@@ -90,7 +90,6 @@ export function drawMap(ctx, cam, view, dpr) {
   const S = still(cam, view, dpr, L);
   ctx.drawImage(S.canvas, Math.round(-S.mx - (cam.x - S.cx) * k * dpr), Math.round(-S.my - (cam.y - S.cy) * k * dpr));
   if (TERRAIN?.complete) drawClouds(ctx, cam, dpr, SIZE.x, performance.now() / 1000);
-  if (view.winter) drawSnow(ctx, cam, dpr, performance.now() / 1000);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(vignette(Math.round(cam.w * dpr), Math.round(cam.h * dpr)), 0, 0);
 
@@ -111,6 +110,14 @@ export function drawMap(ctx, cam, view, dpr) {
       const r = roadBetween(view.route[i - 1], view.route[i]);
       strokeRoad(ctx, r, px, 5.6, [px(8), px(5)], "rgba(28,23,18,0.75)");
       strokeRoad(ctx, r, px, 3, [px(8), px(5)], CREAM);
+    }
+  }
+  // Önizleme: fare bir yerin üstündeyken seçili ordunun oraya gideceği yol, ince altın kesik.
+  if (view.preview?.length > 1) {
+    for (let i = 1; i < view.preview.length; i++) {
+      const r = roadBetween(view.preview[i - 1], view.preview[i]);
+      strokeRoad(ctx, r, px, 4.6, [px(5), px(5)], "rgba(28,23,18,0.55)");
+      strokeRoad(ctx, r, px, 2.4, [px(5), px(5)], GOLD_LIGHT);
     }
   }
   // Yürüyen orduların arkasındaki iz: geçtiği yollar ve şu anki yolun yürüdüğü kısmı, kendi
@@ -320,14 +327,6 @@ function paintTerrain(ctx, view, L, px, cam) {
   ctx.drawImage(TERRAIN, a.x, a.y, b.x - a.x, b.y - a.y);
   paintTrees(ctx, cam);
 
-  // Kış: kara soğuk, beyazımsı bir örtü altında.
-  if (view.winter) {
-    ctx.save();
-    ctx.fillStyle = "rgba(236,242,247,0.34)";
-    ctx.fill(L.dry, "evenodd");
-    ctx.restore();
-  }
-
   // Topraklar: sahibinin renginde ince bir boya, kenarlarında içe doğru aynı renkte bir parıltı
   // (iki medeniyetin sınırı iki renkli görünür). Sadece karada.
   ctx.save();
@@ -401,7 +400,7 @@ function still(cam, view, dpr, L) {
   // Sis görülen yerlere bağlı; adlar yazı tiplerine (yüklenince yeniden çizilsin).
   const fog = view.fog ? [...view.seen].sort().join(",") + "/" + [...view.friends].sort().join(",") : "-";
   const fonts = typeof document !== "undefined" ? document.fonts?.status : "";
-  const key = [k, W, H, ready, fog, fonts, view.winter ? "W" : "", PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
+  const key = [k, W, H, ready, fog, fonts, PLACES.map((p) => view.owners[p.id] ?? "-").join(",")].join("|");
   if (layer && layer.key === key && Math.abs(cam.x - layer.cx) * k * dpr <= layer.mx && Math.abs(cam.y - layer.cy) * k * dpr <= layer.my) return layer;
   const mx = Math.round(W * 0.3), my = Math.round(H * 0.3);
   const canvas = layer?.canvas ?? document.createElement("canvas");
@@ -424,7 +423,6 @@ function still(cam, view, dpr, L) {
     paintTerrain(ctx, view, L, px, { ...cam, w: cam.w * 1.6, h: cam.h * 1.6 });
     const ox = mx + dpr * (cam.w / 2 - cam.x * k), oy = my + dpr * (cam.h / 2 - cam.y * k);
     if (view.fog) paintFog(ctx, canvas, L.cells, POS, view.seen, view.friends, ox, oy, k, dpr);
-    paintGround(ctx, ox, oy, k, dpr);
     paintLabels(ctx, ox, oy, k, dpr);
     paintCompass(ctx, ox, oy, k, dpr);
     return layer;
@@ -584,11 +582,6 @@ function drawPlaces(ctx, cam, view, L) {
   };
   for (const { p, s } of shown) {
     if (view.threats?.[p.id]) ring(s, 30, INK.bad, 2.5, [6, 4]);
-    // Kuşatma: surların çevresinde koyu kırmızı, kalın, kesik bir halka.
-    if (view.sieges?.[p.id] !== undefined) {
-      ring(s, 36, "rgba(40,16,10,0.55)", 6, [4, 4]);
-      ring(s, 36, "rgba(178,52,40,0.95)", 3, [4, 4]);
-    }
     if (p.id === view.selected) ring(s, 24, GOLD_LIGHT, 2.2, null, "rgba(236,212,154,0.28)");
     const m = view.marks?.[p.id];
     if (m === "walk") ring(s, 21, "rgba(243,231,201,0.95)", 1.8, [3, 4]);
@@ -610,29 +603,8 @@ function drawPlaces(ctx, cam, view, L) {
     const lv = view.levels?.[p.id] ?? 2;
     if (p.kind === "castle") castleModel(ctx, s.x, s.y + 2 * z, z * 1.15, lv);
     else cityModel(ctx, s.x, s.y + 2 * z, z * 1.15, p.capital, lv);
-    if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1, view.blockade?.[p.id]);
+    if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1);
     ctx.globalAlpha = 1;
-    // Dünya harikası: sancağın sağında altın tapınaklı madalyon.
-    if (wonderAt(p.id)) wonderMark(ctx, s.x + f.w / 2 + 10, s.y - f.pole + 22, 8.5 * Math.max(1, Math.min(1.3, z)));
-    // Bir görevin hedefi: sancağın solunda altın bir madalyon.
-    if (view.goals?.[p.id]) goalMark(ctx, s.x - f.w / 2 - 10, s.y - f.pole + 2);
-    // Huzursuz (sadakati düşük) kendi yerin: sancağın yanında kırmızı bir ünlem rozeti.
-    const lo = view.unrest?.[p.id];
-    if (lo !== undefined) {
-      const x = s.x + f.w / 2 + 7, y = s.y - f.pole + 2;
-      ctx.beginPath();
-      ctx.arc(x, y, 6.5, 0, TAU);
-      ctx.fillStyle = lo < 25 ? INK.bad : INK.warn;
-      ctx.fill();
-      ctx.strokeStyle = CREAM;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.fillStyle = CREAM;
-      ctx.font = `bold 10px ${SERIF}`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("!", x, y + 0.5);
-    }
   }
 
   // Ordular. Karadakiler yerleşimin sağında yan yana asker figürleri, yanlarında sayıları.
@@ -656,11 +628,7 @@ function drawPlaces(ctx, cam, view, L) {
     // Sisin içindeki yabancı ordu görünmez (yürürken de: bulunduğu nokta açık mı).
     if (view.fog && a.owner !== view.me && !(a.float ? clear(a.float, view.seen, POS) : view.seen.has(a.at))) continue;
     // Yolda olan (animasyonla yürüyen) ordu bir yerleşime bağlı değil, yolun üstünde.
-    if (a.camp && !a.float) {
-      // Kuşatan ordunun kampı: hedefe giden yolun üstünde, surların önünde.
-      const s = toScreen(cam, a.camp.x, a.camp.y);
-      tokens.push({ x: s.x - 8 * zt, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), camp: true });
-    } else if (a.float) {
+    if (a.float) {
       const s = toScreen(cam, a.float.x, a.float.y);
       if (a.sea && a.ships > 0) tokens.push(fleetBox(a, s.x, s.y + 6 * zt, { moving: true, flip: a.dir < 0 }));
       else tokens.push({ x: s.x - 8 * zt, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), moving: true });
@@ -739,11 +707,6 @@ function drawPlaces(ctx, cam, view, L) {
         ctx.lineWidth = 1.6;
         ctx.stroke();
       }
-      // Kamp: askerin arkasında iki çadır.
-      if (t.camp) {
-        tent(ctx, -10, h - 3, 11, army.owner);
-        tent(ctx, 1, h - 9, 9, army.owner);
-      }
       // Karadaki ordunun gemileri varsa (limanda değil): ayağının altında küçük bir tekne.
       const boat = army.ships > 0;
       if (boat) ship(ctx, feet.x + 2, feet.y + 2, 0.8);
@@ -765,33 +728,7 @@ function drawPlaces(ctx, cam, view, L) {
 // Filonun kutusu (zt = 1'de): öndeki kadırganın su hattı (ax, ay), etiket `tag`tan sonra.
 const FLEET = { ax: 30, ay: 43, h: 50, tag: 57, k: 1.15 };
 
-/** Kamp çadırı: krem bez, sahibinin renginde şerit, koyu kapı. (x, y) zeminin ortası. */
-function tent(ctx, x, y, s, owner) {
-  ctx.beginPath();
-  ctx.moveTo(x - s * 0.7, y);
-  ctx.lineTo(x, y - s);
-  ctx.lineTo(x + s * 0.7, y);
-  ctx.closePath();
-  ctx.fillStyle = "#e9dcbc";
-  ctx.fill();
-  ctx.strokeStyle = "#3b3024";
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x - s * 0.36, y - s * 0.5);
-  ctx.lineTo(x + s * 0.36, y - s * 0.5);
-  ctx.strokeStyle = colorOf(owner);
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x, y - s * 0.45);
-  ctx.strokeStyle = "#3b3024";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-}
-
-/** Ordunun sayı etiketi: koyu, sahibinin renginde çerçeveli; generalliyse altın yıldız. */
+/** Ordunun sayı etiketi: koyu, sahibinin renginde çerçeveli. */
 function tag(ctx, army, label, tx, ty, tw, base) {
   const th = 16;
   ctx.globalAlpha = base;
@@ -806,15 +743,6 @@ function tag(ctx, army, label, tx, ty, tw, base) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(label, tx + tw / 2, ty + th / 2 + 0.5);
-  if (army.gen) {
-    // Generalli ordu: etiketin sağ üstünde altın bir yıldız.
-    ctx.font = `bold 12px ${SERIF}`;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = DARK;
-    ctx.strokeText("★", tx + tw, ty - 1);
-    ctx.fillStyle = "#e3b23c";
-    ctx.fillText("★", tx + tw, ty - 1);
-  }
 }
 
 // Bir limanın denize bakan yönü: çevresinde 24 yönde, birkaç uzaklıkta karaya mı denize mi
@@ -892,7 +820,7 @@ export function reach(cam, id, x, y) {
 }
 const byIdPlace = Object.fromEntries(PLACES.map((p) => [p.id, p]));
 
-function anchor(ctx, x, y, blockaded = false) {
+function anchor(ctx, x, y) {
   const shape = () => {
     ctx.beginPath();
     ctx.arc(x, y - 4.5, 1.3, 0, TAU);
@@ -908,9 +836,8 @@ function anchor(ctx, x, y, blockaded = false) {
   ctx.lineWidth = 3.6;
   ctx.stroke();
   shape();
-  // Ablukadaki liman: kırmızı çapa.
-  ctx.strokeStyle = blockaded ? "#ff6a55" : CREAM;
-  ctx.lineWidth = blockaded ? 1.8 : 1.3;
+  ctx.strokeStyle = CREAM;
+  ctx.lineWidth = 1.3;
   ctx.stroke();
 }
 

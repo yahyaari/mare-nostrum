@@ -8,7 +8,6 @@
 import { CIVS } from "../data/world.js";
 import { byId } from "./graph.js";
 import { placesOf, strength } from "./state.js";
-import { wonderAt } from "./wonders.js";
 
 const MAX = 300;
 
@@ -26,7 +25,7 @@ export function snapshot(state) {
 export function record(state, events) {
   state.annals ??= [];
   const me = state.player;
-  const big = (id) => byId[id]?.capital || !!wonderAt(id);
+  const big = (id) => !!byId[id]?.capital;
   const add = (e) => state.annals.push({ t: state.turn, ...e });
   for (const e of events) {
     if (!e) continue;
@@ -34,18 +33,15 @@ export function record(state, events) {
       const by = e.attacker ?? e.by, from = e.defender ?? e.from;
       if (by === me || from === me || big(e.place)) add({ k: "took", by, place: e.place, from: from ?? null });
     }
-    if (e.type === "revolt" && (e.civ === me || big(e.place))) add({ k: "revolt", place: e.place, from: e.civ });
     if (e.fallen) add({ k: "fallen", civ: e.fallen });
     if (e.type === "war") add({ k: "war", by: e.by, on: e.on });
     if (e.type === "ally") add({ k: "ally", by: e.by, to: e.to });
     if (e.type === "peace") add({ k: "peace", by: e.by, to: e.to });
     if (e.type === "broke") add({ k: "broke", by: e.by, with: e.with });
-    if (e.type === "siege" && (e.by === me || e.defender === me)) add({ k: "siege", by: e.by, place: e.place });
-    if (e.type === "mission" && e.ok) add({ k: "mission", m: { key: e.mission.key, place: e.mission.place, other: e.mission.other, need: e.mission.need, what: e.mission.what } });
   }
   // Taşarsa: önce oyuncuyu ilgilendirmeyen en eski satır düşer.
   while (state.annals.length > MAX) {
-    const i = state.annals.findIndex((a) => ![a.by, a.from, a.on, a.to, a.with, a.civ].includes(me) && a.k !== "mission");
+    const i = state.annals.findIndex((a) => ![a.by, a.from, a.on, a.to, a.with, a.civ].includes(me) && true);
     state.annals.splice(i >= 0 ? i : 0, 1);
   }
 }

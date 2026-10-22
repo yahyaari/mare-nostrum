@@ -1,7 +1,7 @@
 // Oyuncu gibi oynayan test: tarayıcıda oyunu açar, bir medeniyet seçer ve N tur boyunca her
 // şeyi ekrandaki düğmelere ve haritaya gerçek basışlarla yapar (Tools/playtest.page.js).
 // Bot (bot.mjs) kuralları sınar; bu, arayüzün o kurallara gerçek oyun durumlarında - savaşta,
-// kuşatılmışken, raporlarla - doğru bağlandığını sınar.
+// saldırırken, haberlerle - doğru bağlandığını sınar.
 //
 //   node Tools/playtest.mjs [url] [medeniyet] [tur] [zorluk] [genişlik] [yükseklik]
 //   node Tools/playtest.mjs http://localhost:8060/ saka 60 easy
@@ -54,7 +54,8 @@ try {
   if (!(cont && after === before)) process.exitCode = 1;
   await page.shot(dir, "99_son");
   console.log(`\nson: tur ${last?.turn} yer ${last?.places} asker ${last?.men} | en yavaş tur ${slow}ms`);
-  console.log(`basış ${s.pressed} yükseltme ${s.upgrades} bölük ${s.recruits} ordu ${s.armies} yürüyüş ${s.marches} saldırı ${s.attacks} (zafer ${s.won}) savaş ilanı ${s.wars} ittifak ${s.allies} karar ${s.decided} liman yapısı ${s.port} gemi ${s.ships} görev ${s.missions ?? 0}`);
+  console.log(`basış ${s.pressed} geliştirme ${s.upgrades} bölük ${s.recruits} ordu ${s.armies} yürüyüş ${s.marches} saldırı ${s.attacks} (zafer ${s.won}) savaş ilanı ${s.wars} ittifak ${s.allies} gemi ${s.ships}`);
+  console.log(`ipucu ${s.tips} yol önizlemesi ${s.previews} | tur sonunda açılan pencere ${s.popups}`);
   if (s.over) console.log("oyun bitti: " + JSON.stringify(s.over));
   const missed = [...new Set(s.missed)];
   if (missed.length) console.log("bulunamayan düğmeler: " + missed.slice(0, 10).join(" | "));

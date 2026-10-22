@@ -135,20 +135,26 @@ const TAP = (id) => `{ const p = M.where('${id}'); M.tap(p.x, p.y); }`;
 const AT = (ms) => `M.anim.freeze(performance.now() + ${ms})`;
 const DONE = "M.anim.freeze(null); M.anim.finish(); M.redraw()";
 
+// Sağ tık: seçili orduyu yürüt ya da saldırt (önce fareyle üstüne gelir: ipucu ve yol).
+const RIGHT = (id) => `{ const p = M.where('${id}'); M.hover(p.x, p.y); M.rightTap(p.x, p.y); }`;
+const HOVER = (id) => `{ const p = M.where('${id}'); M.hover(p.x, p.y); }`;
+
 await shot("01_baslangic", "");
 await shot("02_secim_tr", `${D({ do: "lang", lang: "tr" })}; ${D({ do: "pick", civ: "saka" })}`);
 await shot("03_basla_yardim", `${D({ do: "lang", lang: "en" })}; ${D({ do: "pick", civ: "rome" })}; ${D({ do: "start" })}`);
 await shot("04_harita", D({ do: "close" }));
 await shot("05_sehir_karti", TAP("rome"));
+await shot("05b_asker_ipucu", `const b = M.boxes().find((x) => x.act?.do === 'recruit' && x.act.type === 'arch'); M.hover(b.x + b.w / 2, b.y + b.h / 2); M.ui.tip.since = 0`);
 await shot("06_ordu_cikar", D({ do: "formOpen", id: "rome" }));
 await shot("07_ordu_secili", D({ do: "formOk" }));
-await shot("08_yolda", `${TAP("ariminum")}; ${AT(200)}`);
+await shot("07b_yol_onizleme", `M.look('ariminum', 2.2); ${HOVER("ariminum")}; M.ui.tip.since = 0`);
+await shot("08_yolda", `${RIGHT("ariminum")}; ${AT(200)}`);
 await shot("08b_vardi", DONE);
 await shot("09_tur_seridi", `${D({ do: "endTurn" })}; ${AT(450)}`);
-await shot("09b_tur_raporu", DONE);
-await shot("10_saldiri_isaretleri", `${D({ do: "close" })}; const a = M.game.armies.find((x) => x.owner === 'rome');
-  a.inf = 120; M.ui.sel = { kind: 'army', id: a.id }; M.look('ariminum', 2.6)`);
-await shot("11_saldiri_penceresi", TAP("mediolanum"));
+await shot("09b_tur_sonu", DONE);
+await shot("10_saldiri_isaretleri", `const a = M.game.armies.find((x) => x.owner === 'rome');
+  a.inf = 120; M.ui.sel = { kind: 'army', id: a.id }; M.look('ariminum', 2.6); ${HOVER("mediolanum")}; M.ui.tip.since = 0`);
+await shot("11_saldiri_penceresi", RIGHT("mediolanum"));
 await shot("12_saldiri_ani", `${D({ do: "attack" })}; ${AT(520)}`);
 await shot("12b_savas_sonucu", DONE);
 await shot("13_diplomasi", `${D({ do: "close" })}; ${D({ do: "open", modal: "diplo" })}`);
@@ -158,56 +164,23 @@ await shot("16_yabanci_kart", "M.ui.sel = { kind: 'place', id: 'massalia' }; M.l
 // Tehdit: Kartaca Siraküza'yı almış, savaş açmış, ordusu Tarentum'un yanında.
 await shot("17_tehdit_raporu", `${D({ do: "lang", lang: "en" })}; const g = M.game;
   g.places.syracuse.owner = 'carthage'; g.relations['carthage|rome'] = 'war';
-  g.armies.push({ id: 999, owner: 'carthage', at: 'syracuse', inf: 80, arch: 20, moves: 1, route: [] });
+  g.armies.push({ id: 999, owner: 'carthage', at: 'syracuse', inf: 80, arch: 20, cav: 0, ships: 0, moves: 1, route: [] });
   M.ui.sel = null; M.look('tarentum', 2.2); ${D({ do: "open", modal: "report" })}`);
 await shot("18_tehdit_halkasi", D({ do: "close" }));
-// Rakibin hamlesi: Kartaca'nın 100 askeri Tarentum'a yürüyüp saldırır, tur arası gösterisinde.
+// Rakibin hamlesi: Kartaca'nın askeri Tarentum'a yürüyüp saldırır, tur arası gösterisinde.
 await shot("19_rakip_yuruyor", `${D({ do: "endTurn" })}; ${AT(1150)}`);
 await shot("19b_rakip_carpisma", AT(1350));
 await shot("19c_el_degisti", AT(1900));
-await shot("19d_rapor", DONE);
-// Mektuplar: akın ve haraç; karar penceresi.
-await shot("20_mektup_akin", `M.ui.modal = null; M.game.inbox.push({ id: 900, turn: M.game.turn, type: 'event', key: 'raid', civ: 'rome',
-  place: 'ariminum', raiders: 45, bribe: 14 }); ${D({ do: "close" })}`);
-await shot("21_mektup_harac", `${D({ do: "decide", id: 900, choice: "bribe" })}; M.game.inbox.push({ id: 901, turn: M.game.turn,
-  type: 'offer', key: 'tribute', civ: 'gaul', amount: 32 }); ${D({ do: "close" })}`);
-// Sadakat: huzursuz Mediolanum, kartı ve haritadaki rozeti.
-await shot("22_sadakat", `${D({ do: "decide", id: 901, choice: "pay" })}; ${DONE}; M.ui.modal = null;
-  M.game.places.mediolanum.loyalty = 18; M.game.places.ariminum.loyalty = 33; M.ui.sel = { kind: 'place', id: 'mediolanum' }; M.look('mediolanum', 2.2)`);
-await shot("23_sadakat_tr", `${D({ do: "lang", lang: "tr" })}`);
-// General: ata, sonra bir zaferde seviye atlasın.
-await shot("24_general_ata", `${D({ do: "lang", lang: "en" })}; M.game.civs.rome.money = 100;
-  const a = M.game.armies.find((x) => x.owner === 'rome' && x.at === 'mediolanum'); a.moves = 1; a.inf = 160;
-  M.ui.sel = { kind: 'army', id: a.id }; M.look('mediolanum', 2.4)`);
-await shot("25_general_atandi", `${D({ do: "appoint", army: 0 }).replace("0", "M.ui.sel.id")}; ${DONE}`);
-await shot("26_general_zafer", `const a = M.game.armies.find((x) => x.owner === 'rome' && x.at === 'mediolanum'); a.general.xp = 2;
-  ${TAP("massalia")}; ${D({ do: "attack" })}; ${DONE}`);
-await shot("28_dort_tur", `M.ui.modal = null; const r = M.game.places.rome; r.level = 3; r.barracks = 3; r.industry = 3; r.cav = 20; r.siege = 10;
-  r.upgraded = false; r.recruited = 0; M.game.civs.rome.money = 90; M.game.civs.rome.weapons = 30; M.game.civs.rome.food = 30;
-  M.ui.sel = { kind: 'place', id: 'rome' }; M.look('rome', 2.2)`);
-await shot("29_ordu_cikar_dort", D({ do: "formOpen", id: "rome" }));
-await evaluate(`(() => { const M = window.MareNostrum; M.dispatch({ do: "close" }); return true; })()`);
-await shot("27_general_kart", `${D({ do: "close" })}; const a = M.game.armies.find((x) => x.owner === 'rome' && x.general);
-  M.ui.sel = { kind: 'army', id: a.id }; M.redraw()`);
-// Donanma: Kartaca ile yeni oyun.
+await shot("19d_haberler", DONE);
+// Donanma: Kartaca ile yeni oyun; gemili ordu denizden yürür ve saldırır.
 await shot("30_kartaca_liman", `M.ui.modal = null; ${D({ do: "newGame" })}; ${D({ do: "pick", civ: "carthage" })}; ${D({ do: "start" })};
   ${D({ do: "close" })}; M.game.civs.carthage.money = 80; M.ui.sel = { kind: 'place', id: 'carthage' }; M.look('carthage', 2.4)`);
-await shot("30b_liman_sekmesi", `${D({ do: "cardTab", tab: "port" })}; M.game.places.carthage.fishery = 1; M.game.places.carthage.trade = 1`);
-await shot("30c_liman_tr", `${D({ do: "lang", lang: "tr" })}`);
-await shot("31_gemili_ordu_cikar", `${D({ do: "lang", lang: "en" })}; ${D({ do: "cardTab", tab: "city" })}; ${D({ do: "formOpen", id: "carthage" })}`);
-await shot("32_denizde", `M.ui.modal.ships = 2; ${D({ do: "formOk" })}; ${TAP("lilybaeum")}; ${AT(190)}`);
+await shot("31_gemili_ordu_cikar", D({ do: "formOpen", id: "carthage" }));
+await shot("32_denizde", `M.ui.modal.ships = 2; ${D({ do: "formOk" })}; ${RIGHT("lilybaeum")}; ${AT(190)}`);
 await shot("33_deniz_saldiri", `${DONE}; const g = M.game; const a = g.armies.find((x) => x.owner === 'carthage');
-  a.at = 'carthage'; a.moves = 1; a.inf = 70; a.ships = 3; a.route = []; M.ui.sel = { kind: 'army', id: a.id }; M.look('carthage', 2.2);
-  ${TAP("caralis")}`);
+  a.at = 'carthage'; a.moves = 1; a.inf = 120; a.ships = 3; a.route = []; M.ui.sel = { kind: 'army', id: a.id }; M.look('carthage', 2.2);
+  ${RIGHT("caralis")}`);
 await shot("34_deniz_zafer", `${D({ do: "attack" })}; ${DONE}`);
-await shot("35_abluka", `${D({ do: "close" })}; const g = M.game; g.relations['carthage|rome'] = 'war';
-  g.places.lilybaeum.owner = 'carthage'; g.places.syracuse.owner = 'rome';
-  g.armies.push({ id: 990, owner: 'rome', at: 'syracuse', inf: 0, arch: 0, cav: 0, siege: 0, ships: 4, moves: 1, route: [], general: null });
-  g.places.tarentum.ships = 0; g.armies.push({ id: 991, owner: 'carthage', at: 'syracuse', inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, moves: 0, route: [], general: null });
-  g.armies = g.armies.filter((x) => x.id !== 991);
-  g.places.syracuse.owner = 'carthage'; g.places.tarentum.owner = 'carthage'; g.armies.find((x) => x.id === 990).at = 'epidamnos';
-  g.places.epidamnos.owner = 'rome';
-  M.ui.sel = { kind: 'place', id: 'tarentum' }; M.look('tarentum', 2.4)`);
 await evaluate(`(() => { const M = window.MareNostrum; ${D({ do: "lang", lang: "en" })}; return true; })()`);
 
 for (const line of log) console.log("  " + line);

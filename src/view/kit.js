@@ -29,8 +29,8 @@ export const TITLE_FONT = '"Cinzel", Georgia, serif';
 const FONT_K = 1.12;
 export const TAU = Math.PI * 2;
 
-/** Farenin ekrandaki yeri (main.js günceller): üstüne gelinen düğme parlar. */
-export const pointer = { x: -1, y: -1 };
+/** Farenin ekrandaki yeri ve basılı mı (main.js günceller): üstüne gelinen düğme parlar, basılan çöker. */
+export const pointer = { x: -1, y: -1, down: false };
 export const over = (x, y, w, h) => pointer.x >= x && pointer.x <= x + w && pointer.y >= y && pointer.y <= y + h;
 
 const civ = Object.fromEntries(CIVS.map((c) => [c.id, c]));
@@ -170,25 +170,28 @@ function rounded(ctx, x, y, w, h, r) {
 }
 
 /**
- * Düğme. `b`: { x, y, w, h, label, act, off, main, size, sub }.
+ * Düğme. `b`: { x, y, w, h, label, act, off, main, size, sub, tip }.
  * `off` (kapalı) düğme basılmaz ama basışı yutar. `main` koyu, altın çerçeveli (asıl eylem).
- * `sub` ikinci satır. Ötekiler açık kâğıt, kahve çerçeveli, hafif kabarık.
+ * `sub` ikinci satır. Ötekiler açık kâğıt, kahve çerçeveli, hafif kabarık. Basılı tutulan
+ * düğme bir piksel aşağı iner ve koyulaşır (kullanıcı 22.10: "tepki az"). `tip`: üstüne
+ * gelince çıkan açıklama (kapalı düğmede de: neden kapalı olduğunu söyler).
  */
 export function button(ctx, boxes, b) {
-  const { x, y, w, h } = b;
-  const hot = !b.off && over(x, y, w, h);
+  const hot = !b.off && over(b.x, b.y, b.w, b.h);
+  const down = hot && pointer.down;
+  const { x, w, h } = b, y = b.y + (down ? 1 : 0);
   const g = ctx.createLinearGradient(0, y, 0, y + h);
   if (b.off) { g.addColorStop(0, "rgba(226,212,178,0.75)"); g.addColorStop(1, "rgba(214,198,160,0.75)"); }
-  else if (b.main) { g.addColorStop(0, hot ? "#54432f" : "#3a2e22"); g.addColorStop(1, hot ? "#241c14" : "#17120d"); }
-  else { g.addColorStop(0, hot ? "#fffbf0" : "#fbf3df"); g.addColorStop(1, hot ? "#efe0bb" : "#e4d3ab"); }
+  else if (b.main) { g.addColorStop(0, down ? "#241c14" : hot ? "#54432f" : "#3a2e22"); g.addColorStop(1, down ? "#3a2e22" : hot ? "#241c14" : "#17120d"); }
+  else { g.addColorStop(0, down ? "#e4d3ab" : hot ? "#fffbf0" : "#fbf3df"); g.addColorStop(1, down ? "#f5ead0" : hot ? "#efe0bb" : "#e4d3ab"); }
   rounded(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 3);
   ctx.fillStyle = g;
   ctx.fill();
   ctx.strokeStyle = b.off ? "rgba(140,120,90,0.55)" : b.main ? (hot ? "#ecd49a" : "#c9a45a") : hot ? "#a87f3a" : "#5a4630";
   ctx.lineWidth = b.main ? 1.6 : 1.2;
   ctx.stroke();
-  if (!b.off) {
-    // İçte ince bir çizgi: kabarık dursun.
+  if (!b.off && !down) {
+    // İçte ince bir çizgi: kabarık dursun (basılıyken çökük).
     rounded(ctx, x + 2.5, y + 2.5, w - 5, h - 5, 2);
     ctx.strokeStyle = b.main ? "rgba(201,164,90,0.35)" : "rgba(255,255,255,0.55)";
     ctx.lineWidth = 1;
@@ -202,10 +205,10 @@ export function button(ctx, boxes, b) {
   } else {
     text(ctx, b.label, x + w / 2, y + h / 2 + 1, { bold: true, size, color, align: "center", base: "middle" });
   }
-  boxes.push({ x, y, w, h, act: b.off ? null : b.act });
+  boxes.push({ x, y: b.y, w, h, act: b.off ? null : b.act, tip: b.tip });
 }
 
-// ---- simgeler: para, silah, yiyecek, nüfus ----
+// ---- simgeler: altın, yemek, asker ----
 
 export function icon(ctx, kind, x, y, s = 14, color = INK.ink) {
   const k = s / 14;
@@ -223,15 +226,6 @@ export function icon(ctx, kind, x, y, s = 14, color = INK.ink) {
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(7, 7, 3, 0, TAU);
-    ctx.stroke();
-  } else if (kind === "weapons") {
-    ctx.moveTo(2, 12);
-    ctx.lineTo(12, 2);
-    ctx.moveTo(3.5, 7.5);
-    ctx.lineTo(6.5, 10.5);
-    ctx.moveTo(1.5, 12.5);
-    ctx.lineTo(3, 11);
-    ctx.lineWidth = 1.8;
     ctx.stroke();
   } else if (kind === "food") {
     ctx.moveTo(7, 13);
@@ -263,9 +257,9 @@ export function amount(ctx, kind, n, x, y, o = {}) {
   return s + 3 + text(ctx, String(n), x + s + 3, y, { bold: o.bold, size: s, color: o.color });
 }
 
-/** Bir maliyeti (para/silah/yiyecek) simgelerle, ortalanmış çizer. */
+/** Bir maliyeti (altın/yemek) simgelerle, ortalanmış çizer. */
 export function costLine(ctx, cost, cx, y, color, size = 11) {
-  const parts = ["money", "weapons", "food"].filter((k) => cost[k] > 0);
+  const parts = ["money", "food"].filter((k) => cost[k] > 0);
   const widths = parts.map((k) => size + 3 + measure(ctx, String(cost[k]), { size }));
   const total = widths.reduce((a, b) => a + b, 0) + (parts.length - 1) * 8;
   let x = cx - total / 2;
