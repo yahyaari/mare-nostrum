@@ -176,6 +176,11 @@ export function row(seconds) {
   for (let i = 0; i < n; i++) noise({ seconds: 0.4, loud: 0.07, from: 900, to: 250, delay: i * 0.55, attack: 0.12 });
 }
 
+/** Ok yağmuru: havada vızıldayan oklar. */
+export function volley() {
+  for (let i = 0; i < 5; i++) noise({ seconds: 0.25, loud: 0.04, type: "bandpass", from: 3200, to: 1400, q: 4, delay: i * 0.06 });
+}
+
 /** Çarpışma: kılıçlar, kalkanlar. */
 export function clash() {
   for (let i = 0; i < 3; i++) {

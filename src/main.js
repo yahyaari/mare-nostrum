@@ -25,6 +25,7 @@ import { relation } from "./rules/state.js";
 import { sight } from "./rules/sight.js";
 import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
+import { SCENE_MS } from "./view/battle.js";
 import { alongRoad, drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
 import { drawUI, eventLines, missionText } from "./view/ui.js";
@@ -114,7 +115,9 @@ function redraw() {
     boxes = [];
     drawUI(ctx, cam, game, ui, boxes, view);
     drawOverlay(ctx, cam, view.fx);
-    if (anim.busy() || gliding) redraw();
+    // Savaş sahnesi sürerken her kare çizilir.
+    const scene = ui.modal?.kind === "battle" && performance.now() - (ui.modal.t0 ?? 0) < SCENE_MS;
+    if (anim.busy() || gliding || scene) redraw();
     // Canlı harita: bulutlar süzülür, sancaklar dalgalanır - saniyede 20 kare, sekme arkadayken hiç.
     else if (!ambient && !document.hidden) ambient = setTimeout(() => { ambient = null; redraw(); }, 50);
     if (!anim.busy()) settle();
@@ -160,7 +163,14 @@ function updateMood() {
 function settle() {
   blocking = false;
   if (pending) {
-    if (pending.kind === "battle") (pending.ev.won ? sound.victory : sound.defeat)();
+    if (pending.kind === "battle") {
+      // Savaş sahnesi: sesler sahneyle aynı anda (oklar, çarpışma, sonuç).
+      pending.t0 = performance.now();
+      const ev = pending.ev;
+      if (!ev.drowned && ((ev.before.att.arch ?? 0) + (ev.before.def.arch ?? 0)) > 0) setTimeout(sound.volley, 250);
+      setTimeout(sound.clash, ev.drowned ? 1500 : 1450);
+      setTimeout(ev.won ? sound.victory : sound.defeat, SCENE_MS - 300);
+    }
     else if (pending.kind === "over") (game?.over?.result === "won" ? sound.victory : sound.defeat)();
     else if (pending.kind === "decide" || pending.kind === "mission") sound.scroll();
     ui.modal = pending;

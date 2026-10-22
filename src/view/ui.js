@@ -29,6 +29,7 @@ import { wonderAt } from "../rules/wonders.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { sight } from "../rules/sight.js";
 import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
+import { drawBattle } from "./battle.js";
 import { drawVignette } from "./draw.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
@@ -742,12 +743,16 @@ function battleModal(ctx, cam, game, ui, boxes, T, m) {
   if (e.genFell) extra.push([fill(T.genFell, e.genFell), INK.bad]);
   if (e.drowned) extra.unshift([T.drowned, INK.bad]);
   else if (e.naval?.won && e.naval.sunk) extra.unshift([fill(T.navalWin, e.naval.sunk), INK.good]);
-  const r = modalFrame(ctx, cam, boxes, 190 + extra.length * 22);
-  text(ctx, e.won ? fill(T.won, where) : fill(T.lost, where), r.x + r.w / 2, r.y + 50, {
+  // Üstte savaş sahnesi (battle.js): pencere açıldığından beri geçen süreyle oynar.
+  const SH = 180;
+  const r = modalFrame(ctx, cam, boxes, 190 + SH + 16 + extra.length * 22);
+  drawBattle(ctx, { x: r.x + 16, y: r.y + 16, w: r.w - 32, h: SH }, e, performance.now() - (m.t0 ?? 0), wallsOf(game, e.place));
+  const y0 = r.y + SH + 16;
+  text(ctx, e.won ? fill(T.won, where) : fill(T.lost, where), r.x + r.w / 2, y0 + 44, {
     title: true, bold: true, size: 19, align: "center", color: e.won ? INK.good : INK.bad,
   });
-  text(ctx, fill(T.losses, lost), r.x + r.w / 2, r.y + 84, { size: 14, align: "center" });
-  extra.forEach(([s, color], i) => text(ctx, s, r.x + r.w / 2, r.y + 108 + i * 22, { size: 14, bold: true, align: "center", color }));
+  text(ctx, fill(T.losses, lost), r.x + r.w / 2, y0 + 78, { size: 14, align: "center" });
+  extra.forEach(([s, color], i) => text(ctx, s, r.x + r.w / 2, y0 + 102 + i * 22, { size: 14, bold: true, align: "center", color }));
   oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
 }
 

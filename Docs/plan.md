@@ -114,7 +114,9 @@ kaydırma iki karede 58 ms'den 33 ms'ye = 60 kare/sn). Karartma ayrı, ekrana sa
 
 **Kronik YAPILDI (22.10):** `rules/chronicle.js`, kurallar.md 21. Tur tur yer/asker grafiği + yıllık (menüden ve oyun sonundan). Kayıt sürümü 7. 15 yeni kontrol (1880).
 
-**Sırada (plan sırası): savaş sahnesi, arazi/mevsim, iki kişi; en son öğretici.**
+**Savaş sahnesi YAPILDI (22.10):** `view/battle.js`. Savaş sonucu penceresinin üstünde 2.9 sn: okçular ok yağdırır, süvari hücum eder, saflar çarpışır, kayıp oranında figür düşer, kaybeden çekilir, kazananın sancağı yükselir; surlu yerde savunanlar mazgallı burcun ardında; ordu battıysa denizde kadırgalar batar. Sesler sahneyle senkron (ok vızıltısı, kılıç, sonuç). Rastgele değil: aynı savaş hep aynı oynar.
+
+**Sırada (plan sırası): arazi/mevsim, iki kişi; en son öğretici.**
 
 **İlk deneme:** `?terrain` / `?terrain&natural` — Natural Earth II 1:10m boyalı arazi
 (kamu malı), `Tools/terrain.py` ile kesilip parşömen tonuna çekildi, `assets/terrain.jpg`
