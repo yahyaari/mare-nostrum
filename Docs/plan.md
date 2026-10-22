@@ -3,7 +3,48 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **22.10.2026** (sadeleşme denendi, geri alındı; panel altta ortada).
+> Son güncelleme: **22.10.2026 gece** (auto-compact öncesi notlar).
+
+## NEREDE KALDIK (22.10 gece) - önce bunu oku
+
+**Durum:** detaylı oyun (tarla/sanayi/kışla/liman yapıları, sadakat, olaylar, görevler,
+generaller, kuşatma, harikalar, mevsim, sis) + bugün eklenenler. Son commit `fe28dda`, push'landı.
+1924 kontrol geçiyor. Kayıt sürümü 8. Kullanıcı son durumdan memnun ("tamam güzel olmuş").
+
+**22.10'da yapılanlar (sırayla, hepsi push'lı):**
+1. Sadeleşme denendi (8728c03) ve kullanıcı istemedi -> detaylı kurallar geri (3782d63). DERS:
+   anlaşılmazlığın çaresi sistem kesmek değil, anlatmak / kontrol / tepki.
+2. Seçim kartı ALTTA ORTADA (Total War gibi), yatay sütunlu: şehir | yükseltmeler (Şehir/Liman
+   sekmeli) | asker ya da gemi. Kart açıkken alt menü gizli; seçilen yer kartın üstüne kayar.
+3. Kontrol: sol tık seçer, SAĞ TIK yürütür/saldırtır; üstüne gelince yol + kaç tur; ipuçları
+   (her düğme/kaynak/yer/ordu); tur sonu haberleri sağ üstte (rapor penceresi yok); pencere
+   açılış geçişi; basılı düğme çöker; Enter turu bitirir, Tab sıradaki ordu.
+4. Medeniyet seçimi Bannerlord gibi (5e33c61): solda sancaklar, sağda tek medeniyet paneli
+   (başkenti + askerleri görseli, tarihçe, ▲▼, başlangıç toprakları ve ordusu), ‹ › / ← →,
+   harita arkada o medeniyete süzülür (`camera.pad` ile kenardakiler de ortaya gelir).
+5. Kamera akıcı (d934802): kıpırdarken durağan katman ölçeklenir, gerekirse yarım çözünürlükte,
+   durunca keskin. `node Tools/fps.mjs` ölçer.
+6. Yardım duvarı yerine ipucu balonları (eb0e7e9): tek balon, atan altın çerçeve, oyuncu yapınca
+   geçer; menüde İpuçları aç/kapa; Nasıl oynanır 8 sayfa.
+7. Tur gösterisi (18a0d9c): Turu bitir -> kamera bütün dünyaya uzaklaşır, rakipler oynar (şerit,
+   sisteki savaşa kızıl parıltı), kamera oyuncunun yerine döner. (Önce durak durak gezen hâli
+   yapıldı, kullanıcı "uzaktan tüm dünya" istedi.)
+8. İnşaatçılar (a30c6b6): şehirde 2, kalede 1; süre gidilen seviye kadar tur (seviye/kışla/
+   tersane +1); para başta, iptalde geri; kuşatmada durur; el değişince yıkılır.
+9. Denge (fe28dda): inşaatçılarla ilk düşüş 50 -> 29 oldu (sebep: yükseltme aynı tur işe
+   yaramıyor). Kullanıcının önerisiyle küçüklere başta fazladan asker + yiyecek: Galya 40+20,
+   Partlar 55+30, Sakalar 35+20. Şimdi ilk düşüş 44, hayatta kalma eskisine yakın.
+
+**Sırada:** kullanıcı oynayıp söyleyecek. Önerilenler: arkadaşlarla oynama (aynı bilgisayarda
+sıra ile - hotseat; kural katmanı tek oyuncu varsayıyor: `state.player`), şehir panelinin
+zenginleşmesi; öğretici EN SONDA (ipucu balonları şimdilik onun hafif hâli).
+
+**Bu makinede tuzaklar (bugün yaşandı):** `git checkout <commit> -- dosyalar` dosyaları CRLF
+getiriyor (autocrlf) -> metin eşleyen yama betikleri tutmuyor; önce `node Logs/lf.cjs` ile LF.
+Yama betikleri Write ile `Logs/*.cjs`e (kesme işareti heredoc'u bozuyor); Write içeriğinde
+\` yazma, düz ` yaz. `grep '\\`'` her satırı eşler (GNU grep'te başlangıç çapası), `grep -F` kullan.
+Ekran görüntüsü betikleri `Logs/*shots*.mjs` (gitignore'da) - sunucu `node Tools/serve.mjs`.
+
 
 ---
 
@@ -20,7 +61,7 @@
   Pages `master`'dan, push'tan ~1 dakika sonra yayında.
 - **Dil:** Arayüz İngilizce asıl, Türkçe ikinci (sağ üst / menü). Belgeler ve kod yorumları
   Türkçe.
-- **Push'tan önce:** `node Tools/test.mjs` (1897 kontrol, hepsi geçmeli). Kurala dokunduysan
+- **Push'tan önce:** `node Tools/test.mjs` (1924 kontrol, hepsi geçmeli). Kurala dokunduysan
   `node Tools/balance.mjs 70`. Arayüze dokunduysan `node Tools/peek.mjs ...` ve
   `node Tools/playtest.mjs ...` (komutlar `working-on-this.md`'de).
 
