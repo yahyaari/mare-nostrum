@@ -14,7 +14,7 @@ import { byId, roadLine } from "./graph.js";
 import { bestAt, bury, has, learn } from "./generals.js";
 import { N, SHIPS, UNITS, trait } from "./numbers.js";
 import { between, random } from "./rng.js";
-import { armiesAt, armyById, canSail, empty, fleetOf, info, men, placesOf, relation, shipsOnly } from "./state.js";
+import { armiesAt, armyById, canSail, empty, fleetOf, info, isHuman, men, placesOf, relation, shipsOnly } from "./state.js";
 import { holds } from "./wonders.js";
 import { groundOf } from "./ground.js";
 import { isWinter } from "./season.js";
@@ -197,7 +197,7 @@ const foes = (state, army) => state.armies.filter((b) => b !== army && !b.at && 
 export function order(state, armyId, target) {
   const army = armyById(state, armyId);
   if (!army) return -1;
-  const r = routeTo(state, army, target, army.owner === state.player ? {} : { extra: avoidFor(state, army.owner) });
+  const r = routeTo(state, army, target, isHuman(state, army.owner) ? {} : { extra: avoidFor(state, army.owner) });
   if (r === null) return -1;
   army.route = r.cells.slice(1);
   return advance(state, army);

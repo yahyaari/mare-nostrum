@@ -13,7 +13,7 @@ import { seat } from "./loyalty.js";
 import { defenders, wallsOf } from "./moves.js";
 import { N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
-import { armiesAt, budget, empty, info, key, men, placesOf, relation, strength } from "./state.js";
+import { armiesAt, budget, empty, info, isHuman, key, men, placesOf, relation, strength } from "./state.js";
 
 const pick = (state, list) => (list.length ? list[Math.floor(random(state) * list.length)] : null);
 const placeWhere = (state, civ, ok) => pick(state, placesOf(state, civ).filter(ok));
@@ -117,11 +117,14 @@ export const EVENTS = {
 
 // ---- teklifler: bilgisayardan oyuncuya ----
 
+/** Teklifin alıcısı: aynı bilgisayardaki oyunculardan biri (eski mektuplarda oyuncu). */
+const to = (s, it) => it.to ?? s.player;
+
 export const OFFERS = {
   ally: {
     options: () => [{ key: "accept" }, { key: "decline" }],
     apply(s, it, ch) {
-      if (ch === "accept" && relation(s, it.civ, s.player) === "neutral") s.relations[key(it.civ, s.player)] = "ally";
+      if (ch === "accept" && relation(s, it.civ, to(s, it)) === "neutral") s.relations[key(it.civ, to(s, it))] = "ally";
       return {};
     },
     ai: () => "accept",
@@ -129,18 +132,18 @@ export const OFFERS = {
   peace: {
     options: () => [{ key: "accept" }, { key: "decline" }],
     apply(s, it, ch) {
-      if (ch === "accept" && relation(s, it.civ, s.player) === "war") {
-        delete s.relations[key(it.civ, s.player)];
-        s.cooldown[key(it.civ, s.player)] = s.turn;
+      if (ch === "accept" && relation(s, it.civ, to(s, it)) === "war") {
+        delete s.relations[key(it.civ, to(s, it))];
+        s.cooldown[key(it.civ, to(s, it))] = s.turn;
       }
       return {};
     },
-    ai: (s, it) => (strength(s, s.player) < strength(s, it.civ) * 1.2 ? "accept" : "decline"),
+    ai: (s, it) => (strength(s, to(s, it)) < strength(s, it.civ) * 1.2 ? "accept" : "decline"),
   },
   trade: {
     options: () => [{ key: "accept" }, { key: "decline" }],
     apply(s, it, ch) {
-      if (ch === "accept" && relation(s, it.civ, s.player) !== "war") makeDeal(s, it.civ, s.player);
+      if (ch === "accept" && relation(s, it.civ, to(s, it)) !== "war") makeDeal(s, it.civ, to(s, it));
       return {};
     },
     ai: () => "accept",
@@ -149,24 +152,27 @@ export const OFFERS = {
     options: (s, it) => [{ key: "pay", money: it.amount }, { key: "refuse" }],
     apply(s, it, ch) {
       if (ch === "pay") {
-        s.truce[key(it.civ, s.player)] = s.turn + N.offers.truce;
+        s.truce[key(it.civ, to(s, it))] = s.turn + N.offers.truce;
         return {};
       }
       // Reddedildi: savaş. Müttefikse önce ittifak bozulur (tehdit eden müttefik olmaz zaten).
-      if (relation(s, it.civ, s.player) === "ally") breakAlliance(s, it.civ, s.player);
-      delete s.cooldown[key(it.civ, s.player)];
-      const ev = declareWar(s, it.civ, s.player);
+      if (relation(s, it.civ, to(s, it)) === "ally") breakAlliance(s, it.civ, to(s, it));
+      delete s.cooldown[key(it.civ, to(s, it))];
+      const ev = declareWar(s, it.civ, to(s, it));
       return { war: !!ev };
     },
-    ai: (s, it) => (strength(s, s.player) < strength(s, it.civ) * 0.7 && s.civs[s.player].money >= it.amount ? "pay" : "refuse"),
+    ai: (s, it) => (strength(s, to(s, it)) < strength(s, it.civ) * 0.7 && s.civs[to(s, it)].money >= it.amount ? "pay" : "refuse"),
   },
 };
+
+/** Bir mektubun sahibi: olaysa başına geldiği medeniyet, teklifse alıcısı. */
+export const ownerOf = (state, it) => (it.type === "offer" ? to(state, it) : it.civ);
 
 const kindOf = (it) => (it.type === "offer" ? OFFERS : EVENTS)[it.key];
 
 /** Bir mektubun seçenekleri, parası yetmeyen seçenek kapalı (`off`). */
 export function options(state, it) {
-  const payer = it.type === "offer" ? state.player : it.civ;
+  const payer = it.type === "offer" ? to(state, it) : it.civ;
   return kindOf(it).options(state, it).map((o) => ({ ...o, off: !!o.money && state.civs[payer].money < o.money }));
 }
 
@@ -178,7 +184,7 @@ export function resolve(state, it, choice) {
   const opts = options(state, it);
   let o = opts.find((x) => x.key === choice && !x.off);
   if (!o) o = opts[opts.length - 1];
-  const payer = it.type === "offer" ? state.player : it.civ;
+  const payer = it.type === "offer" ? to(state, it) : it.civ;
   if (o.money) state.civs[payer].money -= o.money;
   // Mektup yazıldıktan sonra yeri el değiştirmiş olabilir: o zaman olay boşa düşer.
   const stale = it.place && state.places[it.place].owner !== it.civ;
@@ -212,7 +218,7 @@ export function roll(state, civ) {
     const place = EVENTS[k].where(state, civ);
     if (!place) continue;
     const it = item(state, { type: "event", key: k, civ, place, ...(EVENTS[k].make?.(state) ?? {}) });
-    if (civ === state.player) {
+    if (isHuman(state, civ)) {
       state.inbox.push(it);
       return it;
     }
@@ -221,11 +227,11 @@ export function roll(state, civ) {
   return null;
 }
 
-/** Bilgisayardan oyuncuya bir teklif (ai.js çağırır). Aynı medeniyetten aynı tur bir tane. */
-export function offer(state, civ, k, fields = {}) {
-  if (state.inbox.some((x) => x.type === "offer" && x.civ === civ)) return null;
-  state.offered[key(civ, state.player)] = state.turn;
-  const it = item(state, { type: "offer", key: k, civ, ...fields });
+/** Bilgisayardan bir oyuncuya (`target`) teklif (ai.js çağırır). Aynı medeniyetten aynı oyuncuya aynı tur bir tane. */
+export function offer(state, civ, k, fields = {}, target = state.player) {
+  if (state.inbox.some((x) => x.type === "offer" && x.civ === civ && to(state, x) === target)) return null;
+  state.offered[key(civ, target)] = state.turn;
+  const it = item(state, { type: "offer", key: k, civ, to: target, ...fields });
   state.inbox.push(it);
   return it;
 }

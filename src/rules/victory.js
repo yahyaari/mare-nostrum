@@ -74,10 +74,12 @@ export function tickVictory(state, events = []) {
  * kazandıysa kaybeder.
  */
 export function overOf(state) {
-  const me = state.player;
-  const end = (winner, kind) => ({ result: winner === me ? "won" : "lost", turn: state.turn, kind, winner });
-  if (!placesOf(state, me).length) return { result: "lost", turn: state.turn, kind: "fallen", winner: null };
-  if (CIVS.every((c) => c.id === me || !state.civs[c.id].alive)) return end(me, "conquest");
+  // Aynı bilgisayarda birkaç oyuncu: biri kazanırsa "won" (kazanan `winner`), hepsi yıkılırsa biter.
+  const humans = state.players ?? [state.player];
+  const end = (winner, kind) => ({ result: humans.includes(winner) ? "won" : "lost", turn: state.turn, kind, winner });
+  if (!humans.some((h) => placesOf(state, h).length)) return { result: "lost", turn: state.turn, kind: "fallen", winner: null };
+  const standing = CIVS.filter((c) => state.civs[c.id].alive && placesOf(state, c.id).length);
+  if (standing.length === 1) return end(standing[0].id, "conquest");
   const racer = CIVS.find((c) => (state.wonderHold?.[c.id] ?? 0) >= N.victory.hold);
   if (racer) return end(racer.id, "wonders");
   if (state.turn > N.victory.turns) return end(ranking(state)[0].civ, "score");

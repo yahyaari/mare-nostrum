@@ -12,7 +12,7 @@ import { POS, cellOf, dist, isLand } from "./map.js";
 import { TECHS, freeTech, grant, knows, techMul, unlocked, unlockerOf } from "./research.js";
 import { dealMoney } from "./leaders.js";
 
-export const VERSION = 15;
+export const VERSION = 16;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -114,12 +114,23 @@ export function migrate(s) {
     s.built ??= {};
     s.version = 15;
   }
+  if (s.version === 15) {
+    // Aynı bilgisayarda birkaç oyuncu: eski oyunda tek.
+    s.players ??= [s.player];
+    s.version = 16;
+  }
   return s;
 }
 
 // ---- yeni oyun ----
 
+/**
+ * Yeni oyun. `player` bir medeniyet ya da birkaç medeniyet (aynı bilgisayarda sırayla oynayan
+ * oyuncular, kullanıcı 23.10): ilki başlar, `state.player` her zaman sırası gelen oyuncu.
+ */
 export function newGame(player, seed = 1, level = "normal") {
+  const players = Array.isArray(player) ? player : [player];
+  player = players[0];
   const civs = {};
   for (const c of CIVS) civs[c.id] = { ...N.start.stock, alive: true, techs: [], progress: {}, research: null, bank: 0 };
   // (state.built: inşa edilen harikalar - yeri; aşağıda nesneyle birlikte.)
@@ -148,6 +159,7 @@ export function newGame(player, seed = 1, level = "normal") {
     places[p.id] = place;
   }
   return {
+    players,
     built: {},
     version: VERSION, turn: 1, player, level, rng: seed | 0 || 1,
     civs, places, armies: [], nextArmy: 1,
@@ -255,7 +267,7 @@ export function output(state, id) {
   if (besieged(state, id)) return { money: 0, weapons: 0, food: 0 };
   const castle = p.kind === "castle" ? N.castleOutput : 1;
   // Zorluk: bilgisayar medeniyetlerinin üretimi (oyuncunun değil).
-  const ai = c && c !== state.player ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;
+  const ai = c && !isHuman(state, c) ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;
   const shut = blockaded(state, id);
   // Liman: kendi 1 balığı + balıkçılık, ve ticaret parası. Ablukada balık yok, para yarı.
   const fish = p.port && !shut ? (N.fish + pl.fishery * N.port.fishPerLevel) * castle * trait(c, "fish") * techMul(state, c, "fish") : 0;
@@ -301,6 +313,15 @@ export function budget(state, civ) {
   b.food -= b.upkeep;
   return b;
 }
+
+// ---- oyuncular ----
+
+/** İnsan oyuncular (aynı bilgisayarda sırayla), yıkılanlar dahil. */
+export const humansOf = (state) => state.players ?? [state.player];
+/** Bu medeniyeti bir insan mı oynuyor. */
+export const isHuman = (state, civ) => !!civ && humansOf(state).includes(civ);
+/** Hâlâ oynayan insanlar, sırasıyla. */
+export const aliveHumans = (state) => humansOf(state).filter((c) => state.civs[c]?.alive && placesOf(state, c).length > 0);
 
 // ---- ilişkiler ----
 

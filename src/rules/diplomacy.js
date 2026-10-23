@@ -5,7 +5,7 @@
 
 import { expel } from "./moves.js";
 import { random } from "./rng.js";
-import { enemiesOf, key, relation, strength } from "./state.js";
+import { enemiesOf, isHuman, key, relation, strength } from "./state.js";
 import { dealOf, moodOf, persona, rememberBroke, rememberWar } from "./leaders.js";
 import { N } from "./numbers.js";
 import { cellOf, regionOf } from "./map.js";
@@ -148,7 +148,7 @@ export function trespass(state, events = []) {
     if (v <= 0) delete state.anger[k];
     else state.anger[k] = v;
     const [victim, by] = k.split(">");
-    if (now.has(k) && (by === state.player || victim === state.player)) {
+    if (now.has(k) && (isHuman(state, by) || isHuman(state, victim))) {
       events.push({ type: "trespass", turn: state.turn, victim, by, anger: state.anger[k] });
     }
   }

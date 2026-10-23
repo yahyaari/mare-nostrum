@@ -26,13 +26,13 @@ import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
-  PORT_UPGRADES, UPGRADES, wonderInfo, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  PORT_UPGRADES, UPGRADES, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
 import { drift } from "../rules/loyalty.js";
 import { appointInfo } from "../rules/generals.js";
-import { options as letterOptions } from "../rules/events.js";
+import { options as letterOptions, ownerOf } from "../rules/events.js";
 import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
 import {
   INK, SERIF, TAU, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, over, panel, pointer, text, wrap,
@@ -156,7 +156,8 @@ function drawStart(ctx, cam, ui, boxes, T) {
   ctx.shadowBlur = 8;
   text(ctx, T.title, 28, 50, { title: true, bold: true, size: 30, color: CREAM });
   ctx.restore();
-  text(ctx, `${T.era} · ${T.chooseCiv}`, 30, 74, { italic: true, size: 14, color: GOLD_LIGHT });
+  const choosing = (ui.players ?? 1) > 1 ? fill(T.choosePlayer, (ui.picks?.length ?? 0) + 1) : T.chooseCiv;
+  text(ctx, `${T.era} · ${choosing}`, 30, 74, { italic: true, size: 14, color: GOLD_LIGHT });
 
   // Sancaklar: seçili olan öne çıkar, altın şeritle işaretlenir.
   const step = Math.min(92, (cam.h - 96 - 16) / CIVS.length);
@@ -176,6 +177,14 @@ function drawStart(ctx, cam, ui, boxes, T) {
     const bx = on ? 36 : 26;
     ctx.globalAlpha = on || hot ? 1 : 0.78;
     hanging(ctx, c.id, bx, y + (step - bh) / 2, bw, bh);
+    const taken = (ui.picks ?? []).indexOf(c.id);
+    if (taken >= 0) {
+      ctx.beginPath();
+      ctx.arc(bx + bw - 2, y + (step - bh) / 2 + 6, 11, 0, TAU);
+      ctx.fillStyle = GOLD;
+      ctx.fill();
+      text(ctx, fill(T.takenBy, taken + 1), bx + bw - 2, y + (step - bh) / 2 + 10, { bold: true, size: 11, color: DARK, align: "center" });
+    }
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.8)";
     ctx.shadowBlur = 6;
@@ -201,8 +210,8 @@ function civPanel(ctx, ui, boxes, T, civ, area) {
   const landRows = wrap(ctx, fill(T.startLands, lands), w, { italic: true, size: 12 });
   const st = startTroops(civ.id);
   const army = fill(T.startArmy, troops(T, { ...st, cav: 0, siege: 0 }));
-  // Alttaki sabit kısım (gezinme, zorluk, başla, devam) ve metin; görsel kalan yeri alır.
-  const bottomH = 40 + 14 + 36 + 14 + 48 + (ui.saved ? 54 : 0) + 18;
+  // Alttaki sabit kısım (gezinme, zorluk, oyuncular, başla, devam) ve metin; görsel kalan yeri alır.
+  const bottomH = 40 + 14 + 36 + 14 + 36 + 14 + 48 + (ui.saved ? 54 : 0) + 18;
   const textH = 44 + 20 + 18 + desc.length * 19 + 14 + 44 + landRows.length * 16 + 16 + 10;
   const illH = Math.round(Math.max(110, Math.min(300, area.h * 0.32, area.h - 20 - bottomH - textH)));
   const h = 20 + illH + textH + bottomH;
@@ -258,7 +267,21 @@ function civPanel(ctx, ui, boxes, T, civ, area) {
   });
   by += 36 + 14;
 
-  button(ctx, boxes, { x, y: by, w, h: 48, main: true, size: 17, label: `${T.start} · ${civ.name[ui.lang]}`, act: { do: "start" } });
+  // Oyuncular: aynı bilgisayarda sırayla (kullanıcı 23.10).
+  text(ctx, T.players, x, by + 23, { bold: true, size: 13 });
+  boxes.push({ x, y: by, w: 110, h: 36, act: null, tip: [T.players, T.tipPlayers] });
+  const pw = Math.min(56, (w - 110) / 4);
+  [1, 2, 3, 4].forEach((n, k) => {
+    button(ctx, boxes, { x: x + w - (4 - k) * (pw + 6) + 6, y: by, w: pw, h: 36, label: String(n), size: 14, main: (ui.players ?? 1) === n, act: { do: "players", n } });
+  });
+  by += 36 + 14;
+  const many = (ui.players ?? 1) > 1, picks = ui.picks ?? [];
+  const last = !many || picks.length >= ui.players - 1;
+  button(ctx, boxes, {
+    x, y: by, w, h: 48, main: true, size: 17, off: picks.includes(civ.id),
+    label: last ? `${T.start} · ${civ.name[ui.lang]}` : fill(T.pickPlayer, picks.length + 1, civ.name[ui.lang]),
+    act: { do: last ? "start" : "pickPlayer" },
+  });
   if (ui.saved) {
     const c = CIVS.find((cc) => cc.id === ui.saved.player);
     button(ctx, boxes, { x, y: by + 56, w, h: 44, size: 14, label: `${T.cont} · ${fill(T.contInfo, c.name[ui.lang], ui.saved.turn)}`, act: { do: "continue" } });
@@ -1419,7 +1442,8 @@ const MODAL_COACH = [
 ];
 
 function drawCoach(ctx, cam, game, ui, boxes, T, modal = false) {
-  if (!ui.coach || ui.coach.off || !!ui.modal !== modal || game.over) return;
+  // Aynı bilgisayarda birkaç oyuncu: öğretici yok.
+  if (!ui.coach || ui.coach.off || !!ui.modal !== modal || game.over || humansOf(game).length > 1) return;
   for (const step of modal ? MODAL_COACH : COACH) {
     if (ui.coach.done.has(step.id) || !step.when(game, ui, ui.coach.done)) continue;
     const spot = step.at(game, ui, boxes, cam, T);
@@ -1496,7 +1520,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -1917,6 +1941,26 @@ function researchModal(ctx, cam, game, ui, boxes, T) {
   oneButton(ctx, boxes, r, { label: T.close ?? T.ok, act: { do: "close" } });
 }
 
+/**
+ * Aynı bilgisayarda sıra değişti: ekranın tamamı kapanır (öteki oyuncunun haritası, sisi ve
+ * kartları görünmesin), sırası gelenin lideri ve adı; "Hazırım" ile oyun açılır.
+ */
+function handoffModal(ctx, cam, game, ui, boxes, T) {
+  const g = ctx.createRadialGradient(cam.w / 2, cam.h / 2, 40, cam.w / 2, cam.h / 2, Math.max(cam.w, cam.h) * 0.7);
+  g.addColorStop(0, "#2b2219");
+  g.addColorStop(1, "#0d0a07");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, cam.w, cam.h);
+  boxes.push({ x: 0, y: 0, w: cam.w, h: cam.h, act: null });
+  const civ = game.player, n = humansOf(game).indexOf(civ) + 1;
+  const cx = cam.w / 2, cy = cam.h / 2;
+  portrait(ctx, civ, cx, cy - 100, 96, "friendly");
+  text(ctx, fill(T.handoffTitle, civName(civ, ui.lang)), cx, cy + 44, { title: true, bold: true, size: 30, color: GOLD_LIGHT, align: "center" });
+  text(ctx, `${T.leaders[civ].name} · ${fill(T.handoffSub, n, game.turn)}`, cx, cy + 74, { size: 16, italic: true, color: CREAM, align: "center" });
+  text(ctx, T.handoffHint, cx, cy + 102, { size: 14, color: "rgba(243,231,201,0.65)", align: "center" });
+  button(ctx, boxes, { x: cx - 120, y: cy + 126, w: 240, h: 50, main: true, size: 18, label: T.ready, act: { do: "ready" } });
+}
+
 /** Oyuncunun harikası tamamlandı: büyük harika işareti, adı, armağanı, şehri. */
 function wonderModal(ctx, cam, game, ui, boxes, T, m) {
   const [name, gift] = T.wonders[m.wonder];
@@ -2048,7 +2092,7 @@ export function letterText(game, it, lang) {
 
 /** Olay ya da teklif: bir karar, kapatılamaz; seçenekler alt alta. */
 function decideModal(ctx, cam, game, ui, boxes, T) {
-  const it = game.inbox[0];
+  const it = game.inbox.find((x) => ownerOf(game, x) === game.player);
   if (!it) return;
   const L = letterText(game, it, ui.lang);
   const W = Math.min(cam.w - 24, 460);
@@ -2187,7 +2231,7 @@ function missionModal(ctx, cam, game, ui, boxes, T, mm) {
 
 /** Alt menüden: açık görevler. Yeri olan göreve basınca harita oraya kayar. */
 function missionsModal(ctx, cam, game, ui, boxes, T) {
-  const list = game.missions ?? [];
+  const list = (game.missions ?? []).filter((x) => x.civ === game.player);
   const rowH = 70;
   const r = modalFrame(ctx, cam, boxes, 84 + Math.max(1, list.length) * rowH + 74, 560);
   text(ctx, T.missionsTitle, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
@@ -2387,12 +2431,13 @@ function victoryModal(ctx, cam, game, ui, boxes, T) {
 function overModal(ctx, cam, game, ui, boxes, T) {
   const o = game.over, won = o.result === "won";
   const r = modalFrame(ctx, cam, boxes, 236);
-  text(ctx, won ? T.victory : T.defeat, r.x + r.w / 2, r.y + 56, { title: true, bold: true, size: 28, align: "center", color: won ? INK.good : INK.bad });
+  const many = humansOf(game).length > 1;
+  text(ctx, many && o.winner ? fill(T.winnerIs, civName(o.winner, ui.lang)) : won ? T.victory : T.defeat, r.x + r.w / 2, r.y + 56, { title: true, bold: true, size: 28, align: "center", color: won ? INK.good : INK.bad });
   // Hangi yoldan: fetih, harikalar, skor; kaybedildiyse kim kazandı.
   const kind = { conquest: T.vConquest, wonders: T.vWonders, score: T.vScore }[o.kind];
   if (kind) text(ctx, kind.toLocaleUpperCase(ui.lang), r.x + r.w / 2, r.y + 82, { title: true, bold: true, size: 13, align: "center", color: INK.warn });
   const who = civName(o.winner, ui.lang);
-  const line = won ? fill({ conquest: T.victoryText, wonders: T.winWonders, score: T.winScore }[o.kind] ?? T.victoryText, o.turn)
+  const line = won && !many ? fill({ conquest: T.victoryText, wonders: T.winWonders, score: T.winScore }[o.kind] ?? T.victoryText, o.turn)
     : o.kind === "wonders" ? fill(T.loseWonders, who) : o.kind === "score" ? fill(T.loseScore, who, rankOf(game, game.player)) : fill(T.defeatText, o.turn);
   lines(ctx, line, r.x + 24, r.y + 112, r.w - 48, { size: 14, align: "center" }, 2, 18);
   twoButtons(ctx, boxes, r, { label: T.newGame, act: { do: "newGame" } }, { label: T.chronicle, act: { do: "open", modal: "chronicle" } });

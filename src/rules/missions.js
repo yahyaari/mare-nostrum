@@ -147,22 +147,36 @@ export function make(state, key, civ = state.player) {
  * N.missions.max tane, ikisinin arası en az N.missions.spacing tur. Aynı türden iki görev olmaz.
  */
 export function issue(state, events = null) {
+  // Aynı bilgisayarda birkaç oyuncu: her birine ayrı görevler, ayrı aralık.
+  let last = null;
+  for (const civ of state.players ?? [state.player]) {
+    if (!state.civs[civ]?.alive) continue;
+    last = issueFor(state, civ, events) ?? last;
+  }
+  return last;
+}
+
+function issueFor(state, civ, events) {
   const M = N.missions;
   state.missions ??= [];
-  if (state.over || state.turn < M.from || state.missions.length >= M.max) return null;
-  if (state.lastMission && state.turn - state.lastMission < M.spacing) return null;
+  state.lastMissionOf ??= {};
+  const mine = state.missions.filter((m) => m.civ === civ);
+  // Eski kayıtta tek oyuncunun aralığı `lastMission`ta.
+  const lastAt = state.lastMissionOf[civ] ?? (civ === state.player ? state.lastMission : undefined);
+  if (state.over || state.turn < M.from || mine.length >= M.max) return null;
+  if (lastAt && state.turn - lastAt < M.spacing) return null;
   if (roll(state) >= M.chance) return null;
-  const keys = Object.keys(KINDS).filter((k) => !state.missions.some((m) => m.key === k));
+  const keys = Object.keys(KINDS).filter((k) => !mine.some((m) => m.key === k));
   // Türleri karıştır, verilebilen ilkini ver.
   for (let i = keys.length - 1; i > 0; i--) {
     const j = Math.floor(roll(state) * (i + 1));
     [keys[i], keys[j]] = [keys[j], keys[i]];
   }
   for (const key of keys) {
-    const m = make(state, key);
+    const m = make(state, key, civ);
     if (!m) continue;
     state.missions.push(m);
-    state.lastMission = state.turn;
+    state.lastMissionOf[civ] = state.turn;
     events?.push({ type: "missionNew", turn: state.turn, mission: m });
     return m;
   }

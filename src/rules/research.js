@@ -97,7 +97,8 @@ export function scienceOf(state, civ) {
     if (pl.owner !== civ) continue;
     n += pl.pop / N.research.popPer + (p.capital ? N.research.capital : 0);
   }
-  const ai = civ !== state.player ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;
+  const human = (state.players ?? [state.player]).includes(civ);
+  const ai = !human ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;
   const library = holds(state, civ, "library") ? N.wonders.libraryScience : 1;
   return n * trait(civ, "science") * techMul(state, civ, "science") * library * ai;
 }

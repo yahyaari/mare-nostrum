@@ -53,8 +53,10 @@ harikaları inşa etme yarışı, aynı bilgisayarda arkadaşlarla) ve küçükl
    şehirde inşaatçıyla; ilk bitiren alır, kaybedene yarı para. `state.built`, kayıt 15. Harikalar
    zaferi 12'den 8. Ayrıca eski bir hareket hatası düzeldi: boğazdaki feribot yolundaki gemisiz
    ordu Ege'yi yürüyerek geçiyordu (moves.js modeOf).
-6. **Arkadaşlarla aynı bilgisayarda** (sırada), sonra küçükler (şehir binaları, geri çekilme ve
-   dağlar, oyun sonu özeti).
+6. **Arkadaşlarla aynı bilgisayarda** (bu adım): kurallar.md bölüm 25. Oyuncular 1-4, sırayla
+   seçim, devir ekranı (Escape kapatmaz, Enter = Hazırım), son oyuncudan sonra dünya turu, her
+   oyuncuya kendi mektup/görev/haber; `state.players`, `humansOf`, `isHuman`, `aliveHumans`. Kayıt 16.
+7. Sırada küçükler: şehir binaları, geri çekilme ve dağlar, oyun sonu özeti.
 
 ## ÖNCEKİLER (22.10 akşam)
 

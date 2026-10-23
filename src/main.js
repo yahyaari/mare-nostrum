@@ -12,9 +12,9 @@ import {
 } from "./rules/moves.js";
 import { POS, cellOf, centre, dist, isLand, pathCost, regionOf, smooth, stepCost } from "./rules/map.js";
 import {
-  VERSION, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, merge, men, migrate, muster, newGame, placesOf, recruit, startWonder, station, upgrade,
+  VERSION, aliveHumans, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, humansOf, merge, men, migrate, muster, newGame, placesOf, recruit, startWonder, station, upgrade,
 } from "./rules/state.js";
-import { resolve as answer } from "./rules/events.js";
+import { ownerOf, resolve as answer } from "./rules/events.js";
 import { appoint } from "./rules/generals.js";
 import { accept as acceptMission, check as checkMissions, decline as declineMission } from "./rules/missions.js";
 import { blockaded } from "./rules/state.js";
@@ -48,7 +48,7 @@ const ctx = canvas.getContext("2d");
 const cam = makeCamera();
 
 let game = null;
-const ui = { screen: "start", lang: pickLang(), level: pickLevel(), pick: null, saved: null, sel: null, army: null, modal: null, toast: null, news: null, tip: null, fog: pickFog(), coach: pickCoach() };
+const ui = { screen: "start", lang: pickLang(), level: pickLevel(), players: 1, picks: [], pick: null, saved: null, sel: null, army: null, modal: null, toast: null, news: null, tip: null, fog: pickFog(), coach: pickCoach() };
 const startOwners = Object.fromEntries(PLACES.map((p) => [p.id, p.owner]));
 
 let dpr = 1;
@@ -164,6 +164,19 @@ function redraw() {
   });
 }
 
+/** Aynı bilgisayarda sıra başkasına geçer: seçimler unutulur, ekran kapanır, kaydedilir. */
+function passTo(civ) {
+  game.player = civ;
+  ui.sel = null;
+  ui.army = null;
+  ui.cards = null;
+  ui.news = null;
+  ui.tip = null;
+  ui.fight = null;
+  ui.modal = { kind: "handoff" };
+  save();
+}
+
 /** Sıradaki pencere: oyun bittiyse son, bekleyen mektup varsa karar, yoksa hiçbiri. */
 function next() {
   if (!game) return null;
@@ -172,13 +185,13 @@ function next() {
   if (ui.wondersDone?.length) return { kind: "wonder", ...ui.wondersDone.shift() };
   // Sana savaş açan lider konuşur (her biri bir pencere).
   if (ui.speeches?.length) return { kind: "speech", civ: ui.speeches.shift() };
-  if (game.inbox?.length) return { kind: "decide" };
+  if (game.inbox?.some((it) => ownerOf(game, it) === game.player)) return { kind: "decide" };
   // Araştırma bitti: sıradakini seçmek için ağaç açılır (Civilization gibi).
   if (ui.pickTech) {
     ui.pickTech = false;
     if (!game.civs[game.player].research && available(game, game.player).length) return { kind: "research" };
   }
-  const fresh = game.missions?.find((x) => !x.seen);
+  const fresh = game.missions?.find((x) => !x.seen && x.civ === game.player);
   if (fresh) return { kind: "mission", id: fresh.id };
   return null;
 }
@@ -280,7 +293,7 @@ function mapView() {
   view.friends = new Set(PLACES.filter((p) => { const o = game.places[p.id].owner; return o === game.player || (o && relation(game, game.player, o) === "ally"); }).map((p) => p.id));
   view.winter = isWinter(game.turn);
   view.levels = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.level]));
-  view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place).map((x) => [x.place, true]));
+  view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place && x.civ === game.player).map((x) => [x.place, true]));
   view.spies = Object.fromEntries((game.spies ?? []).filter((s) => s.civ === game.player).map((s) => [s.target, s.at ? "in" : "road"]));
   view.building = Object.fromEntries(placesOf(game, game.player).filter((id) => game.places[id].builds?.length).map((id) => [id, true]));
   view.docked = Object.fromEntries(PLACES.filter((p) => p.port && fleetOf(game.places[p.id]) > 0).map((p) => [p.id, fleetOf(game.places[p.id])]));
@@ -454,13 +467,30 @@ function dispatch(act) {
       ui.level = act.level;
       try { localStorage.setItem("mn.level", act.level); } catch { /* varsayılan */ }
       break;
-    case "start":
+    case "players":
+      ui.players = act.n;
+      ui.picks = [];
+      break;
+    case "pickPlayer": {
+      // Aynı bilgisayarda: bu oyuncu bu medeniyeti aldı, sıradaki oyuncu boştakilerden seçer.
+      if (!ui.pick || ui.picks.includes(ui.pick)) break;
+      ui.picks.push(ui.pick);
+      const free = CIVS.find((c) => !ui.picks.includes(c.id));
+      if (free) { ui.pick = free.id; ui.pickAt = performance.now(); showCiv(free.id); }
+      break;
+    }
+    case "start": {
       if (!ui.pick) break;
+      const many = ui.players > 1;
+      if (many && ui.picks.includes(ui.pick)) break;
+      const who = many ? [...ui.picks, ui.pick] : ui.pick;
       // ?seed=123 aynı oyunu tekrar kurar (araçlar ve hata ayıklama için).
-      game = newGame(ui.pick, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level);
+      game = newGame(who, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level);
+      ui.picks = [];
       // Öğretici açıksa (ve bitirilmediyse) başkentin yanında haydutlar: ilk ordu, ilk savaş.
       // Zincirin balonları baştan: önceki oyunlarda görülmüş olsalar da (öğretici bitene kadar).
-      if (!ui.coach.off && !ui.coach.done.has("loot") && spawnBandits(game)) {
+      // Birkaç oyuncuda öğretici yok.
+      if (!many && !ui.coach.off && !ui.coach.done.has("loot") && spawnBandits(game)) {
         for (const id of ["city", "recruit", "garrison", "pick", "form", "hunt", "strike", "preview"]) ui.coach.done.delete(id);
         saveCoach();
       }
@@ -469,10 +499,11 @@ function dispatch(act) {
       ui.sel = null;
       ui.army = null;
       ui.news = null;
-      ui.modal = null;
+      ui.modal = many ? { kind: "handoff" } : null;
       lookAtHome();
       save();
       break;
+    }
     case "continue":
       game = load();
       if (!game) { ui.saved = null; break; }
@@ -480,9 +511,23 @@ function dispatch(act) {
       cam.pad = null;
       ui.sel = null;
       ui.army = null;
+      ui.modal = humansOf(game).length > 1 ? { kind: "handoff" } : next();
+      lookAtHome();
+      break;
+    case "ready": {
+      // Sırası gelen oyuncu hazır: kendi haberleri, savaş ilanları, harikaları, araştırması.
+      if (m?.kind !== "handoff") break;
+      ui.modal = null;
+      const evs = game.events ?? [];
+      if (evs.some((e) => e.type === "tech" && e.civ === me)) ui.pickTech = true;
+      ui.speeches = evs.filter((e) => e.type === "war" && e.on === me).map((e) => e.by);
+      ui.wondersDone = evs.filter((e) => e.type === "wonderBuilt" && e.civ === me).map((e) => ({ wonder: e.wonder, place: e.place }));
+      const lines = eventLines(game, ui.lang);
+      ui.news = lines.length ? { lines } : null;
       ui.modal = next();
       lookAtHome();
       break;
+    }
     case "newGame":
       forget();
       ui.pick = game?.player ?? ui.pick;
@@ -529,6 +574,8 @@ function dispatch(act) {
       saveCoach();
       break;
     case "close":
+      // Sıra değişirken ekran kendiliğinden açılmaz (öteki oyuncunun haritası görünmesin).
+      if (m?.kind === "handoff") break;
       ui.modal = next();
       break;
     case "fightOff":
@@ -598,6 +645,19 @@ function dispatch(act) {
       break;
     case "endTurn": {
       coachDone("endturn");
+      // Aynı bilgisayarda birkaç oyuncu: sıradaki oyuncu oynar; dünya (bilgisayarlar, üretim)
+      // ancak sıranın sonuncusundan sonra döner. Gösteri yok, sıra değişince ekran kapanır.
+      const hs = aliveHumans(game);
+      if (hs.length > 1) {
+        const i = hs.indexOf(me);
+        if (i < 0 || i < hs.length - 1) { passTo(hs[i + 1] ?? hs[0]); break; }
+        ui.modal = null;
+        ui.news = null;
+        traced(() => endTurn(game));
+        if (checkOver(game)) { ui.modal = { kind: "over" }; save(); break; }
+        passTo(aliveHumans(game)[0]);
+        break;
+      }
       ui.modal = null;
       ui.news = null;
       const before = { ...game.civs[me] };
@@ -1301,7 +1361,8 @@ window.addEventListener("keydown", (e) => {
     } : {}),
     // Total War gibi: Enter turu bitirir, Tab sıradaki orduyu seçer (karar penceresi açıkken değil).
     Enter: () => {
-      if (ui.screen === "start" && !ui.modal) dispatch({ do: "start" });
+      if (ui.modal?.kind === "handoff") dispatch({ do: "ready" });
+      else if (ui.screen === "start" && !ui.modal) dispatch({ do: (ui.players ?? 1) > 1 && ui.picks.length < ui.players - 1 ? "pickPlayer" : "start" });
       else if (playing && !ui.modal && !blocking) dispatch({ do: "endTurn" });
     },
     Tab: () => { if (playing && !ui.modal) dispatch({ do: "nextArmy" }); },

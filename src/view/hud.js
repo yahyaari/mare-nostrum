@@ -224,7 +224,7 @@ export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
     ["temple", T.hudCities, { do: "open", modal: "cities" }, trouble, INK.bad, T.tipCities],
     ["hands", T.hudDiplo, { do: "open", modal: "diplo" }, 0, null, T.tipDiplo],
     ["compass", T.hudMap, { do: "overview" }, 0, null, T.tipMap],
-    ["scroll", T.hudMissions, { do: "open", modal: "missions" }, game.missions?.length ?? 0, GOLD, T.tipMissions],
+    ["scroll", T.hudMissions, { do: "open", modal: "missions" }, (game.missions ?? []).filter((x) => x.civ === me).length, GOLD, T.tipMissions],
   ];
   // Araştırma: kandil; çevresinde araştırılanın ilerlemesi, seçilmemişse kırmızı ünlem.
   const R = game.civs[me], sci = Math.round(scienceOf(game, me) * 10) / 10;

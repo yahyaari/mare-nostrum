@@ -164,7 +164,7 @@ const C = await import("../src/rules/combat.js");
 const M = await import("../src/rules/moves.js");
 const D = await import("../src/rules/diplomacy.js");
 const T = await import("../src/rules/turn.js");
-const { N, UNITS, SHIPS, trait } = await import("../src/rules/numbers.js");
+const { N, UNITS, SHIPS, trait, LEVELS } = await import("../src/rules/numbers.js");
 const { play } = await import("./bot.mjs");
 const MAP = await import("../src/rules/map.js");
 const R = await import("../src/rules/research.js");
@@ -804,6 +804,56 @@ section("Harikaları inşa etme yarışı (bölüm 18b)");
   const a = raise(f, "rome", { inf: 30 });
   Object.assign(a, MAP.centre(ferry), { at: null, route: [] });
   check("feribot yolunda gemisiz ordu kara ordusudur", M.modeOf(a) === "land");
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Aynı bilgisayarda birkaç oyuncu (bölüm 25)");
+
+{
+  const EVM = await import("../src/rules/events.js");
+  const MI = await import("../src/rules/missions.js");
+  const V2 = await import("../src/rules/victory.js");
+  const h = S.newGame(["rome", "carthage"], 7, "hard");
+  check("iki oyunculu oyun: ilki başlar, ikisi de insan", h.player === "rome" && h.players.join() === "rome,carthage" && S.isHuman(h, "carthage") && !S.isHuman(h, "egypt"));
+  check("insanlar zorluğun üretim çarpanını almaz", (() => {
+    const one = S.newGame("rome", 7, "hard");
+    return Math.abs(S.output(h, "carthage").money - S.output(one, "carthage").money / LEVELS.hard.aiOutput) < 1e-9;
+  })());
+  T.endTurn(h);
+  check("dünya turunda bilgisayar ikinci oyuncunun yerine oynamaz", h.civs.carthage.research === null && S.armiesOf(h, "carthage").length === 0 && h.civs.carthage.techs.length === 0);
+  check("bilgisayarlar oynar", CIVS.filter((c) => !S.isHuman(h, c.id)).some((c) => h.civs[c.id].research));
+  // Mektuplar: ikisinin de olayları kendi gelen kutusuna; teklif alıcısıyla.
+  h.turn = 30;
+  let got = null;
+  for (let i = 0; i < 80 && !got; i++) { const it = EVM.roll(h, "carthage"); if (it?.type === "event") got = it; }
+  check("ikinci oyuncunun olayı gelen kutusunda, sahibi o", got && h.inbox.includes(got) && EVM.ownerOf(h, got) === "carthage");
+  h.relations[S.key("egypt", "carthage")] = "war";
+  const off = EVM.offer(h, "egypt", "peace", {}, "carthage");
+  check("teklifin alıcısı yazılı", off?.to === "carthage" && EVM.ownerOf(h, off) === "carthage");
+  EVM.resolve(h, off, "accept");
+  check("ikinci oyuncu barışı kabul edince barış onunla", S.relation(h, "egypt", "carthage") === "neutral");
+  // Görevler: her oyuncuya ayrı.
+  const g = S.newGame(["rome", "carthage"], 9);
+  g.turn = N.missions.from + 1;
+  for (let i = 0; i < 40; i++) { MI.issue(g, []); g.turn += N.missions.spacing; }
+  check("görevler iki oyuncuya da ayrı ayrı gelir", g.missions.some((m) => m.civ === "rome") && g.missions.some((m) => m.civ === "carthage"));
+  check("her oyuncunun en çok iki görevi", ["rome", "carthage"].every((c) => g.missions.filter((m) => m.civ === c).length <= N.missions.max));
+  // Oyun sonu: biri düşerse oyun sürer, ikisi de düşerse biter; tek kalan insan fetihle kazanır.
+  const o = S.newGame(["rome", "carthage"], 7);
+  for (const id of S.placesOf(o, "rome")) o.places[id].owner = "gaul";
+  o.civs.rome.alive = false;
+  check("bir oyuncu düşerse oyun sürer, sıra ötekinde", V2.overOf(o) === null && S.aliveHumans(o).join() === "carthage");
+  for (const id of S.placesOf(o, "carthage")) o.places[id].owner = "gaul";
+  check("hepsi düşerse oyun biter", V2.overOf(o)?.kind === "fallen");
+  const w = S.newGame(["rome", "carthage"], 7);
+  for (const c of CIVS) if (c.id !== "carthage") { for (const id of S.placesOf(w, c.id)) w.places[id].owner = "carthage"; w.civs[c.id].alive = false; }
+  const ov = V2.overOf(w);
+  check("tek kalan insan fetihle kazanır", ov?.kind === "conquest" && ov.winner === "carthage" && ov.result === "won");
+  const old = S.newGame("rome", 7);
+  delete old.players;
+  old.version = 15;
+  S.migrate(old);
+  check("eski kayıt: tek oyuncu", old.version === S.VERSION && old.players.join() === "rome");
 }
 
 // ---------------------------------------------------------------------------------------------

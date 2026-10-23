@@ -15,7 +15,7 @@ import { check as checkMissions, issue } from "./missions.js";
 import { tick } from "./loyalty.js";
 import { advance, refresh } from "./moves.js";
 import { N, UNITS, trait } from "./numbers.js";
-import { armiesOf, budget, empty, info, placesOf, popCap, progressBuilds } from "./state.js";
+import { armiesOf, budget, empty, humansOf, info, isHuman, placesOf, popCap, progressBuilds } from "./state.js";
 import { holds } from "./wonders.js";
 import { tickSieges } from "./siege.js";
 import { record, snapshot } from "./chronicle.js";
@@ -67,7 +67,7 @@ export function endTurn(state) {
   // Oyuncu karar vermeden geçtiyse bekleyen mektuplar bedava seçenekle kapanır.
   settleInbox(state);
   for (const c of CIVS) {
-    if (c.id !== state.player && state.civs[c.id].alive) aiTurn(state, c.id, events);
+    if (!isHuman(state, c.id) && state.civs[c.id].alive) aiTurn(state, c.id, events);
   }
   // Kuşatmalar bir tur ilerler (üretimden önce: kuşatılan yer bu tur bir şey üretmez).
   tickSieges(state, events);
@@ -84,7 +84,7 @@ export function endTurn(state) {
       }
     }
     state.armies = state.armies.filter((a) => !empty(a));
-    if (lost[state.player]) events.push({ type: "winter", turn: state.turn, civ: state.player, lost: lost[state.player] });
+    for (const h of humansOf(state)) if (lost[h]) events.push({ type: "winter", turn: state.turn, civ: h, lost: lost[h] });
   }
   // İnşaatlar bir tur ilerler (üretimden önce: biten tarla bu tur üretir).
   progressBuilds(state, events);
@@ -93,7 +93,7 @@ export function endTurn(state) {
   tickResearch(state, events);
   // Son ödemesini yapan ticaret anlaşmaları düşer (oyuncununki habere).
   for (const d of (state.deals ?? []).filter((x) => x.until <= state.turn + 1)) {
-    if (d.a === state.player || d.b === state.player) events.push({ type: "dealEnded", turn: state.turn, civ: d.a === state.player ? d.b : d.a });
+    for (const h of [d.a, d.b].filter((c) => isHuman(state, c))) events.push({ type: "dealEnded", turn: state.turn, civ: h === d.a ? d.b : d.a, to: h });
   }
   state.deals = (state.deals ?? []).filter((x) => x.until > state.turn + 1);
   state.turn += 1;
@@ -107,8 +107,11 @@ export function endTurn(state) {
   for (const c of CIVS) if (state.civs[c.id].alive) roll(state, c.id);
   // Casuslar: yoldakiler varır, yerindekiler raporlar ya da yakalanır.
   tickSpies(state, events);
-  refresh(state, state.player);
-  for (const a of armiesOf(state, state.player)) advance(state, a);
+  for (const h of humansOf(state)) {
+    if (!state.civs[h].alive) continue;
+    refresh(state, h);
+    for (const a of armiesOf(state, h)) advance(state, a);
+  }
   // Harikalar zaferinin sayaçları.
   tickVictory(state, events);
   // Görevler: tamamlanan ödülünü alır, süresi geçen düşer, belki yenisi gelir.

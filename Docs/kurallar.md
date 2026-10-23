@@ -825,3 +825,27 @@ ilk düşüş 46. `Tools/experiment.mjs` artık `"P.macedon.war": 1` alıyor.
   çatar), konuşma balonu, kişiliği, tutum ve gerekçeleri, yapılabilecekler. Bir şey önerince lider
   cevap verir. Teklif mektuplarında liderin portresi ve sözü; sana savaş açan lider konuşur
   ("Kan mı istedin? Doyasıya içeceksin!").
+
+---
+
+## 25. Aynı bilgisayarda birkaç oyuncu
+
+Kullanıcı (22.10'dan beri istiyordu; 23.10 "sırayla devam et"): arkadaşlarla aynı bilgisayarda,
+sırayla (hotseat).
+
+- Başlangıç ekranında **Oyuncular: 1 2 3 4**. Birden fazlaysa medeniyetler sırayla seçilir
+  ("1. oyuncu: Roma · Sıradaki"); seçilen medeniyet listede oyuncunun numarasıyla işaretlenir,
+  ikinci kez seçilemez.
+- `state.players`: insan oyuncular; `state.player` her zaman sırası gelen. Bilgisayar insanların
+  yerine oynamaz; zorluğun üretim çarpanı bilgisayarlara (bütün insanlar oyuncu gibi).
+- **Tur:** her oyuncu sırayla kendi turunu oynar. Sıra değişirken ekranın tamamı kapanır: sırası
+  gelenin lideri, "Sıra: Kartaca", "Bilgisayarı devret - ötekiler başka yere baksın", **Hazırım**
+  (Enter da). Escape kapatmaz. Son oyuncu turunu bitirince dünya döner (bilgisayarlar, üretim,
+  araştırma...), sonra ilk oyuncunun sırası. Birkaç oyuncuda tur gösterisi (kamera turu) yok.
+- Her oyuncunun kendi sisi, kartları, mektupları (olaylar ve bilgisayarın teklifleri - teklifin
+  alıcısı `to`), görevleri (her birine ayrı, ayrı aralıkla), haberleri, araştırma uyarısı, ona savaş
+  açan liderin sözü ve tamamlanan harikası; "Hazırım"a basınca gelir.
+- Bir oyuncu yıkılırsa oyundan çıkar, ötekiler sürer. Hepsi yıkılırsa oyun biter. Tek kalan
+  medeniyet fetihle kazanır; Harikalar ve Skor zaferi herkes için aynı. Oyun sonu penceresi
+  kazananın adını yazar.
+- Öğretici (ipucu balonları, haydutlar) birkaç oyuncuda yok. Kayıt 16 (eski oyun tek oyuncu).
