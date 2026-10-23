@@ -39,14 +39,15 @@ import {
 } from "./kit.js";
 import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal } from "./hud.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, chevrons, galley, roundRect, shade, shield, soldier, wonderMark } from "./pieces.js";
-import { ALL_WONDERS, BUILDABLE, WONDERS, placeOfWonder, wonderAt, wondersAt } from "../rules/wonders.js";
+import { ALL_WONDERS, BUILDABLE, WONDERS, placeOfWonder, wonderAt, wondersAt, wondersOf as wondersOfCiv } from "../rules/wonders.js";
 import { rankOf, ranking, scoreOf, wonderTurnsLeft } from "../rules/victory.js";
+import { ownersAt } from "../rules/chronicle.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { sight } from "../rules/sight.js";
 import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
 import { SCENE_MS, drawBattle, trooper } from "./battle.js";
 import { explain, fight, nextRankXp, veteranMul, veteranRank } from "../rules/combat.js";
-import { drawVignette, placeOnScreen } from "./draw.js";
+import { drawMinimap, drawVignette, placeOnScreen } from "./draw.js";
 import { toScreen } from "./camera.js";
 import { SIZE } from "../geo.js";
 
@@ -1548,7 +1549,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -2468,6 +2469,112 @@ function overModal(ctx, cam, game, ui, boxes, T) {
   const line = won && !many ? fill({ conquest: T.victoryText, wonders: T.winWonders, score: T.winScore }[o.kind] ?? T.victoryText, o.turn)
     : o.kind === "wonders" ? fill(T.loseWonders, who) : o.kind === "score" ? fill(T.loseScore, who, rankOf(game, game.player)) : fill(T.defeatText, o.turn);
   lines(ctx, line, r.x + 24, r.y + 112, r.w - 48, { size: 14, align: "center" }, 2, 18);
-  twoButtons(ctx, boxes, r, { label: T.newGame, act: { do: "newGame" } }, { label: T.chronicle, act: { do: "open", modal: "chronicle" } });
+  twoButtons(ctx, boxes, r, { label: T.newGame, act: { do: "newGame" } }, { label: T.summary, act: { do: "summary" } });
+}
+
+/**
+ * Oyun sonu özeti (kullanıcı 23.10, önerilen küçük işlerin sonuncusu; Civilization'ın oyun sonu
+ * ekranı gibi): solda dünyanın tur tur tekrarı (mini harita, oynat/durdur, zaman çizgisi), sağda
+ * herkesin skoru oyun boyunca ve son sıralama, altta oyuncunun sayıları.
+ */
+function summaryModal(ctx, cam, game, ui, boxes, T, m) {
+  const me = game.player, ch = game.chronicle ?? {};
+  const turns = ch.owners?.length ?? 0;
+  const r = modalFrame(ctx, cam, boxes, Math.min(cam.h - 24, 640), 1040);
+  text(ctx, T.summaryTitle, r.x + r.w / 2, r.y + 38, { title: true, bold: true, size: 22, align: "center" });
+  const o = game.over;
+  if (o) {
+    const line = humansOf(game).length > 1 && o.winner ? fill(T.winnerIs, civName(o.winner, ui.lang)) : o.result === "won" ? T.victory : T.defeat;
+    text(ctx, line, r.x + r.w / 2, r.y + 60, { italic: true, size: 14, align: "center", color: o.result === "won" ? INK.good : INK.bad });
+  }
+  // Sol: harita tekrarı.
+  const mw = Math.min(500, r.w * 0.5 - 40), mh = Math.round((mw * SIZE.y) / SIZE.x);
+  const mx = r.x + 24, my = r.y + 96;
+  text(ctx, T.sumMap.toLocaleUpperCase(ui.lang), mx, my - 10, { title: true, bold: true, size: 12, color: INK.warn });
+  const now = performance.now();
+  const step = 90; // milisaniye / tur
+  let i = m.turn ?? turns - 1;
+  if (m.playing && turns) i = Math.min(turns - 1, Math.floor((now - m.from) / step));
+  if (m.playing && i >= turns - 1) m.playing = false;
+  m.turn = i;
+  const owners = turns ? ownersAt(game, Math.max(0, i)) : Object.fromEntries(Object.keys(game.places).map((id) => [id, game.places[id].owner]));
+  drawMinimap(ctx, { x: mx, y: my, w: mw, h: mh }, null, owners);
+  ctx.strokeStyle = GOLD_DARK;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(mx - 1, my - 1, mw + 2, mh + 2);
+  // Zaman çizgisi: oynat/durdur, çubuk (basılan tura atlar), tur.
+  const ty = my + mh + 14;
+  button(ctx, boxes, { x: mx, y: ty, w: 40, h: 30, label: m.playing ? "❚❚" : "▶", size: 13, act: { do: "summaryPlay" } });
+  const bx = mx + 50, bw = mw - 50 - 90;
+  ctx.fillStyle = "rgba(90,70,40,0.18)";
+  ctx.fillRect(bx, ty + 12, bw, 6);
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(bx, ty + 12, turns > 1 ? (bw * i) / (turns - 1) : bw, 6);
+  for (let k = 0; k < 20; k++) {
+    const x0 = bx + (bw * k) / 20;
+    boxes.push({ x: x0, y: ty, w: bw / 20 + 1, h: 30, act: { do: "summaryTurn", turn: Math.round(((turns - 1) * (k + 0.5)) / 20) } });
+  }
+  text(ctx, fill(T.chrTurn, i + 1), mx + mw, ty + 20, { bold: true, size: 13, align: "right" });
+  // Sağ: skor grafiği ve sıralama.
+  const gx = mx + mw + 40, gw = r.x + r.w - 24 - gx, gy = my, gh = mh;
+  text(ctx, T.sumScore.toLocaleUpperCase(ui.lang), gx, gy - 10, { title: true, bold: true, size: 12, color: INK.warn });
+  ctx.fillStyle = "rgba(90,70,40,0.07)";
+  ctx.fillRect(gx, gy, gw, gh);
+  const sc = ch.score ?? [];
+  const top = Math.max(1, ...sc.flat());
+  CIVS.forEach((c, k) => {
+    if (sc.length < 2) return;
+    ctx.beginPath();
+    sc.forEach((row, t) => {
+      const px = gx + (gw * t) / (sc.length - 1), py = gy + gh - (gh * row[k]) / top;
+      if (t) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    });
+    ctx.strokeStyle = colorOf(c.id);
+    ctx.lineWidth = c.id === me ? 3 : 1.6;
+    ctx.stroke();
+  });
+  // Tekrarın şimdiki turu grafikte de.
+  if (sc.length > 1) {
+    const px = gx + (gw * Math.min(i, sc.length - 1)) / (sc.length - 1);
+    ctx.beginPath();
+    ctx.moveTo(px + 0.5, gy);
+    ctx.lineTo(px + 0.5, gy + gh);
+    ctx.strokeStyle = "rgba(60,45,25,0.45)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  const rank = ranking(game);
+  rank.forEach((row, k) => {
+    const cx = gx + (k % 2) * (gw / 2), cy = ty + 16 + Math.floor(k / 2) * 19;
+    shield(ctx, row.civ, cx, cy - 11, 11);
+    fit(ctx, `${fill(T.rankN, k + 1)} ${civName(row.civ, ui.lang)} · ${row.total}`, cx + 16, cy, gw / 2 - 20, { size: 12, bold: row.civ === me, color: game.civs[row.civ].alive ? INK.ink : INK.faint });
+  });
+  // Alt: oyuncunun sayıları.
+  const k = CIVS.findIndex((c) => c.id === me);
+  const most = Math.max(0, ...(ch.places ?? []).map((row) => row[k]));
+  const army = Math.max(0, ...(ch.men ?? []).map((row) => row[k]));
+  const taken = (game.annals ?? []).filter((a) => a.k === "took" && a.by === me).length;
+  const stats = [
+    [T.stScore, `${scoreOf(game, me).total} (${fill(T.rankN, rankOf(game, me))})`],
+    [T.stPlaces, `${placesOf(game, me).length} (${most})`],
+    [T.stArmy, fill(T.soldiers, army)],
+    [T.stWins, String(game.wins?.[me] ?? 0)],
+    [T.stTaken, String(taken)],
+    [T.stTech, `${game.civs[me].techs?.length ?? 0} / ${TECHS.length}`],
+    [T.stWonders, String(wondersOfCiv(game, me).length)],
+  ];
+  const sy = ty + 16 + Math.ceil(rank.length / 2) * 19 + 26;
+  const sw = (r.w - 48) / stats.length;
+  stats.forEach(([label, v], n) => {
+    const sx = r.x + 24 + n * sw;
+    ctx.fillStyle = n % 2 ? "rgba(90,70,40,0.05)" : "rgba(90,70,40,0.1)";
+    ctx.fillRect(sx, sy, sw - 6, 52);
+    fit(ctx, label, sx + (sw - 6) / 2, sy + 18, sw - 14, { size: 11, color: INK.soft, align: "center" });
+    fit(ctx, v, sx + (sw - 6) / 2, sy + 40, sw - 14, { size: 16, bold: true, align: "center" });
+  });
+  const bw2 = (r.w - 56) / 3, by = r.y + r.h - 62;
+  button(ctx, boxes, { x: r.x + 20, y: by, w: bw2, h: 44, size: 15, main: true, label: T.newGame, act: { do: "newGame" } });
+  button(ctx, boxes, { x: r.x + 28 + bw2, y: by, w: bw2, h: 44, size: 15, label: T.chronicle, act: { do: "open", modal: "chronicle" } });
+  button(ctx, boxes, { x: r.x + 36 + 2 * bw2, y: by, w: bw2, h: 44, size: 15, label: T.ok, act: { do: "open", modal: game.over ? "over" : null } });
 }
 

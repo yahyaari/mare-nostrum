@@ -155,7 +155,7 @@ function redraw() {
     if (ui.fight && !ui.fight.done && now - ui.fight.t0 > SCENE_MS) { ui.fight.done = true; ui.modal ??= next(); }
     if (ui.fight && now - ui.fight.t0 > FIGHT_MS) ui.fight = null;
     const scene = !!ui.fight;
-    const opening = ui.modal && now - ui.modalAt < MODAL_MS;
+    const opening = (ui.modal && now - ui.modalAt < MODAL_MS) || (ui.modal?.kind === "summary" && ui.modal.playing);
     const sliding = ui.screen === "start" && now - (ui.pickAt ?? 0) < 320;
     if (anim.busy() || gliding || scene || opening || sliding) redraw();
     // Canlı harita: bulutlar süzülür, sancaklar dalgalanır - saniyede 20 kare, sekme arkadayken hiç.
@@ -546,7 +546,7 @@ function dispatch(act) {
       ui.modal = { kind: "confirm", text: T().newGameQ, yes: { do: "newGame" } };
       break;
     case "open":
-      ui.modal = { kind: act.modal };
+      ui.modal = act.modal ? { kind: act.modal } : null;
       if (act.modal === "report") { ui.news = null; coachDone("news"); }
       if (act.modal === "diplo") coachDone("diplo");
       break;
@@ -580,6 +580,25 @@ function dispatch(act) {
       break;
     case "fightOff":
       ui.fight = null;
+      break;
+    case "summary":
+      // Oyun sonu özeti: harita tekrarı baştan oynar.
+      ui.modal = { kind: "summary", playing: true, from: performance.now(), turn: 0 };
+      break;
+    case "summaryPlay":
+      if (m?.kind !== "summary") break;
+      if (m.playing) m.playing = false;
+      else {
+        const n = game.chronicle?.owners?.length ?? 0;
+        if ((m.turn ?? 0) >= n - 1) m.turn = 0;
+        m.playing = true;
+        m.from = performance.now() - (m.turn ?? 0) * 90;
+      }
+      break;
+    case "summaryTurn":
+      if (m?.kind !== "summary") break;
+      m.playing = false;
+      m.turn = Math.max(0, act.turn);
       break;
     case "cardTab":
       ui.cardTab = act.tab;

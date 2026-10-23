@@ -732,6 +732,16 @@ Oyunun tarihi (`src/rules/chronicle.js`). Menüden ve oyun sonu penceresinden a�
 
 ---
 
+### 21b. Oyun sonu özeti
+
+Kullanıcı 23.10, önerilen küçük işlerin sonuncusu (Civilization'ın oyun sonu ekranı gibi). Oyun
+bitince pencerede **Özet**: solda dünyanın tur tur tekrarı (mini harita, oynat/durdur, zaman çizgisine
+basınca o tura atlar), sağda herkesin skoru oyun boyunca (oyuncunun çizgisi kalın, tekrarın turu
+dikey çizgiyle) ve son sıralama, altta oyuncunun sayıları: skor ve sırası, yerleşim (en çok),
+en büyük ordu, kazanılan savaş, alınan yer, araştırma, harikalar. Kronik bunun için her tur her
+medeniyetin skorunu ve her yerleşimin sahibini de kaydeder (`chronicle.score`, `chronicle.owners`:
+yerleşim başına bir harf); eski kayıtta tekrar kayıttan sonraki turlardan başlar.
+
 ## 22. Arazi ve mevsim
 
 **Arazi** (`src/rules/ground.js`):

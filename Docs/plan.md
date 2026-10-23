@@ -3,7 +3,7 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **23.10.2026** (zafer yolları, canlı savaşlar, öğretici haydutlar, araştırma ağacı).
+> Son güncelleme: **23.10.2026** (zafer yolları, canlı savaşlar, öğretici, araştırma, liderler, harika yarışı, aynı bilgisayarda oyuncular, şehir binaları, geri çekilme ve dağlar, oyun sonu özeti).
 
 ## SON EKLENENLER (23.10) - önce bunu oku
 
@@ -59,7 +59,9 @@ harikaları inşa etme yarışı, aynı bilgisayarda arkadaşlarla) ve küçükl
 7. **Şehir binaları** (bu adım): kurallar.md 4b. Yapılar sekmesi: tapınak, pazar, okul, hamam. Kayıt 17.
 8. **Geri çekilme ve dağlar** (bu adım): kurallar.md bölüm 7 ve 22b. Yenilen ordu yarıdan azıyla
    çekilir, generali yaşar; dağlar yol dışında iki kat yavaş, dağda savunan x1.25.
-9. Sırada: oyun sonu özeti.
+9. **Oyun sonu özeti** (bu adım): kurallar.md 21b. Harita tekrarı, skor grafiği, sıralama, sayılar.
+
+Önerilen listenin hepsi bitti. **Sırada:** kullanıcı oynayıp söyleyecek.
 
 ## ÖNCEKİLER (22.10 akşam)
 

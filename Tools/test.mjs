@@ -2143,6 +2143,19 @@ section("Kronik (bölüm 21)");
 
 const CH = await import("../src/rules/chronicle.js");
 {
+  // Oyun sonu özeti için: her tur herkesin skoru ve her yerleşimin sahibi.
+  const CH = await import("../src/rules/chronicle.js");
+  const VV = await import("../src/rules/victory.js");
+  const s = S.newGame("rome", 7);
+  T.endTurn(s); T.endTurn(s);
+  check("kronik her tur skoru ve sahipleri kaydeder", s.chronicle.score.length === s.chronicle.places.length && s.chronicle.owners.length === s.chronicle.places.length && s.chronicle.owners[0].length === PLACES.length);
+  const last = s.chronicle.score.length - 1;
+  check("kaydedilen skor o turun skoru", s.chronicle.score[last][CIVS.findIndex((c) => c.id === "rome")] === VV.scoreOf(s, "rome").total);
+  const own = CH.ownersAt(s, last);
+  check("kayıttan bir turun sahipleri geri okunur", PLACES.every((p) => own[p.id] === s.places[p.id].owner) && CH.ownersAt(s, 999) === null);
+}
+
+{
   const s = S.newGame("rome", 5);
   for (let i = 0; i < 12; i++) T.endTurn(s);
   check("her tur bir fotoğraf (ilki oyunun başı)", s.chronicle.places.length === s.turn && s.chronicle.men.length === s.turn);

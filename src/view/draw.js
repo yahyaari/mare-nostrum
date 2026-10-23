@@ -268,6 +268,7 @@ export function drawMinimap(ctx, r, cam, owners) {
     }
   }
   ctx.drawImage(miniCanvas, r.x, r.y, r.w, r.h);
+  if (!cam) return; // özetteki harita tekrarı: kamera çerçevesi yok
   // Kameranın gördüğü yer
   const fx = r.w / SIZE.x, fy = r.h / SIZE.y;
   const x0 = Math.max(r.x, r.x + (cam.x - cam.w / 2 / cam.scale) * fx), y0 = Math.max(r.y, r.y + (cam.y - cam.h / 2 / cam.scale) * fy);

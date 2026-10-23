@@ -5,19 +5,34 @@
 // Kayıt küçük tutulur: tur başına iki kere yedi sayı, yıllık en fazla MAX satır (taşarsa önce
 // oyuncuyu ilgilendirmeyen eski satırlar düşer).
 
-import { CIVS } from "../data/world.js";
+import { CIVS, PLACES } from "../data/world.js";
+import { scoreOf } from "./victory.js";
 import { byId } from "./graph.js";
 import { placesOf, strength } from "./state.js";
 import { wonderAt } from "./wonders.js";
 
 const MAX = 300;
 
-/** Bu turun fotoğrafı: her medeniyetin yer ve asker sayısı. */
+/**
+ * Bu turun fotoğrafı: her medeniyetin yer ve asker sayısı ve skoru; her yerleşimin sahibi (oyun
+ * sonu özetindeki harita tekrarı için: yerleşim başına bir harf, medeniyetin sırası ya da "-").
+ */
 export function snapshot(state) {
   state.chronicle ??= { places: [], men: [] };
+  state.chronicle.score ??= [];
+  state.chronicle.owners ??= [];
   state.chronicle.places.push(CIVS.map((c) => placesOf(state, c.id).length));
   state.chronicle.men.push(CIVS.map((c) => (state.civs[c.id].alive ? strength(state, c.id) : 0)));
+  state.chronicle.score.push(CIVS.map((c) => scoreOf(state, c.id).total));
+  state.chronicle.owners.push(PLACES.map((p) => { const i = CIVS.findIndex((c) => c.id === state.places[p.id].owner); return i < 0 ? "-" : String(i); }).join(""));
 }
+
+/** Kayıttaki bir turun sahipleri: { yer: medeniyet | null }. */
+export const ownersAt = (state, i) => {
+  const row = state.chronicle?.owners?.[i];
+  if (!row) return null;
+  return Object.fromEntries(PLACES.map((p, k) => [p.id, row[k] === "-" ? null : CIVS[Number(row[k])].id]));
+};
 
 /**
  * Olayları yıllığa yaz. Oyuncuyu ilgilendiren her şey; başkalarının arasındakilerden sadece
