@@ -48,7 +48,13 @@ harikaları inşa etme yarışı, aynı bilgisayarda arkadaşlarla) ve küçükl
    (Civ V gibi), hafıza (`state.memory`), hediye, ticaret anlaşması (`state.deals`), para
    karşılığı barış, liderle görüşme ekranı, portreli teklif mektupları, savaş ilan eden lider
    konuşur. Kayıt 14. Denge: kişilikler yumuşatıldı (ayakta kalan 344, herkes 41+).
-5. **Harikaları inşa etme yarışı** (sırada), 6. **arkadaşlarla aynı bilgisayarda**, sonra küçükler.
+5. **Harikaları inşa etme yarışı** (bu adım): kurallar.md 18b. Altı yeni harika (Delfi Kahini,
+   Büyük Kütüphane, Büyük Hazine, Büyük Liman, Büyük Su Kemeri, Kolezyum), araştırmayla açılır,
+   şehirde inşaatçıyla; ilk bitiren alır, kaybedene yarı para. `state.built`, kayıt 15. Harikalar
+   zaferi 12'den 8. Ayrıca eski bir hareket hatası düzeldi: boğazdaki feribot yolundaki gemisiz
+   ordu Ege'yi yürüyerek geçiyordu (moves.js modeOf).
+6. **Arkadaşlarla aynı bilgisayarda** (sırada), sonra küçükler (şehir binaları, geri çekilme ve
+   dağlar, oyun sonu özeti).
 
 ## ÖNCEKİLER (22.10 akşam)
 

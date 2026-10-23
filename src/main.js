@@ -12,7 +12,7 @@ import {
 } from "./rules/moves.js";
 import { POS, cellOf, centre, dist, isLand, pathCost, regionOf, smooth, stepCost } from "./rules/map.js";
 import {
-  VERSION, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, merge, men, migrate, muster, newGame, placesOf, recruit, station, upgrade,
+  VERSION, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, merge, men, migrate, muster, newGame, placesOf, recruit, startWonder, station, upgrade,
 } from "./rules/state.js";
 import { resolve as answer } from "./rules/events.js";
 import { appoint } from "./rules/generals.js";
@@ -168,6 +168,8 @@ function redraw() {
 function next() {
   if (!game) return null;
   if (game.over) return { kind: "over" };
+  // Harikan tamamlandı (her biri bir pencere).
+  if (ui.wondersDone?.length) return { kind: "wonder", ...ui.wondersDone.shift() };
   // Sana savaş açan lider konuşur (her biri bir pencere).
   if (ui.speeches?.length) return { kind: "speech", civ: ui.speeches.shift() };
   if (game.inbox?.length) return { kind: "decide" };
@@ -296,6 +298,8 @@ function mapView() {
     camp: !!a.besieging || !!a.bandit,
   }));
   view.sieges = Object.fromEntries(game.armies.filter((a) => a.besieging).map((a) => [a.besieging, a.owner]));
+  // İnşa edilen harikaların yerleri (haritada işaret).
+  view.built = Object.fromEntries(Object.values(game.built ?? {}).map((id) => [id, true]));
   const a = ownArmy();
   if (a) {
     view.marks = {};
@@ -628,6 +632,7 @@ function dispatch(act) {
       // Rapor pencere açmaz: haberler sağ üstte belirir. Kararlar ve görevler yine pencere.
       if (game.events.some((e) => e.type === "tech" && e.civ === me)) ui.pickTech = true;
       ui.speeches = game.events.filter((e) => e.type === "war" && e.on === me).map((e) => e.by);
+      ui.wondersDone = game.events.filter((e) => e.type === "wonderBuilt" && e.civ === me).map((e) => ({ wonder: e.wonder, place: e.place }));
       pending = next();
       pendingNews = eventLines(game, ui.lang);
       if (!pendingNews.length) pendingNews = null;
@@ -889,6 +894,12 @@ function dispatch(act) {
     }
     case "leader":
       ui.modal = { kind: "leader", civ: act.civ, line: null };
+      break;
+    case "wonder":
+      if (!startWonder(game, act.id, act.wonder)) break;
+      sound.horn(true);
+      anim.rise(act.id, T().wonders[act.wonder][0], INK.warn);
+      save();
       break;
     case "gift": {
       if (!gift(game, me, act.civ, act.amount)) break;

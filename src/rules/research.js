@@ -20,6 +20,7 @@
 
 import { PLACES } from "../data/world.js";
 import { LEVELS, N, trait } from "./numbers.js";
+import { holds } from "./wonders.js";
 
 export const TECHS = [
   { id: "irrigation", tier: 1, lane: 0, needs: [], mods: { wheat: 1.15 } },
@@ -81,7 +82,8 @@ const COMBAT = ["inf", "arch", "cav", "all", "walls", "navy"];
 export function modsOf(state, civ) {
   const out = {};
   for (const k of COMBAT) {
-    const m = techMul(state, civ, k);
+    // Büyük Liman da filoyu güçlendirir (harika, araştırma değil ama aynı yerden).
+    const m = techMul(state, civ, k) * (k === "navy" && holds(state, civ, "harbour") ? N.wonders.harbourNavy : 1);
     if (m !== 1) out[k] = m;
   }
   return out;
@@ -96,7 +98,8 @@ export function scienceOf(state, civ) {
     n += pl.pop / N.research.popPer + (p.capital ? N.research.capital : 0);
   }
   const ai = civ !== state.player ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;
-  return n * trait(civ, "science") * techMul(state, civ, "science") * ai;
+  const library = holds(state, civ, "library") ? N.wonders.libraryScience : 1;
+  return n * trait(civ, "science") * techMul(state, civ, "science") * library * ai;
 }
 
 /** Araştırılabilir mi: bilinmiyor ve istediklerinin hepsi biliniyor. */
@@ -153,6 +156,16 @@ export function aiResearch(state, civ) {
   const order = trait(civ, "navy") > 1 ? SEA : ORDER;
   const next = order.find((id) => canResearch(state, civ, id));
   if (next) c.research = next;
+}
+
+/** Delfi Kahini: araştırılan teknoloji (yoksa ilk açık olan) bu tur biter. */
+export function freeTech(state, civ) {
+  const c = state.civs[civ];
+  const id = c.research ?? available(state, civ)[0];
+  if (!id) return null;
+  c.research = id;
+  c.progress[id] = Math.max(c.progress[id] ?? 0, costFor(state, civ, id));
+  return id;
 }
 
 /** Bir medeniyete bir teknolojiyi istedikleriyle birlikte ver (eski kayıtlar ve testler için). */

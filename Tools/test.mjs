@@ -730,6 +730,83 @@ section("Araştırma ağacı (bölüm 23)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Harikaları inşa etme yarışı (bölüm 18b)");
+
+{
+  const W = await import("../src/rules/wonders.js");
+  const { TEXT } = await import("../src/text.js");
+  check("6 antik + 6 inşa edilebilir harika", W.WONDERS.length === 6 && W.BUILDABLE.length === 6 && W.ALL_WONDERS.length === 12);
+  for (const lang of ["en", "tr"]) check(`${lang}: her harikanın adı ve armağanı yazılı`, W.ALL_WONDERS.every((w) => TEXT[lang].wonders[w]?.[0] && TEXT[lang].wonders[w]?.[1]));
+  const s = S.newGame("rome", 7);
+  const rome = s.places.rome;
+  s.civs.rome.money = 1000;
+  check("kalede harika yapılmaz", S.wonderInfo(s, "ariminum", "oracle").why === "castle" || byId.ariminum.kind !== "castle");
+  check("şehir seviyesi 3 gerek", S.wonderInfo(s, "rome", "oracle").why === "wonderLevel");
+  rome.level = 3;
+  check("araştırma gerek (Kütüphane: Yazı)", S.wonderInfo(s, "rome", "library").why === "tech_writing");
+  check("Büyük Liman liman ister", S.wonderInfo(s, "ariminum", "harbour").why !== null);
+  check("Delfi Kahini hemen yapılabilir", S.wonderInfo(s, "rome", "oracle").why === null);
+  const m0 = s.civs.rome.money;
+  check("başlatınca para ödenir, bir inşaatçı çalışır", S.startWonder(s, "rome", "oracle") && s.civs.rome.money === m0 - 140 && S.freeBuilders(s, "rome") === 1);
+  s.places.tarentum.level = 3;
+  check("aynı harika iki şehirde birden yapılmaz", S.wonderInfo(s, "tarentum", "oracle").why === "elsewhere");
+  check("Vazgeç parayı geri verir", S.cancelBuild(s, "rome", "wonder:oracle") && s.civs.rome.money === m0);
+
+  // Yarış: Roma ve Mısır aynı harikayı yapar; önce biten alır, öteki paranın yarısını geri alır.
+  const r = S.newGame("rome", 7);
+  r.civs.rome.money = r.civs.egypt.money = 500;
+  r.places.rome.level = 3;
+  r.places.alexandria.level = 3;
+  S.startWonder(r, "rome", "oracle");
+  S.startWonder(r, "alexandria", "oracle");
+  r.places.alexandria.builds.find((b) => b.what === "wonder:oracle").left = 3;
+  const eg0 = r.civs.egypt.money;
+  R.choose(r, "egypt", "bronze");
+  const evs = [];
+  for (let i = 0; i < 3; i++) S.progressBuilds(r, evs);
+  check("ilk bitiren alır: Delfi Kahini İskenderiye'de", r.built.oracle === "alexandria" && evs.some((e) => e.type === "wonderBuilt" && e.civ === "egypt" && e.wonder === "oracle"));
+  check("yarışı kaybedenin inşaatı biter, paranın yarısı döner", !r.places.rome.builds.some((b) => b.what === "wonder:oracle") && r.civs.rome.money === 500 - 140 + 70 && evs.some((e) => e.type === "wonderMissed" && e.civ === "rome" && e.refund === 70));
+  check("artık kimse yapamaz", S.wonderInfo(r, "rome", "oracle").why === "taken");
+  check("Delfi Kahini: araştırılan teknoloji bu tur biter", (() => { R.tickResearch(r, []); return r.civs.egypt.techs.includes("bronze"); })(), r.civs.egypt.techs.join());
+  check("harika skora ve sayıma girer", W.wondersOf(r, "egypt").some((w) => w.id === "oracle") && W.wondersAt(r, "alexandria").length === 2);
+  r.places.alexandria.owner = "rome";
+  check("şehri alan harikayı da alır", W.holds(r, "rome", "oracle") && !W.holds(r, "egypt", "oracle"));
+
+  // Etkiler.
+  const e = S.newGame("carthage", 7);
+  const sci0 = R.scienceOf(e, "carthage"), out0 = S.output(e, "carthage");
+  e.places.carthage.trade = 1;
+  const trade0 = S.output(e, "carthage").money;
+  e.built = { library: "carthage", treasury: "carthage" };
+  check("Büyük Kütüphane bilimi x1.25", Math.abs(R.scienceOf(e, "carthage") - sci0 * 1.25) < 1e-9);
+  check("Büyük Hazine parayı x1.15", Math.abs(S.output(e, "carthage").money - trade0 * 1.15) < 1e-9);
+  e.built.harbour = "carthage";
+  check("Büyük Liman filoyu x1.2 güçlendirir", R.modsOf(e, "carthage").navy === N.wonders.harbourNavy);
+  const { drift } = await import("../src/rules/loyalty.js");
+  const d0 = drift(e, "carthage").total;
+  e.built.colosseum = "carthage";
+  check("Kolezyum: her yerde sadakat turda +3", Math.abs(drift(e, "carthage").total - d0 - 3) < 1e-9);
+  const g1 = S.newGame("rome", 7), g2 = S.newGame("rome", 7);
+  for (const g of [g1, g2]) g.places.tarentum.pop = 10;
+  g2.built = { aqueduct: "rome" };
+  T.economy(g1, []); T.economy(g2, []);
+  check("Büyük Su Kemeri nüfus artışını hızlandırır", g2.places.tarentum.pop > g1.places.tarentum.pop);
+
+  const old = S.newGame("rome", 7);
+  delete old.built;
+  old.version = 14;
+  S.migrate(old);
+  check("eski kayıt: inşa edilmiş harika yok", old.version === S.VERSION && old.built && !Object.keys(old.built).length);
+
+  // Gerileme: boğazdaki feribot yolunda duran gemisiz ordu denizden yol planlamaz (bot, tohum 505).
+  const f = S.newGame("rome", 7);
+  const ferry = [...Array(MAP.W * MAP.H).keys()].find((c) => !MAP.isLand(c) && MAP.isRoad(c));
+  const a = raise(f, "rome", { inf: 30 });
+  Object.assign(a, MAP.centre(ferry), { at: null, route: [] });
+  check("feribot yolunda gemisiz ordu kara ordusudur", M.modeOf(a) === "land");
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Liderler ve tutum (bölüm 24)");
 
 {
@@ -1707,10 +1784,11 @@ section("Zafer yolları: Fetih, Harikalar, Skor");
   M.attack(s, a.id, "mediolanum", [1, 1]);
   check("kazanılan savaş skora girer", s.wins.rome === 1 && V.scoreOf(s, "rome").parts.wins === N.score.win);
 
-  // Harikalar: 5 harika tutanın sayacı.
+  // Harikalar: 8 harika tutanın sayacı (5 antik + İskenderiye'de inşa edilmiş 3).
   const h = S.newGame("rome", 7);
   for (const id of ["rhodes", "ephesus", "athens"]) h.places[id].owner = "egypt";
-  check("Mısır'da 5 harika", W.wondersOf(h, "egypt").length === 5);
+  h.built = { oracle: "alexandria", library: "alexandria", treasury: "alexandria" };
+  check("Mısır'da 8 harika", W.wondersOf(h, "egypt").length === N.victory.wonders);
   const ev = V.tickVictory(h, []);
   check("sayaç başlar, herkes duyar", h.wonderHold.egypt === 1 && ev.some((e) => e.type === "wonderRace" && e.civ === "egypt") && V.wonderTurnsLeft(h, "egypt") === N.victory.hold - 1);
   for (let i = 1; i < N.victory.hold - 1; i++) V.tickVictory(h, []);
@@ -1720,6 +1798,7 @@ section("Zafer yolları: Fetih, Harikalar, Skor");
   check("süre dolunca Mısır kazanır, oyuncu kaybeder", o && o.kind === "wonders" && o.winner === "egypt" && o.result === "lost");
   const k = S.newGame("rome", 7);
   for (const id of ["rhodes", "ephesus", "athens"]) k.places[id].owner = "egypt";
+  k.built = { oracle: "alexandria", library: "alexandria", treasury: "alexandria" };
   V.tickVictory(k, []); V.tickVictory(k, []);
   k.places.athens.owner = "rome";
   const ev2 = V.tickVictory(k, []);

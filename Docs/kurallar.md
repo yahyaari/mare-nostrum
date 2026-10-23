@@ -528,7 +528,7 @@ Kullanıcı 23.10: "şu ana kadar güzel şeyler yaptık ama hâlâ bir oyun gib
 Fetih, Harikalar, Skor (`src/rules/victory.js`).
 
 - **Fetih:** bütün rakipler yıkılır.
-- **Harikalar:** 6 dünya harikasından **5**'ini **20 tur** üst üste tutan kazanır. Sayaç başlayınca
+- **Harikalar:** 12 dünya harikasından (6 antik, 6 inşa edilen; bölüm 18b) **8**'ini **20 tur** üst üste tutan kazanır. Sayaç başlayınca
   herkes duyar (haber, üst bantta kırmızı ünlem, Zafer penceresinde "Mısır: 12 tur sonra
   Harikalar zaferi!"). Bilgisayarlar öndekinin üstüne gider: gücü denkse savaş açar, onun harika
   şehirlerini hedefler.
@@ -606,6 +606,43 @@ Parthenon; Zeus heykeli ve Mozole haritadaki bir yerleşimde değil.)
 > Dünya biraz yavaşladı, düzeni bozulmadı.
 
 ---
+
+### 18b. Harikaları inşa etme yarışı
+
+Kullanıcı 23.10, önerilerden ikincisi (Civilization gibi): antik altı harikanın yanında araştırmayla
+açılan altı harika inşa edilebilir (`src/rules/wonders.js` BUILDABLE, `state.js` wonderInfo /
+startWonder).
+
+| Harika | Gerekli araştırma | Bedel | Süre | Armağanı |
+|---|---|---|---|---|
+| Delfi Kahini | - | 140 | 10 tur | Araştırdığın teknoloji hemen biter (seçili değilse ilk açık olan) |
+| Büyük Kütüphane | Yazı | 200 | 12 | Bilim x1.25 |
+| Büyük Hazine | Sikke | 220 | 12 | Para x1.15 |
+| Büyük Liman | Limancılık | 220 | 12 | Filolar x1.2 güçlü, ticaret x1.2 (liman şehri) |
+| Büyük Su Kemeri | Mühendislik | 280 | 14 | Nüfus artışı x1.25 |
+| Kolezyum | Matematik | 340 | 16 | Her yerde sadakat turda +3 |
+
+- Şehir (kale değil), seviye 3; bir inşaatçı süre boyunca çalışır, para başta ödenir. Aynı harika
+  bir medeniyetin iki şehrinde birden yapılmaz. Vazgeçilirse para geri gelir.
+- **Yarış:** herkes aynı anda yapabilir; ilk bitiren alır, ötekilerin inşaatı biter ve paralarının
+  yarısı geri döner. Biri bitirince herkes duyar ("Mısır bir harika tamamladı: İskenderiye
+  şehrinde Büyük Kütüphane!").
+- Harika bittiği şehirde durur: şehri alan harikayı da alır (antikler gibi). Skora 30 sayar ve
+  Harikalar zaferine girer.
+- **Ekran:** şehir kartında *Harikalar* sekmesi (altı harika: armağanı, fiyatı, süresi, İnşa et;
+  yapılıyorsa kalan tur ve Vazgeç; yapıldıysa kimin, nerede; kilitliyse neden). Haritada şehrin
+  yanında harika işareti. Kendi harikan bitince kutlama penceresi. Zafer penceresinde on iki harika
+  (yapılmamışlar soluk).
+- Bilgisayar parası artınca, aynı anda en çok bir tane, ucuzdan pahalıya harika yapar.
+- Geniş ülkeye pahalı (araştırma gibi): 6 yerleşimden sonra her yerleşim bedeli %5 artırır.
+- **Harikalar zaferi** artık 12 harikadan **8**'ini 20 tur tutmak (önce 6'dan 5). 28 bot oyunuyla: eşik 5
+  iken 22 oyun Harikalar zaferiyle bitiyordu, 7 iken 9, 8 iken 6 (eskisi gibi beşte bir). Harikalar ilk
+  denemede yarı fiyatına ve aynı anda birkaç tane yapılıyordu: zengin Partlar 4-5'ini birden alıyordu.
+  Şimdi Delfi Kahini ortanca 64. turda, Kolezyum 121. turda; oyunların yarısında hepsi yapılmıyor.
+- Denge (70 oyun, zaferler kapalı, adil karşılaştırma): harikalar dengeyi neredeyse değiştirmiyor
+  (harikasız 291, harikalı 298 ayakta). Bu adımda düzeltilen hareket hatası (boğazdaki feribot
+  yolunda duran gemisiz ordu "denizde" sayılıp Ege'yi yürüyerek geçiyordu) dünyayı biraz kanlı
+  yaptı: ayakta kalan 306 -> 291, ilk düşüş aynı (44 -> 45).
 
 ## 19. Savaş sisi ve haritanın süsleri
 

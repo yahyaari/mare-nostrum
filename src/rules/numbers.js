@@ -116,7 +116,7 @@ export const N = {
   // 28 bot oyunuyla: 4 harika / 10 tur iken oyunların yarısı Harikalar zaferiyle, en erken 20. turda
   // bitiyordu (Mısır iki harikayla başlıyor, yanındaki Rodos ve Efes bağımsız). 5 / 20: beşte bir,
   // en erken 55. tur; çoğu oyun 200. turda skorla biter.
-  victory: { wonders: 5, hold: 20, turns: 200 },
+  victory: { wonders: 8, hold: 20, turns: 200 },
   // Tecrübe (kullanıcı 23.10: "savaşlar cansız"; Civilization'ın terfileri gibi): ordu savaş
   // kazandıkça tecrübe toplar (`win`; yerleşimini savunan içerideki ordu `held`). Rütbeler:
   // Acemi, Kıdemli (`xp[0]`), Usta (`xp[1]`), Seçkin (`xp[2]`); her rütbe güce +`per`.
@@ -206,7 +206,9 @@ export const N = {
   ground: { river: 0.85, pass: 1.25 },
   season: { storm: 0.25, stormLoss: 0.1, winterArmy: 0.03 },
   // Dünya harikaları (bölüm 18): şehri tutanın bütün ülkesine.
-  wonders: { pharosFort: 1, pyramidsLoyalty: 2, gardensGrowth: 1.25, artemisMoney: 1.1, colossusTrade: 1.5, parthenonXp: 2 },
+  wonders: { pharosFort: 1, pyramidsLoyalty: 2, gardensGrowth: 1.25, artemisMoney: 1.1, colossusTrade: 1.5, parthenonXp: 2,
+    // İnşa edilenler (wonders.js BUILDABLE): şehir seviyesi, yarışı kaybedene dönen pay, etkileri.
+    level: 3, refund: 0.5, perPlace: 0.05, libraryScience: 1.25, treasuryMoney: 1.15, harbourNavy: 1.2, harbourTrade: 1.2, aqueductGrowth: 1.25, colosseumLoyalty: 3 },
 };
 
 // Zorluk: bilgisayarın OYUNCUYA ne zaman savaş açtığı ve bilgisayarın üretimi. Bilgisayarlar

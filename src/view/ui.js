@@ -26,7 +26,7 @@ import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
-  PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  PORT_UPGRADES, UPGRADES, wonderInfo, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -39,7 +39,7 @@ import {
 } from "./kit.js";
 import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal } from "./hud.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, chevrons, galley, roundRect, shade, shield, soldier, wonderMark } from "./pieces.js";
-import { WONDERS, wonderAt } from "../rules/wonders.js";
+import { ALL_WONDERS, BUILDABLE, WONDERS, placeOfWonder, wonderAt, wondersAt } from "../rules/wonders.js";
 import { rankOf, ranking, scoreOf, wonderTurnsLeft } from "../rules/victory.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { sight } from "../rules/sight.js";
@@ -517,9 +517,9 @@ function gridHead(ctx, boxes, T, u, of, title, x, y, w, g, mine) {
  */
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const tabs = ["city", ...(p.port ? ["port"] : []), "garrison"];
+  const tabs = ["city", ...(p.port ? ["port"] : []), ...(p.kind === "castle" ? [] : ["wonders"]), "garrison"];
   const tab = tabs.includes(ui.cardTab) ? ui.cardTab : "city";
-  const wonder = wonderAt(id);
+  const wonder = wondersAt(game, id)[0] ?? null;
   const A = 214, B = 300, C = 230, BC = B + GAP + C;
   const body = A + GAP + BC + PAD;
   // Görsel, garnizon ve içeridekiler soldaki kartta (sideCard); burada ne yapılacağı.
@@ -534,7 +534,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   fit(ctx, kindLine(id, game, T, true), x, y + 50, A, { italic: true, size: 12, color: INK.soft });
   let ay = y + 72;
   if (wonder) {
-    wonderLine(ctx, id, T, x, ay - 2, A);
+    wonderLine(ctx, id, T, x, ay - 2, A, wonder.id);
     ay += 18;
   }
   const pw = amount(ctx, "pop", `${pl.pop} / ${Math.round(popCap(pl, p.kind))}`, x, ay, { size: 13 });
@@ -575,13 +575,14 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   // Sekmeler: ikinci ve üçüncü sütunun üstünde.
   x += A + GAP;
   vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-  const label = { city: T.tabCity, port: "⚓ " + T.tabPort, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
+  const label = { city: T.tabCity, port: "⚓ " + T.tabPort, wonders: "✦ " + T.tabWonders, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
   const tw = (BC - 8 * (tabs.length - 1)) / tabs.length;
   tabs.forEach((k, i) => {
     button(ctx, boxes, { x: x + i * (tw + 8), y: y + 14, w: tw, h: 28, label: label[k], size: 13, main: tab === k, act: { do: "cardTab", tab: k } });
   });
   const top = y + 50;
-  if (tab === "garrison") {
+  if (tab === "wonders") wondersTab(ctx, game, ui, boxes, T, id, x, top, BC, y + H - 12 - top);
+  else if (tab === "garrison") {
     const g = cardGrid(ctx, boxes, T, ui, pl, pl.owner, of, { x, y: top + 26, w: BC, h: y + H - 12 - (top + 26) }, true);
     gridHead(ctx, boxes, T, pl, of, T.garrison, x, top, BC, g, true);
   } else {
@@ -781,9 +782,8 @@ function rule(ctx, x1, x2, y) {
 }
 
 /** Kartta harika satırı: madalyon, adı ve armağanı (`w` genişliğe sığdırılır). */
-function wonderLine(ctx, id, T, x, y, w = 324) {
-  const wd = wonderAt(id);
-  const [name, gift] = T.wonders[wd.id];
+function wonderLine(ctx, id, T, x, y, w = 324, wid = wonderAt(id)?.id) {
+  const [name, gift] = T.wonders[wid];
   wonderMark(ctx, x + 8, y - 5, 8);
   const nw = fit(ctx, name, x + 22, y, w - 22, { title: true, bold: true, size: 12, color: "#7a5418" });
   const room = w - 28 - nw;
@@ -974,7 +974,7 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
     + (f.works ? (p.port ? 52 : 17) + (f.builds?.length ? 18 : 0) : 0)
     + (f.garrison ? 18 + armyRows(f.inside.length) + armyRows(f.gate.length) : 50);
   const actsH = own ? 0 : 42 + 42 + (pl.owner && relation(game, me, pl.owner) === "neutral" ? 42 : 0);
-  const need = 8 + 26 + 36 + (wonderAt(id) ? 16 : 0) + 26 + rowsH + actsH + 12;
+  const need = 8 + 26 + 36 + wondersAt(game, id).length * 16 + 26 + rowsH + actsH + 12;
   const VH = Math.max(92, Math.min(200, area.h - need));
   const r = { ...area, h: Math.min(area.h, VH + need) };
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
@@ -1013,7 +1013,7 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
   y += 17;
   fit(ctx, kindLine(id, game, T, !f.seen), x, y, w, { italic: true, size: 12, color: INK.soft });
   y += 8;
-  if (wonderAt(id)) { y += 16; wonderLine(ctx, id, T, x, y, w); }
+  for (const wd of wondersAt(game, id)) { y += 16; wonderLine(ctx, id, T, x, y, w, wd.id); }
   rule(ctx, x, x + w, y + 8);
   y += 26;
 
@@ -1038,7 +1038,7 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
       row("", `${T.fishery} ${wk.fishery} · ${T.shipyard} ${wk.shipyard}`, tone, 17, 12);
       row("", `${T.trade} ${wk.trade} · ${T.fort} ${wk.fort}`, tone, 18, 12);
     }
-    if (f.builds?.length) row(T.buildingShort, f.builds.map((b) => `${T[b.what]} (${b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left)})`).join(" · "), INK.warn);
+    if (f.builds?.length) row(T.buildingShort, f.builds.map((b) => `${buildName(T, b.what)} (${b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left)})`).join(" · "), INK.warn);
   }
   if (f.garrison) {
     const g = f.garrison;
@@ -1286,7 +1286,7 @@ export function placeTip(game, id, lang, hid, go) {
   out.push(hid ? T.fogUnknown : men(d) ? troops(T, d) : T.undefended);
   const walls = wallsOf(game, id);
   if (walls) out.push(`${T.walls}: ${wallsText(walls, T)}`);
-  if (wonderAt(id)) out.push([T.wonders[wonderAt(id).id][0], "warn"]);
+  for (const wd of wondersAt(game, id)) out.push([T.wonders[wd.id][0], "warn"]);
   if (!go) return out;
   out.push(goLine(go, lang));
   if (go.trespass?.length) out.push([fill(T.tipTrespass, go.trespass.map((c) => civName(c, lang)).join(", ")), "bad"]);
@@ -1496,7 +1496,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, leader: leaderModal, speech: speechModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -1808,6 +1808,8 @@ export function eventLines(game, lang) {
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
+    if (e.type === "wonderBuilt") out.push([fill(T.evWonderBuilt, name(e.civ), T.wonders[e.wonder][0], placeName(e.place, lang)), e.civ === me ? "good" : "bad"]);
+    if (e.type === "wonderMissed" && e.civ === me) out.push([fill(T.evWonderMissed, T.wonders[e.wonder][0], e.refund), "bad"]);
     if (e.type === "dealEnded") out.push([fill(T.evDealEnded, name(e.civ)), null]);
     if (e.type === "trade" && mine) out.push([fill(T.evTrade, name(e.by), name(e.to)), "good"]);
     if (e.type === "tech" && e.civ === me) out.push([fill(T.evTech, T.techs[e.tech][0]), "good"]);
@@ -1817,8 +1819,8 @@ export function eventLines(game, lang) {
     if (e.type === "spyCaught" && e.civ === me) out.push([fill(T.evSpyCaught, placeName(e.place, lang), name(e.by)), "bad"]);
     if (e.type === "trespass" && e.by === me) out.push([fill(T.evTrespassBy, name(e.victim), Math.ceil(e.anger), N.anger.war), "bad"]);
     if (e.type === "trespass" && e.victim === me) out.push([fill(T.evTrespassOn, name(e.by)), "warn"]);
-    if (e.type === "battle" && e.won && !e.field && wonderAt(e.place)) {
-      out.push([fill(T.evWonder, name(e.attacker), T.wonders[wonderAt(e.place).id][0]), e.attacker === me ? "good" : e.defender === me ? "bad" : null]);
+    if (e.type === "battle" && e.won && !e.field && wondersAt(game, e.place).length) {
+      out.push([fill(T.evWonder, name(e.attacker), T.wonders[wondersAt(game, e.place)[0].id][0]), e.attacker === me ? "good" : e.defender === me ? "bad" : null]);
     }
     if (e.type === "storm" && e.civ === me) out.push([fill(T.evStorm, e.lost, e.sunk), "bad"]);
     if (e.type === "winter" && e.civ === me) out.push([fill(T.evWinter, e.lost), "bad"]);
@@ -1913,6 +1915,58 @@ function researchModal(ctx, cam, game, ui, boxes, T) {
   }
   lines(ctx, T.techPick, r.x + 24, y0 + 4 * NH + 3 * GY + 26, r.w - 48, { size: 12, italic: true, color: INK.soft, align: "center" }, 2, 15);
   oneButton(ctx, boxes, r, { label: T.close ?? T.ok, act: { do: "close" } });
+}
+
+/** Oyuncunun harikası tamamlandı: büyük harika işareti, adı, armağanı, şehri. */
+function wonderModal(ctx, cam, game, ui, boxes, T, m) {
+  const [name, gift] = T.wonders[m.wonder];
+  const r = modalFrame(ctx, cam, boxes, 300, 440);
+  wonderMark(ctx, r.x + r.w / 2, r.y + 74, 34);
+  text(ctx, fill(T.wonderDone, name), r.x + r.w / 2, r.y + 150, { title: true, bold: true, size: 20, align: "center", color: "#7a5418" });
+  text(ctx, gift[0].toLocaleUpperCase(ui.lang) + gift.slice(1), r.x + r.w / 2, r.y + 178, { size: 15, italic: true, align: "center" });
+  text(ctx, fill(T.wonderDoneSub, placeName(m.place, ui.lang)), r.x + r.w / 2, r.y + 202, { size: 13, align: "center", color: INK.soft });
+  oneButton(ctx, boxes, r, { label: T.hail, act: { do: "close" } });
+}
+
+/** İnşaatın adı: yapı (tarla, sanayi...) ya da harika. */
+const buildName = (T, what) => (what.startsWith("wonder:") ? T.wonders[what.slice(7)][0] : T[what]);
+
+/**
+ * Şehir kartında Harikalar sekmesi: inşa edilebilen altı harika iki sütunda. Her biri: adı,
+ * armağanı, ve durumu - yapılabilirse fiyatı, süresi ve İnşa et; burada yapılıyorsa kalan tur ve
+ * Vazgeç; başkası yaptıysa kim ve nerede; kilitliyse neden.
+ */
+function wondersTab(ctx, game, ui, boxes, T, id, x, top, w, h) {
+  buildersRow(ctx, game, boxes, T, id, x, top, w);
+  const cw = (w - 10) / 2, ch = Math.min(52, (h - 30) / 3);
+  BUILDABLE.forEach((d, i) => {
+    const cx = x + (i % 2) * (cw + 10), cy = top + 26 + Math.floor(i / 2) * ch;
+    const wi = wonderInfo(game, id, d.id), [name, gift] = T.wonders[d.id];
+    const at = placeOfWonder(game, d.id);
+    ctx.fillStyle = i % 2 === Math.floor(i / 2) % 2 ? "rgba(90,70,40,0.07)" : "rgba(90,70,40,0.03)";
+    ctx.fillRect(cx, cy, cw, ch - 4);
+    wonderMark(ctx, cx + 12, cy + 15, 7);
+    fit(ctx, name, cx + 24, cy + 18, cw - 112, { bold: true, size: 13, color: at ? INK.soft : INK.ink });
+    fit(ctx, gift, cx + 6, cy + 35, cw - 110, { size: 11, italic: true, color: INK.soft });
+    const bx = cx + cw - 98, bw = 92;
+    if (at) {
+      fit(ctx, fill(T.wonderOf, civName(game.places[at].owner, ui.lang, T.free), placeName(at, ui.lang)), bx - 6, cy + 30, bw + 6, { size: 11, bold: true, color: game.places[at].owner === game.player ? INK.good : INK.bad, align: "left" });
+    } else if (wi.why === "building") {
+      const b = wi.building;
+      text(ctx, fill(T.turnsN, b.left), bx + bw, cy + 16, { size: 12, bold: true, align: "right", color: INK.warn });
+      ctx.fillStyle = "rgba(90,70,40,0.18)";
+      ctx.fillRect(bx, cy + 22, bw, 5);
+      ctx.fillStyle = GOLD;
+      ctx.fillRect(bx, cy + 22, bw * (1 - b.left / b.total), 5);
+      button(ctx, boxes, { x: bx + bw - 60, y: cy + 29, w: 60, h: 18, label: T.cancel, size: 10, act: { do: "cancelBuild", id, what: "wonder:" + d.id } });
+    } else {
+      text(ctx, fill(T.wonderTurns, wi.cost, wi.turns), bx + bw, cy + 14, { size: 11, align: "right", color: INK.soft });
+      button(ctx, boxes, {
+        x: bx, y: cy + 20, w: bw, h: 26, label: T.buildWonder, size: 12, main: !wi.why, off: !!wi.why,
+        act: { do: "wonder", id, wonder: d.id }, tip: [name, gift, fill(T.wonderTurns, wi.cost, wi.turns), wi.why ? [whyText(wi.why, T), "bad"] : null, T.wonderRaceHint],
+      });
+    }
+  });
 }
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
@@ -2082,7 +2136,7 @@ function citiesModal(ctx, cam, game, ui, boxes, T, m) {
     const y = r.y + 62 + i * rowH, pl = game.places[id], p = byId[id];
     listRow(ctx, boxes, r, y, rowH - 2, i, { do: "pickPlace", id });
     let nw = text(ctx, p.name[ui.lang], x, y + 20, { bold: true, size: 15 });
-    if (wonderAt(id)) { wonderMark(ctx, x + nw + 14, y + 15, 7.5); nw += 22; }
+    if (wondersAt(game, id).length) { wonderMark(ctx, x + nw + 14, y + 15, 7.5); nw += 22; }
     text(ctx, kindLine(id, game, T), x + nw + 10, y + 20, { italic: true, size: 12, color: INK.soft });
     const lo = pl.loyalty;
     const lc = lo < N.loyalty.revolt ? INK.bad : lo < N.loyalty.unrest ? INK.warn : INK.good;
@@ -2264,7 +2318,7 @@ function chronicleModal(ctx, cam, game, ui, boxes, T, m) {
  */
 function victoryModal(ctx, cam, game, ui, boxes, T) {
   const me = game.player;
-  const r = modalFrame(ctx, cam, boxes, 556, 560);
+  const r = modalFrame(ctx, cam, boxes, 596, 560);
   const x = r.x + 24, w = r.w - 48;
   text(ctx, T.victoryTitle, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   let y = r.y + 76;
@@ -2290,17 +2344,19 @@ function victoryModal(ctx, cam, game, ui, boxes, T) {
   text(ctx, fill(T.vConquestProg, standing, rivals.length, placesOf(game, me).length), x, y, { size: 13 });
   y += 30;
   // Harikalar: altı harika, her birinin şimdiki sahibi.
-  head(T.vWonders, fill(T.vWondersText, N.victory.wonders, N.victory.hold));
+  head(T.vWonders, fill(T.vWondersText, N.victory.wonders, N.victory.hold, ALL_WONDERS.length));
   const cw = w / 3;
-  WONDERS.forEach((wd, i) => {
-    const cx = x + (i % 3) * cw, cy = y + Math.floor(i / 3) * 22 + 12;
-    const owner = game.places[wd.place].owner;
-    shield(ctx, owner, cx, cy - 11, 11);
-    fit(ctx, T.wonders[wd.id][0], cx + 15, cy, cw - 18, { size: 12, bold: owner === me, color: owner === me ? INK.good : INK.ink });
+  ALL_WONDERS.forEach((wid, i) => {
+    const cx = x + (i % 3) * cw, cy = y + Math.floor(i / 3) * 20 + 12;
+    const at = placeOfWonder(game, wid), owner = at ? game.places[at].owner : undefined;
+    // Henüz yapılmamış harika soluk, sahipsiz.
+    if (at) shield(ctx, owner, cx, cy - 11, 11);
+    else text(ctx, "·", cx + 5, cy, { size: 14, color: INK.faint });
+    fit(ctx, T.wonders[wid][0], cx + 15, cy, cw - 18, { size: 12, bold: owner === me, color: !at ? INK.faint : owner === me ? INK.good : INK.ink });
   });
-  y += 52;
-  const mine = WONDERS.filter((wd) => game.places[wd.place].owner === me).length;
-  text(ctx, fill(T.vWondersYou, mine, WONDERS.length), x, y, { size: 13 });
+  y += 4 * 20 + 12;
+  const mine = ALL_WONDERS.filter((wid) => { const at = placeOfWonder(game, wid); return at && game.places[at].owner === me; }).length;
+  text(ctx, fill(T.vWondersYou, mine, ALL_WONDERS.length), x, y, { size: 13 });
   for (const c of CIVS) {
     const left = wonderTurnsLeft(game, c.id);
     if (left === null) continue;

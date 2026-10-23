@@ -7,12 +7,12 @@
 import { CIVS, PLACES } from "../data/world.js";
 import { byId } from "./graph.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
-import { holds } from "./wonders.js";
+import { buildableById, holds } from "./wonders.js";
 import { POS, cellOf, dist, isLand } from "./map.js";
-import { TECHS, grant, techMul, unlocked, unlockerOf } from "./research.js";
+import { TECHS, freeTech, grant, knows, techMul, unlocked, unlockerOf } from "./research.js";
 import { dealMoney } from "./leaders.js";
 
-export const VERSION = 14;
+export const VERSION = 15;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -109,6 +109,11 @@ export function migrate(s) {
     s.deals ??= [];
     s.version = 14;
   }
+  if (s.version === 14) {
+    // İnşa edilen harikalar: henüz hiçbiri.
+    s.built ??= {};
+    s.version = 15;
+  }
   return s;
 }
 
@@ -117,6 +122,7 @@ export function migrate(s) {
 export function newGame(player, seed = 1, level = "normal") {
   const civs = {};
   for (const c of CIVS) civs[c.id] = { ...N.start.stock, alive: true, techs: [], progress: {}, research: null, bank: 0 };
+  // (state.built: inşa edilen harikalar - yeri; aşağıda nesneyle birlikte.)
   for (const [c, e] of Object.entries(N.start.extra ?? {})) civs[c].food += e.food ?? 0;
   const places = {};
   for (const p of PLACES) {
@@ -142,6 +148,7 @@ export function newGame(player, seed = 1, level = "normal") {
     places[p.id] = place;
   }
   return {
+    built: {},
     version: VERSION, turn: 1, player, level, rng: seed | 0 || 1,
     civs, places, armies: [], nextArmy: 1,
     relations: {}, // "a|b" -> "ally" | "war"; yazılmayan tarafsız
@@ -254,8 +261,8 @@ export function output(state, id) {
   const fish = p.port && !shut ? (N.fish + pl.fishery * N.port.fishPerLevel) * castle * trait(c, "fish") * techMul(state, c, "fish") : 0;
   // Harikalar: Rodos Heykeli ticareti, Artemis Tapınağı bütün parayı artırır.
   const W = N.wonders;
-  const trade = p.port ? pl.trade * N.port.tradePerLevel * castle * (holds(state, c, "colossus") ? W.colossusTrade : 1) * techMul(state, c, "trade") : 0;
-  const pilgrims = holds(state, c, "artemis") ? W.artemisMoney : 1;
+  const trade = p.port ? pl.trade * N.port.tradePerLevel * castle * (holds(state, c, "colossus") ? W.colossusTrade : 1) * (holds(state, c, "harbour") ? W.harbourTrade : 1) * techMul(state, c, "trade") : 0;
+  const pilgrims = (holds(state, c, "artemis") ? W.artemisMoney : 1) * (holds(state, c, "treasury") ? W.treasuryMoney : 1);
   return {
     money: (pl.pop / N.taxPer + trade) * trait(c, "money") * techMul(state, c, "money") * ai * pilgrims * (shut ? N.navy.blockadeMoney : 1),
     weapons: pl.industry * castle * trait(c, "weapons") * techMul(state, c, "weapons") * ai,
@@ -372,10 +379,74 @@ export function progressBuilds(state, events) {
     if (!pl.builds?.length || !pl.owner || besieged(state, id)) continue;
     for (const b of pl.builds) b.left -= 1;
     for (const b of pl.builds.filter((x) => x.left <= 0)) {
+      if (b.what.startsWith("wonder:")) {
+        finishWonder(state, id, b.what.slice(7), b, events);
+        continue;
+      }
       pl[b.what] += 1;
       events.push({ type: "built", turn: state.turn, civ: pl.owner, place: id, what: b.what, level: pl[b.what] });
     }
     pl.builds = pl.builds.filter((x) => x.left > 0);
+  }
+}
+
+// ---- harikalar: inşa ----
+
+/**
+ * Bir harika burada inşa edilebilir mi: { cost, turns, building, why }. why: "taken" (biri
+ * bitirdi) | "building" (burada yapılıyor) | "castle" | "notPort" | "tech_<id>" | "wonderLevel" |
+ * "elsewhere" (başka şehrinde yapılıyor) | "busy" | "money" | null.
+ */
+export function wonderInfo(state, id, w) {
+  const pl = state.places[id], p = byId[id], d = buildableById[w];
+  const building = pl.builds?.find((b) => b.what === "wonder:" + w) ?? null;
+  // Geniş ülkeye pahalı (araştırma gibi): N.research.free yerleşimden sonra her biri +perPlace.
+  const n = Object.values(state.places).filter((q) => q.owner === pl.owner).length;
+  const cost = Math.round(d.cost * (1 + N.wonders.perPlace * Math.max(0, n - N.research.free)));
+  let why = null;
+  if (state.built?.[w]) why = "taken";
+  else if (building) why = "building";
+  else if (p.kind === "castle") why = "castle";
+  else if (d.port && !p.port) why = "notPort";
+  else if (d.needs && !knows(state, pl.owner, d.needs)) why = "tech_" + d.needs;
+  else if (pl.level < N.wonders.level) why = "wonderLevel";
+  else if (Object.entries(state.places).some(([o, q]) => o !== id && q.owner === pl.owner && q.builds?.some((b) => b.what === "wonder:" + w))) why = "elsewhere";
+  else if (freeBuilders(state, id) <= 0) why = "busy";
+  else if (state.civs[pl.owner].money < cost) why = "money";
+  return { cost, turns: d.turns, building, why };
+}
+
+/** Harikayı başlat: para şimdi ödenir, bir inşaatçı `turns` tur çalışır. */
+export function startWonder(state, id, w) {
+  const wi = wonderInfo(state, id, w);
+  if (wi.why) return false;
+  const pl = state.places[id];
+  state.civs[pl.owner].money -= wi.cost;
+  pl.builds.push({ what: "wonder:" + w, left: wi.turns, total: wi.turns, paid: wi.cost });
+  return true;
+}
+
+/** İlk bitiren alır; aynı harikayı yapan ötekilerin inşaatı biter, parasının yarısı döner. */
+function finishWonder(state, id, w, b, events) {
+  const owner = state.places[id].owner;
+  if (state.built?.[w]) {
+    // Aynı tur başka biri daha önce bitirdi.
+    state.civs[owner].money += Math.round(b.paid * N.wonders.refund);
+    events.push({ type: "wonderMissed", turn: state.turn, civ: owner, wonder: w, refund: Math.round(b.paid * N.wonders.refund) });
+    return;
+  }
+  state.built ??= {};
+  state.built[w] = id;
+  events.push({ type: "wonderBuilt", turn: state.turn, civ: owner, place: id, wonder: w });
+  if (w === "oracle") freeTech(state, owner);
+  for (const [o, q] of Object.entries(state.places)) {
+    if (o === id || !q.builds?.length) continue;
+    const lost = q.builds.find((x) => x.what === "wonder:" + w);
+    if (!lost) continue;
+    q.builds = q.builds.filter((x) => x !== lost);
+    const refund = Math.round(lost.paid * N.wonders.refund);
+    state.civs[q.owner].money += refund;
+    events.push({ type: "wonderMissed", turn: state.turn, civ: q.owner, wonder: w, refund });
   }
 }
 

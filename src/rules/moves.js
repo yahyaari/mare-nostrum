@@ -67,8 +67,13 @@ export const mpMax = (a) => N.march.mp * trait(a.owner, "moves") * (has(a.genera
  */
 export function modeOf(army) {
   if (men(army) === 0) return "sea";
-  // Denizdeyken gemisi batıp askerini taşıyamaz olan ordu yine de kıyıya çıkabilsin.
-  if (army.x !== undefined && !isLand(cellOf(army.x, army.y))) return "both";
+  // Denizdeyken gemisi batıp askerini taşıyamaz olan ordu yine de kıyıya çıkabilsin. Boğazdaki
+  // feribot yolu (su ama yol) deniz sayılmaz: orada duran gemisiz ordu açık denizden yol planlıyor
+  // ve Ege'yi yürüyerek geçiyordu (bot oyunu, tohum 505).
+  if (army.x !== undefined) {
+    const c = cellOf(army.x, army.y);
+    if (!isLand(c) && !isRoad(c)) return "both";
+  }
   return canSail(army) ? "both" : "land";
 }
 

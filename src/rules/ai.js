@@ -14,7 +14,7 @@ import {
   access, advance, attack, avoidFor, bySea, canAttack, canStrike, defenders, forecast, forecastField, hostile, nearest, order, reachOf, refresh, routeTo, strike,
 } from "./moves.js";
 import { POS, centre, dist } from "./map.js";
-import { wonderAt } from "./wonders.js";
+import { BUILDABLE, wondersAt } from "./wonders.js";
 import { besiege, canBesiege } from "./siege.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { random } from "./rng.js";
@@ -22,7 +22,7 @@ import { aiResearch, unlocked } from "./research.js";
 import { dealOf, moodOf, persona, warMoodMul } from "./leaders.js";
 import {
   armiesAt, armiesOf, armyById, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men,
-  freeBuilders, muster, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, station, strength, together, upgrade, upgradeInfo,
+  freeBuilders, muster, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, startWonder, station, strength, together, upgrade, upgradeInfo, wonderInfo,
 } from "./state.js";
 
 // Ordunun hedeflenen bileşimi (payları; gerisi piyade). Güçlü okçusu olan daha çok okçu, zayıf
@@ -46,6 +46,7 @@ export function aiTurn(state, civ, events) {
   calm(state, civ);
   aiResearch(state, civ);
   build(state, civ);
+  buildWonders(state, civ);
   shipyard(state, civ);
   recruitAll(state, civ);
   military(state, civ, events);
@@ -153,6 +154,25 @@ function offers(state, civ) {
   } else if (rel === "neutral" && state.turn >= level.peace && ratio >= N.offers.tributeRatio && mood < 25
     && neighbourCivs(state, civ).includes(P) && (state.truce[k] ?? 0) <= state.turn && random(state) < 0.15) {
     offer(state, civ, "tribute", { amount: Math.round(15 + state.turn * 0.8) });
+  }
+}
+
+// ---- harikalar ----
+
+/**
+ * Parası artanda bir harikaya başla: ucuzdan pahalıya ilk yapılabilen, en büyük şehrinde. Turda
+ * bir ihtimalle (hepsi aynı tur başlamasın), kasada pay bırakarak, aynı anda bir tane.
+ */
+function buildWonders(state, civ) {
+  if (random(state) > 0.3) return;
+  // Aynı anda en çok bir harika (bunsuz zengin medeniyet hepsini birden yapıp Harikalar zaferine koşuyordu).
+  if (placesOf(state, civ).some((id) => state.places[id].builds?.some((b) => b.what.startsWith("wonder:")))) return;
+  for (const w of BUILDABLE) {
+    const ids = placesOf(state, civ).filter((id) => !wonderInfo(state, id, w.id).why && state.civs[civ].money >= wonderInfo(state, id, w.id).cost + 60).sort((a, b) => state.places[b].level - state.places[a].level);
+    if (ids.length) {
+      startWonder(state, ids[0], w.id);
+      return;
+    }
   }
 }
 
@@ -297,7 +317,7 @@ function need(state, civ, id) {
  * zaferine gidenin harika şehri çok değerli (öndekini durdur).
  */
 const worth = (state, id) => state.places[id].level * 10 + (info(id).capital ? 25 : 0) - men(defenders(state, id)) * 0.3
-  + (wonderAt(id) && state.wonderHold?.[state.places[id].owner] ? 60 : 0);
+  + (wondersAt(state, id).length && state.wonderHold?.[state.places[id].owner] ? 60 : 0);
 
 /** Bir kuvvet bir noktadan saldırsa: tahmin (ordunun askerleri, gemileri, generali o noktada). */
 const oddsFrom = (state, u, civ, id, at) => forecast(state, { ...u, x: at.x, y: at.y }, civ, id).odds;

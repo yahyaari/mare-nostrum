@@ -51,7 +51,7 @@ export function economy(state, events) {
     for (const id of placesOf(state, c.id)) {
       const pl = state.places[id];
       const cap = popCap(pl, info(id).kind);
-      const gardens = holds(state, c.id, "gardens") ? N.wonders.gardensGrowth : 1;
+      const gardens = (holds(state, c.id, "gardens") ? N.wonders.gardensGrowth : 1) * (holds(state, c.id, "aqueduct") ? N.wonders.aqueductGrowth : 1);
       const grow = starving ? 0 : cap * N.growth * trait(c.id, "growth") * techMul(state, c.id, "growth") * gardens;
       pl.pop = Math.min(cap, Math.round(pl.pop + grow));
     }

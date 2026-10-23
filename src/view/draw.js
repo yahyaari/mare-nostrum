@@ -654,7 +654,7 @@ function drawPlaces(ctx, cam, view, L) {
     if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1, view.blockade?.[p.id]);
     ctx.globalAlpha = 1;
     // Dünya harikası: sancağın sağında altın tapınaklı madalyon.
-    if (wonderAt(p.id)) wonderMark(ctx, s.x + f.w / 2 + 10, s.y - f.pole + 22, 8.5 * Math.max(1, Math.min(1.3, z)));
+    if (wonderAt(p.id) || view.built?.[p.id]) wonderMark(ctx, s.x + f.w / 2 + 10, s.y - f.pole + 22, 8.5 * Math.max(1, Math.min(1.3, z)));
     // Bir görevin hedefi: sancağın solunda altın bir madalyon.
     if (view.goals?.[p.id]) goalMark(ctx, s.x - f.w / 2 - 10, s.y - f.pole + 2);
     // İnşaatı süren kendi yerin: sancağın solunda küçük bir çekiç rozeti.
