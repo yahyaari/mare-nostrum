@@ -19,6 +19,7 @@ import { besiege, canBesiege } from "./siege.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { random } from "./rng.js";
 import { aiResearch, unlocked } from "./research.js";
+import { dealOf, moodOf, persona, warMoodMul } from "./leaders.js";
 import {
   armiesAt, armiesOf, armyById, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men,
   freeBuilders, muster, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, station, strength, together, upgrade, upgradeInfo,
@@ -80,7 +81,7 @@ function diplomacy(state, civ, events) {
     const o = c.id;
     if (o === civ || !state.civs[o].alive || !canDeclare(state, civ, o)) continue;
     if (o === state.player && (state.truce[key(civ, o)] ?? 0) > state.turn) continue;
-    if (angerOf(state, civ, o) >= N.anger.war && me >= N.anger.ratio * strength(state, o)) events.push(declareWar(state, civ, o));
+    if (angerOf(state, civ, o) >= persona(civ).anger && me >= N.anger.ratio * strength(state, o)) events.push(declareWar(state, civ, o));
   }
   if (state.turn < Math.min(N.aiPeace, level.peace)) return;
   // Harikalar zaferine giden medeniyet: herkes için hedef (gücü denkse savaş açılır).
@@ -99,8 +100,11 @@ function diplomacy(state, civ, events) {
     const prey = neighbourCivs(state, civ)
       .filter((o) => canDeclare(state, civ, o) && state.turn >= peace(o) && !truce(o))
       .sort((a, b) => strength(state, a) - strength(state, b));
+    // Kişilik (savaşçı lider daha az üstünlükle, daha sık) ve tutum (düşmanca olana daha istekli).
+    const p = persona(civ);
     for (const o of prey) {
-      if (me >= ratio(o) * strength(state, o) && random(state) < N.aiWarChance) {
+      const want = p.war * warMoodMul(moodOf(state, civ, o).score);
+      if (me >= (ratio(o) / p.war) * strength(state, o) && random(state) < N.aiWarChance * want) {
         events.push(declareWar(state, civ, o));
         break;
       }
@@ -138,10 +142,15 @@ function offers(state, civ) {
   const rel = relation(state, civ, P);
   const ratio = strength(state, civ) / Math.max(1, strength(state, P));
   const level = LEVELS[state.level] ?? LEVELS.normal;
+  const mood = moodOf(state, civ, P).score;
+  const deal = dealOf(state, civ, P);
   if (rel === "war" && ratio < 0.7 && random(state) < 0.35) offer(state, civ, "peace");
   else if (rel === "neutral" && enemiesOf(state, civ).some((e) => enemiesOf(state, P).includes(e)) && random(state) < 0.3) {
     offer(state, civ, "ally");
-  } else if (rel === "neutral" && state.turn >= level.peace && ratio >= N.offers.tributeRatio
+  } else if (rel !== "war" && mood >= 20 && !(deal && deal.until > state.turn) && random(state) < 0.2) {
+    // Dostça bir komşu ticaret önerir.
+    offer(state, civ, "trade");
+  } else if (rel === "neutral" && state.turn >= level.peace && ratio >= N.offers.tributeRatio && mood < 25
     && neighbourCivs(state, civ).includes(P) && (state.truce[k] ?? 0) <= state.turn && random(state) < 0.15) {
     offer(state, civ, "tribute", { amount: Math.round(15 + state.turn * 0.8) });
   }

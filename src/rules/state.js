@@ -10,8 +10,9 @@ import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { holds } from "./wonders.js";
 import { POS, cellOf, dist, isLand } from "./map.js";
 import { TECHS, grant, techMul, unlocked, unlockerOf } from "./research.js";
+import { dealMoney } from "./leaders.js";
 
-export const VERSION = 13;
+export const VERSION = 14;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -101,6 +102,12 @@ export function migrate(s) {
       if (uses("quinq") || own.some((p) => (p.shipyard ?? 0) >= 3)) grant(s, civ, unlockerOf("quinq"));
     }
     s.version = 13;
+  }
+  if (s.version === 13) {
+    // Liderler: hafıza ve ticaret anlaşmaları sıfırdan.
+    s.memory ??= {};
+    s.deals ??= [];
+    s.version = 14;
   }
   return s;
 }
@@ -273,6 +280,8 @@ export function budget(state, civ) {
     b.weapons += o.weapons;
     b.food += o.food;
   }
+  // Ticaret anlaşmaları (leaders.js).
+  b.money += dealMoney(state, civ);
   // İaşeci generalin ordusu yarı yiyecek yer.
   const fed = armiesOf(state, civ).reduce((n, a) => n + (a.general?.traits.includes("supply") ? men(a) / 2 : 0), 0);
   // Süvarinin atları da yer: süvari bölüğü iki bölük sayılır.

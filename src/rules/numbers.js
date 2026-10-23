@@ -127,6 +127,10 @@ export const N = {
   // Civilization V gibi: `free` yerleşimden sonra her yerleşim bedeli `perPlace` artırır (70 oyunda
   // bunsuz Partlar oyunların 40ında en büyüğe çıkıyordu: geniş toprak -> çok bilim -> güçlü ordu).
   research: { popPer: 80, capital: 2, cost: [40, 120, 260, 450], free: 6, perPlace: 0.05 },
+  // Diplomasi (bölüm 24, leaders.js): hediyenin her parası tutuma `giftPoints` puan (en çok
+  // `giftMax`, turda `giftFade` söner); ticaret anlaşması iki tarafa turda `tradeMoney` para,
+  // `tradeTurns` tur; sınır komşusu `border` harita biriminden yakın yerleşimler. Hediye düğmeleri.
+  diplo: { giftPoints: 0.5, giftMax: 40, giftFade: 1, tradeMoney: 3, tradeTurns: 20, border: 4, giftSizes: [25, 50], peaceGold: 30 },
   // Öğretici haydutlar (bandits.js): başkentten near-far uzakta (dist'e en yakın), dağıtana ganimet.
   bandits: { inf: 10, arch: 10, loot: 40, dist: 1.4, near: 1.1, far: 1.9 },
   // Skor: her yerleşim, seviyesinin her basamağı, başkent; her `popPer` nüfus; her harika; her

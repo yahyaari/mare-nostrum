@@ -91,6 +91,11 @@ export function endTurn(state) {
   economy(state, events);
   // Bilim araştırmaya akar (üretimden sonra: bu turun nüfusuyla).
   tickResearch(state, events);
+  // Son ödemesini yapan ticaret anlaşmaları düşer (oyuncununki habere).
+  for (const d of (state.deals ?? []).filter((x) => x.until <= state.turn + 1)) {
+    if (d.a === state.player || d.b === state.player) events.push({ type: "dealEnded", turn: state.turn, civ: d.a === state.player ? d.b : d.a });
+  }
+  state.deals = (state.deals ?? []).filter((x) => x.until > state.turn + 1);
   state.turn += 1;
   for (const id in state.places) {
     state.places[id].upgraded = false;

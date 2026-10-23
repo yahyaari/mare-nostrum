@@ -5,7 +5,7 @@
 // saldırtır. Fare bir yerin üstündeyken seçili ordunun oraya yolu ve kaç tur süreceği görünür.
 
 import { CIVS, PLACES } from "./data/world.js";
-import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rules/diplomacy.js";
+import { breakAlliance, declareWar, proposeAlliance, proposePeace, proposeTrade } from "./rules/diplomacy.js";
 import { roadBetween } from "./rules/graph.js";
 import {
   access, attack, canAttack, canStrike, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, strike, turnsFor,
@@ -21,6 +21,7 @@ import { blockaded } from "./rules/state.js";
 import { veteranRank } from "./rules/combat.js";
 import { banditsOf, spawnBandits } from "./rules/bandits.js";
 import { available, choose, turnsLeft as techTurns } from "./rules/research.js";
+import { gift } from "./rules/leaders.js";
 import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
@@ -167,6 +168,8 @@ function redraw() {
 function next() {
   if (!game) return null;
   if (game.over) return { kind: "over" };
+  // Sana savaş açan lider konuşur (her biri bir pencere).
+  if (ui.speeches?.length) return { kind: "speech", civ: ui.speeches.shift() };
   if (game.inbox?.length) return { kind: "decide" };
   // Araştırma bitti: sıradakini seçmek için ağaç açılır (Civilization gibi).
   if (ui.pickTech) {
@@ -624,6 +627,7 @@ function dispatch(act) {
       hurried = false;
       // Rapor pencere açmaz: haberler sağ üstte belirir. Kararlar ve görevler yine pencere.
       if (game.events.some((e) => e.type === "tech" && e.civ === me)) ui.pickTech = true;
+      ui.speeches = game.events.filter((e) => e.type === "war" && e.on === me).map((e) => e.by);
       pending = next();
       pendingNews = eventLines(game, ui.lang);
       if (!pendingNews.length) pendingNews = null;
@@ -849,33 +853,56 @@ function dispatch(act) {
       break;
     }
     case "askWar":
-      ui.modal = { kind: "confirm", text: fill(T().declareQ, civName(act.civ, ui.lang)), yes: { do: "war", civ: act.civ, back: m?.kind === "diplo" } };
+      ui.modal = { kind: "confirm", text: fill(T().declareQ, civName(act.civ, ui.lang)), yes: { do: "war", civ: act.civ, back: m?.kind === "leader" ? "leader" : m?.kind === "diplo" ? "diplo" : null } };
       break;
     case "war":
       sound.war();
       record(game, [declareWar(game, me, act.civ)]);
-      ui.modal = act.back ? { kind: "diplo" } : null;
+      // Liderin ekranından açıldıysa lider cevap verir.
+      ui.modal = act.back === "leader" ? { kind: "leader", civ: act.civ, line: "hostile" } : act.back === "diplo" ? { kind: "diplo" } : null;
       save();
       break;
     case "ally": {
       const ev = proposeAlliance(game, me, act.civ);
       record(game, [ev]);
-      if (ev) toast(fill(ev.type === "ally" ? T().accepted : T().refused, civName(act.civ, ui.lang)));
+      if (ev && m?.kind === "leader") ui.modal = { kind: "leader", civ: act.civ, line: ev.type === "ally" ? "yes" : "no" };
+      else if (ev) toast(fill(ev.type === "ally" ? T().accepted : T().refused, civName(act.civ, ui.lang)));
       save();
       break;
     }
     case "askBreak":
-      ui.modal = { kind: "confirm", text: fill(T().breakQ, civName(act.civ, ui.lang)), yes: { do: "break", civ: act.civ } };
+      ui.modal = { kind: "confirm", text: fill(T().breakQ, civName(act.civ, ui.lang)), yes: { do: "break", civ: act.civ, back: m?.kind === "leader" ? "leader" : "diplo" } };
       break;
     case "break":
       record(game, [breakAlliance(game, me, act.civ)]);
-      ui.modal = { kind: "diplo" };
+      ui.modal = act.back === "leader" ? { kind: "leader", civ: act.civ, line: "hostile" } : { kind: "diplo" };
       save();
       break;
     case "peace": {
-      const ev = proposePeace(game, me, act.civ);
+      const ev = proposePeace(game, me, act.civ, act.gold ?? 0);
       record(game, [ev]);
-      if (ev) toast(fill(ev.type === "peace" ? T().accepted : T().refused, civName(act.civ, ui.lang)));
+      if (ev && m?.kind === "leader") ui.modal = { kind: "leader", civ: act.civ, line: ev.type === "peace" ? "yes" : "no" };
+      else if (ev) toast(fill(ev.type === "peace" ? T().accepted : T().refused, civName(act.civ, ui.lang)));
+      if (ev?.type === "peace") sound.chime();
+      save();
+      break;
+    }
+    case "leader":
+      ui.modal = { kind: "leader", civ: act.civ, line: null };
+      break;
+    case "gift": {
+      if (!gift(game, me, act.civ, act.amount)) break;
+      sound.chime();
+      ui.modal = { kind: "leader", civ: act.civ, line: "thanks" };
+      save();
+      break;
+    }
+    case "trade": {
+      const ev = proposeTrade(game, me, act.civ);
+      if (!ev) break;
+      record(game, [ev]);
+      if (ev.type === "trade") sound.chime();
+      ui.modal = { kind: "leader", civ: act.civ, line: ev.type === "trade" ? "yes" : "no" };
       save();
       break;
     }

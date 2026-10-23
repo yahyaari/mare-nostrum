@@ -13,7 +13,7 @@
 //   fight: { ev, t0 } oyuncunun az önceki savaşı: haritada sahne, sonra sonuç şeridi (drawFight)
 
 import { CIVS, PLACES } from "../data/world.js";
-import { angerOf, canDeclare, canPropose } from "../rules/diplomacy.js";
+import { angerOf, canDeclare, canPropose, canTrade } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import {
   access, canAttack, canStrike, defenders, fieldSides, forecast, forecastField, fortOf, hostile, menace, mpMax, nearestPlace, shipsAt, sides, wallsOf,
@@ -21,6 +21,8 @@ import {
 import { POS, cellOf, centre, dist, isLand, placeAtCell } from "../rules/map.js";
 import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
 import { banditsOf } from "../rules/bandits.js";
+import { dealLeft, dealOf, moodLevel, moodOf, persona } from "../rules/leaders.js";
+import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
@@ -1494,7 +1496,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, leader: leaderModal, speech: speechModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -1638,42 +1640,144 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   button(ctx, boxes, { x: r.x + 36 + 2 * bw, y: by, w: bw, h: 44, size: 15, label: T.cancel, act: { do: "close" } });
 }
 
+/**
+ * Diplomasi: her medeniyetin lideri (portresi, adı, sana karşı tutumu) ve ilişkisi. Satıra
+ * basınca liderle görüşme ekranı açılır (leaderModal).
+ */
 function diploModal(ctx, cam, game, ui, boxes, T) {
   const me = game.player;
   const others = CIVS.filter((c) => c.id !== me);
-  const rowH = 56;
+  const rowH = 62;
   const r = modalFrame(ctx, cam, boxes, 84 + others.length * rowH + 70, 560);
   text(ctx, T.diplomacy, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
-  const narrow = r.w < 460;
   others.forEach((c, i) => {
-    const y = r.y + 62 + i * rowH;
+    const y = r.y + 58 + i * rowH;
     const x = r.x + 18;
     const alive = game.civs[c.id].alive;
-    shield(ctx, c.id, x, y + 6, 17);
-    text(ctx, c.name[ui.lang], x + 26, y + 22, { title: true, bold: true, size: 14, color: alive ? INK.ink : INK.faint });
+    if (alive) listRow(ctx, boxes, r, y, rowH - 4, i, { do: "leader", civ: c.id });
+    const mood = moodOf(game, c.id, me), level = moodLevel(mood.score);
+    ctx.save();
+    if (!alive) ctx.globalAlpha = 0.45;
+    portrait(ctx, c.id, x + 26, y + rowH / 2 - 2, 25, alive ? level : "neutral");
+    ctx.restore();
+    const L = T.leaders[c.id];
+    text(ctx, L.name, x + 62, y + 24, { title: true, bold: true, size: 14, color: alive ? INK.ink : INK.faint });
     if (!alive) {
-      text(ctx, fill(T.evFallen, ""), x + 26, y + 40, { italic: true, size: 12, color: INK.faint });
+      text(ctx, fill(T.evFallen, c.name[ui.lang]), x + 62, y + 44, { italic: true, size: 12, color: INK.faint });
       return;
     }
     const rel = relation(game, me, c.id);
     const [label, color] = rel === "war" ? [T.war, INK.bad] : rel === "ally" ? [T.ally, INK.good] : [T.neutral, INK.soft];
+    const iw = text(ctx, `${c.name[ui.lang]} · ${label}`, x + 62, y + 44, { italic: true, size: 12, color });
     // Toprağına girdiğin tarafsızın öfkesi: sabrı taşınca savaş açar.
     const mad = angerOf(game, c.id, me);
-    const info = `${label} · ${fill(T.soldiers, strength(game, c.id))}` + (narrow ? "" : ` · ${fill(T.placesN, placesOf(game, c.id).length)}`);
-    const iw = text(ctx, info, x + 26, y + 40, { italic: true, size: 12, color });
-    if (rel === "neutral" && mad > 0) text(ctx, ` · ${fill(T.angry, Math.ceil(mad), N.anger.war)}`, x + 26 + iw, y + 40, { italic: true, bold: true, size: 12, color: INK.bad });
-
-    const acts = rel === "neutral"
-      ? [[T.declare, { do: "askWar", civ: c.id }, !canDeclare(game, me, c.id)], [T.propose, { do: "ally", civ: c.id }, !canPropose(game, me, c.id)]]
-      : rel === "ally" ? [[T.breakAlly, { do: "askBreak", civ: c.id }, false]]
-      : [[T.peace, { do: "peace", civ: c.id }, game.asked[key(me, c.id)] === game.turn]];
-    const bw = narrow ? 70 : 92;
-    acts.forEach(([l, act, off], j) => {
-      const bx = r.x + r.w - 18 - (acts.length - j) * (bw + 6) + 6;
-      button(ctx, boxes, { x: bx, y: y + 8, w: bw, h: 34, label: l, act, off, size: 12 });
-    });
+    if (rel === "neutral" && mad > 0) text(ctx, ` · ${fill(T.angry, Math.ceil(mad), persona(c.id).anger)}`, x + 62 + iw, y + 44, { italic: true, bold: true, size: 12, color: INK.bad });
+    // Sağda tutum ve görüş düğmesi.
+    const mc = MOOD_INK[level];
+    text(ctx, T.moods[level], r.x + r.w - 130, y + 24, { bold: true, size: 13, color: mc, align: "right" });
+    text(ctx, (mood.score > 0 ? "+" : "") + mood.score, r.x + r.w - 130, y + 42, { size: 12, color: INK.soft, align: "right" });
+    button(ctx, boxes, { x: r.x + r.w - 116, y: y + 12, w: 92, h: 32, label: T.talk, size: 12, act: { do: "leader", civ: c.id } });
   });
   oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+}
+
+const MOOD_INK = { friendly: INK.good, neutral: INK.soft, cold: INK.warn, hostile: INK.bad };
+
+/** Liderin sözü: `line` verilmediyse tutumuna göre selam. */
+function leaderLine(T, civ, line, level) {
+  const L = T.leaders[civ];
+  if (line === "thanks") return T.thanks;
+  if (line === "peaceAsk") return T.peaceAsk;
+  if (line && L[line]) return L[line];
+  return L[level === "friendly" ? "friendly" : level === "neutral" ? "neutral" : "hostile"];
+}
+
+/**
+ * Liderle görüşme (Civilization gibi): solda portre, adı ve unvanı; sağda konuşma balonu,
+ * kişiliği, ilişki, tutum ve gerekçeleri; altta yapılabilecekler. Bir şey önerince lider
+ * cevap verir (balon değişir), pencere açık kalır.
+ */
+function leaderModal(ctx, cam, game, ui, boxes, T, m) {
+  const me = game.player, civ = m.civ, L = T.leaders[civ];
+  if (!game.civs[civ]?.alive) return;
+  const mood = moodOf(game, civ, me), level = moodLevel(mood.score);
+  const rel = relation(game, me, civ);
+  const r = modalFrame(ctx, cam, boxes, 486, 680);
+  const lx = r.x + 24, rx = r.x + 236, rw = r.x + r.w - 24 - rx;
+  // Sol: portre ve kimlik.
+  portrait(ctx, civ, lx + 96, r.y + 118, 90, level);
+  text(ctx, L.name, lx + 96, r.y + 234, { title: true, bold: true, size: 17, align: "center" });
+  text(ctx, L.title, lx + 96, r.y + 254, { italic: true, size: 13, color: INK.soft, align: "center" });
+  const cw = measure(ctx, civName(civ, ui.lang), { size: 13, bold: true });
+  shield(ctx, civ, lx + 96 - cw / 2 - 18, r.y + 264, 13);
+  text(ctx, civName(civ, ui.lang), lx + 96 - cw / 2, r.y + 276, { size: 13, bold: true });
+  // Sağ üst: konuşma balonu, ucu portreye bakar.
+  const say = "“" + leaderLine(T, civ, m.line, level) + "”";
+  const rows = wrap(ctx, say, rw - 32, { size: 16, italic: true });
+  const bh = 26 + rows.length * 22;
+  roundRect(ctx, rx, r.y + 24, rw, bh, 10);
+  ctx.fillStyle = "rgba(255,252,240,0.92)";
+  ctx.fill();
+  ctx.strokeStyle = GOLD_DARK;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(rx + 1, r.y + 44);
+  ctx.lineTo(rx - 14, r.y + 56);
+  ctx.lineTo(rx + 1, r.y + 62);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(255,252,240,0.92)";
+  ctx.fill();
+  rows.forEach((l, k) => text(ctx, l, rx + 16, r.y + 50 + k * 22, { size: 16, italic: true }));
+  // Kişilik, ilişki, anlaşma.
+  let y = r.y + 24 + bh + 26;
+  const pw = text(ctx, L.persona + ": ", rx, y, { bold: true, size: 13 });
+  fit(ctx, L.desc, rx + pw, y, rw - pw, { size: 13, color: INK.soft });
+  y += 22;
+  const [label, color] = rel === "war" ? [T.war, INK.bad] : rel === "ally" ? [T.ally, INK.good] : [T.neutral, INK.soft];
+  const dw = text(ctx, label, rx, y, { bold: true, size: 13, color });
+  const deal = dealOf(game, me, civ);
+  if (deal && deal.until > game.turn) text(ctx, " · " + fill(T.dealLeft, dealLeft(game, deal)), rx + dw, y, { size: 13, color: INK.good });
+  else if (rel === "neutral" && angerOf(game, civ, me) > 0) text(ctx, " · " + fill(T.angry, Math.ceil(angerOf(game, civ, me)), persona(civ).anger), rx + dw, y, { size: 13, bold: true, color: INK.bad });
+  // Tutum ve gerekçeleri.
+  y += 28;
+  const aw = text(ctx, T.attitude + ": ", rx, y, { bold: true, size: 14 });
+  text(ctx, `${T.moods[level]} (${mood.score > 0 ? "+" : ""}${mood.score})`, rx + aw, y, { bold: true, size: 14, color: MOOD_INK[level] });
+  const parts = [...mood.parts].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 7);
+  parts.forEach(([k, v], n) => {
+    const ly = y + 22 + n * 19;
+    text(ctx, (v > 0 ? "+" : "−") + Math.abs(v), rx + 34, ly, { bold: true, size: 13, color: v > 0 ? INK.good : INK.bad, align: "right" });
+    fit(ctx, T.moodParts[k] ?? k, rx + 44, ly, rw - 44, { size: 13 });
+  });
+  // Altta yapılabilecekler.
+  const money = game.civs[me].money;
+  const acts = [];
+  if (rel === "neutral") {
+    acts.push({ label: T.declare, act: { do: "askWar", civ }, off: !canDeclare(game, me, civ) });
+    acts.push({ label: T.propose, act: { do: "ally", civ }, off: !canPropose(game, me, civ) });
+  } else if (rel === "ally") acts.push({ label: T.breakAlly, act: { do: "askBreak", civ } });
+  else {
+    acts.push({ label: T.peace, act: { do: "peace", civ }, off: game.asked[key(me, civ)] === game.turn });
+    const g = N.diplo.peaceGold;
+    acts.push({ label: fill(T.peaceGold, g), act: { do: "peace", civ, gold: g }, off: game.asked[key(me, civ)] === game.turn || money < g, tip: [fill(T.peaceGold, g), fill(T.tipPeaceGold, g)] });
+  }
+  if (rel !== "war") acts.push({ label: T.tradeDeal, act: { do: "trade", civ }, off: !canTrade(game, me, civ), tip: [T.tradeDeal, fill(T.tipTrade, N.diplo.tradeMoney, N.diplo.tradeTurns)] });
+  for (const g of N.diplo.giftSizes) acts.push({ label: fill(T.giftN, g), act: { do: "gift", civ, amount: g }, off: money < g, tip: [fill(T.giftN, g), T.tipGift] });
+  const bw = (r.w - 48 - (acts.length - 1) * 8) / acts.length, by = r.y + r.h - 112;
+  acts.forEach((a, n) => button(ctx, boxes, { x: r.x + 24 + n * (bw + 8), y: by, w: bw, h: 38, size: 12, ...a }));
+  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "open", modal: "diplo" } });
+}
+
+/** Bir lider sana savaş açtı: portresi, sözü, tek düğme. */
+function speechModal(ctx, cam, game, ui, boxes, T, m) {
+  const L = T.leaders[m.civ];
+  const say = "“" + L[m.line ?? "war"] + "”";
+  const rows = wrap(ctx, say, 380, { size: 16, italic: true });
+  const r = modalFrame(ctx, cam, boxes, 300 + rows.length * 22, 440);
+  portrait(ctx, m.civ, r.x + r.w / 2, r.y + 86, 64, "hostile");
+  text(ctx, fill(T.warOnYou, L.name), r.x + r.w / 2, r.y + 186, { title: true, bold: true, size: 18, align: "center", color: INK.bad });
+  rows.forEach((l, k) => text(ctx, l, r.x + r.w / 2, r.y + 218 + k * 22, { size: 16, italic: true, align: "center" }));
+  oneButton(ctx, boxes, r, { label: T.toArms, act: { do: "close" } });
 }
 
 /** Bu turun olaylarından oyuncuyu ilgilendirenler, yazıya dökülmüş. */
@@ -1704,6 +1808,8 @@ export function eventLines(game, lang) {
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
+    if (e.type === "dealEnded") out.push([fill(T.evDealEnded, name(e.civ)), null]);
+    if (e.type === "trade" && mine) out.push([fill(T.evTrade, name(e.by), name(e.to)), "good"]);
     if (e.type === "tech" && e.civ === me) out.push([fill(T.evTech, T.techs[e.tech][0]), "good"]);
     if (e.type === "wonderRace") out.push([fill(e.civ === me ? T.evWonderRaceMe : T.evWonderRace, name(e.civ), N.victory.wonders, e.left), e.civ === me ? "good" : "bad"]);
     if (e.type === "wonderLost") out.push([fill(T.evWonderLost, name(e.civ)), e.civ === me ? "bad" : "good"]);
@@ -1893,13 +1999,20 @@ function decideModal(ctx, cam, game, ui, boxes, T) {
   const L = letterText(game, it, ui.lang);
   const W = Math.min(cam.w - 24, 460);
   const body = wrap(ctx, L.body, W - 48, { size: 14 });
-  const r = modalFrame(ctx, cam, boxes, 92 + body.length * 20 + L.options.length * 54 + 14, 460);
-  if (it.type === "offer") {
-    shield(ctx, it.civ, r.x + r.w / 2 - 10, r.y + 12, 20);
+  // Teklif: liderin portresi ve kendi sözü (haraçta tehdidi, barışta yorgunluğu).
+  const offer = it.type === "offer";
+  const level = offer ? moodLevel(moodOf(game, it.civ, game.player).score) : null;
+  const line = offer ? leaderLine(T, it.civ, { tribute: "demand", peace: "peaceAsk", ally: "friendly", trade: "friendly" }[it.key], level) : null;
+  const say = offer ? wrap(ctx, "“" + line + "”", W - 48, { size: 15, italic: true }) : [];
+  const top = offer ? 124 + say.length * 21 : 0;
+  const r = modalFrame(ctx, cam, boxes, 92 + top + body.length * 20 + L.options.length * 54 + 14, 460);
+  if (offer) {
+    portrait(ctx, it.civ, r.x + r.w / 2, r.y + 62, 46, it.key === "tribute" ? "cold" : level);
+    say.forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 134 + i * 21, { size: 15, italic: true, align: "center" }));
   }
-  text(ctx, L.title, r.x + r.w / 2, r.y + (it.type === "offer" ? 58 : 44), { title: true, bold: true, size: 19, align: "center" });
-  body.forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 84 + i * 20, { size: 14, align: "center", color: INK.soft, italic: true }));
-  const by = r.y + 96 + body.length * 20;
+  text(ctx, L.title, r.x + r.w / 2, r.y + top + 44, { title: true, bold: true, size: 19, align: "center" });
+  body.forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + top + 84 + i * 20, { size: 14, align: "center", color: INK.soft, italic: true }));
+  const by = r.y + top + 96 + body.length * 20;
   L.options.forEach((o, i) => {
     button(ctx, boxes, {
       x: r.x + 20, y: by + i * 54, w: r.w - 40, h: 44, label: o.label, size: 14, off: o.off, main: i === 0 && !o.off,

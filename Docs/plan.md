@@ -38,6 +38,18 @@ her biri ayrı push:
    ilk düşüş 43); deneylerle ekonomi etkileri yarıya indi: ilk düşüş 48, Partlar 30, ayakta kalan
    toplam 339 (araştırmasız 328). `Tools/experiment.mjs` artık `"R.tactics.mods": {}` alıyor.
 
+Sonra kullanıcı "başka ne yapabiliriz" dedi; önerdiğim üç büyük iş (liderler ve canlı diplomasi,
+harikaları inşa etme yarışı, aynı bilgisayarda arkadaşlarla) ve küçükler (şehir binaları, geri
+çekilme ve dağlar, oyun sonu özeti) için: "sırayla devam et".
+
+4. **Liderler ve canlı diplomasi** (bu adım): kurallar.md bölüm 24. Yedi lider (Scipio, Hannibal,
+   Kleopatra, İskender, Mithridates, Vercingetorix, Tomris), çizimle portre (yüz ifadesi tutuma
+   göre), kişilik (savaş/barış/ittifak çarpanları, öfke eşiği, kin), tutum puanı ve gerekçeleri
+   (Civ V gibi), hafıza (`state.memory`), hediye, ticaret anlaşması (`state.deals`), para
+   karşılığı barış, liderle görüşme ekranı, portreli teklif mektupları, savaş ilan eden lider
+   konuşur. Kayıt 14. Denge: kişilikler yumuşatıldı (ayakta kalan 344, herkes 41+).
+5. **Harikaları inşa etme yarışı** (sırada), 6. **arkadaşlarla aynı bilgisayarda**, sonra küçükler.
+
 ## ÖNCEKİLER (22.10 akşam)
 
 Kullanıcı (22.10): "şehirde garnizon sekmesi olsun, askerler kart şeklinde... seçip komutan atayıp

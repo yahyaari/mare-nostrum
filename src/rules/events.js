@@ -8,7 +8,7 @@
 //   teklif (bilgisayardan oyuncuya): ittifak, barış, haraç
 
 import { fight } from "./combat.js";
-import { breakAlliance, declareWar } from "./diplomacy.js";
+import { breakAlliance, declareWar, makeDeal } from "./diplomacy.js";
 import { seat } from "./loyalty.js";
 import { defenders, wallsOf } from "./moves.js";
 import { N, UNITS } from "./numbers.js";
@@ -136,6 +136,14 @@ export const OFFERS = {
       return {};
     },
     ai: (s, it) => (strength(s, s.player) < strength(s, it.civ) * 1.2 ? "accept" : "decline"),
+  },
+  trade: {
+    options: () => [{ key: "accept" }, { key: "decline" }],
+    apply(s, it, ch) {
+      if (ch === "accept" && relation(s, it.civ, s.player) !== "war") makeDeal(s, it.civ, s.player);
+      return {};
+    },
+    ai: () => "accept",
   },
   tribute: {
     options: (s, it) => [{ key: "pay", money: it.amount }, { key: "refuse" }],

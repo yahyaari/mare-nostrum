@@ -743,3 +743,48 @@ eklensin" (`src/rules/research.js`).
   Mühendislik, kinkeremi ya da tersane 3'ü olana Gemi İnşası.
 - Hız (bot oyunları): en büyük medeniyet ağacı 67-70. turda bitirir, ortalar 86-144 arası,
   küçükler bitiremez.
+
+---
+
+## 24. Liderler ve canlı diplomasi
+
+Kullanıcı 23.10 "başka ne yapabiliriz" -> sırayla; ilki liderler (Civilization gibi: rakiplerin
+bir yüzü, kişiliği ve sana karşı bir tutumu olsun, konuşsunlar). `src/rules/leaders.js`,
+portreler `src/view/leaders.js` (çizim, resim dosyası yok).
+
+| Medeniyet | Lider | Kişilik | Ne demek |
+|---|---|---|---|
+| Roma | Scipio Africanus | Disiplinli | İttifaka sadık (kabul x1.2) |
+| Kartaca | Hannibal Barka | Hırslı | Savaş x1.15, barış x0.9; Roma'ya -15 (Hamilkar'ın yemini) |
+| Mısır | Kleopatra | Diplomat | Savaş x0.9, barış x1.15, ittifak x1.3, hediye x1.5, herkese +10 |
+| Makedonya | Büyük İskender | Fatih | Savaş x1.15, barış x0.9, ittifak x0.85, herkese -5 |
+| Partlar | Büyük Mithridates | Kurnaz | Savaş x1.05, barış x0.95 |
+| Galya | Vercingetorix | Gururlu | Toprağında 2 tur kalana savaş açar (ötekiler 3), savaş x1.05, hediye x0.75 |
+| Sakalar | Tomris Hatun | Kindar | Savaş ilanını 60 tur hatırlar (ötekiler 25-40), barış x0.85 |
+
+Savaş çarpanı hem savaş açma ihtimalini çarpar hem gereken üstünlüğü böler. **Denge (70 oyun):**
+ilk denemede çarpanlar 0.75-1.3 arasıydı; saldırgan liderler kendini yıpratıyordu (Makedonya 150
+turda ayakta 44 -> 37/70, Sakalar 48 -> 40), temkinli Mithridates büyüyordu (Partlar en büyük
+30 -> 40). Yumuşatılınca: ayakta kalan toplam 344 (önce 339), herkes 41+, Partlar en büyük 31,
+ilk düşüş 46. `Tools/experiment.mjs` artık `"P.macedon.war": 1` alıyor.
+
+- **Tutum** (-100..100): bir liderin sana (ve her medeniyetin birbirine) bakışı, gerekçeleriyle:
+  kişiliği, savaştayız -40, müttefikiz +25, ortak düşmanımız var +20, bize savaş açtın -25 (zamanla
+  unutulur), ittifakı bozdun -30 (unutulur), toprağımızdaki orduların öfke başına -8, hediyelerin,
+  haraç ödedin +10, ticaretimiz +15, sınırlarımız bitişik -5, fazla güçlüsün -10, harikalar
+  yarışındasın -15. Dostça (25+), nötr, soğuk (-10'dan aşağı), düşmanca (-30'dan aşağı).
+- Tutum bilgisayarın kararlarını çevirir: soğuksa ittifak kabul etmez, ittifak ve barış ihtimali
+  tutumla artar; düşmancaya savaş açmaya 1.6 kat istekli, dostçaya 0.4 kat. Kişilik savaş, barış ve
+  ittifak isteğini çarpar.
+- **Hediye** (25 ya da 50 para): her para tutuma 0.5 puan (Kleopatra 0.75, Vercingetorix 0.375), en
+  çok 40, turda 1 söner.
+- **Ticaret anlaşması:** savaşta değilken; müttefik hep kabul eder, nötr tutumda çoğunlukla. İki
+  taraf da 20 tur boyunca turda 3 para kazanır; savaş anlaşmayı bitirir. Dostça bir lider kendisi de
+  önerebilir (mektup).
+- **Para karşılığı barış** (30 para): kabul ihtimali artar, kabul edilirse para karşıya geçer.
+- Her teklif (ittifak, barış, ticaret) bir medeniyete turda bir kere.
+- **Ekran:** Diplomasi'de her satırda liderin portresi, adı, ilişki ve tutumu; *Görüş* liderle
+  görüşme ekranını açar: büyük portre (yüz ifadesi tutuma göre: gülümser, somurtur, kaşlarını
+  çatar), konuşma balonu, kişiliği, tutum ve gerekçeleri, yapılabilecekler. Bir şey önerince lider
+  cevap verir. Teklif mektuplarında liderin portresi ve sözü; sana savaş açan lider konuşur
+  ("Kan mı istedin? Doyasıya içeceksin!").

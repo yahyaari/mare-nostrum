@@ -730,6 +730,89 @@ section("Araştırma ağacı (bölüm 23)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Liderler ve tutum (bölüm 24)");
+
+{
+  const LD = await import("../src/rules/leaders.js");
+  const GEN = await import("../src/rules/generals.js");
+  const { TEXT } = await import("../src/text.js");
+  check("her medeniyetin bir lideri ve kişiliği var", CIVS.every((c) => LD.LEADERS[c.id] && ["war", "peace", "ally", "anger", "gifts", "grudge", "base"].every((k) => typeof LD.LEADERS[c.id][k] === "number")));
+  for (const lang of ["en", "tr"]) {
+    const L = TEXT[lang].leaders;
+    check(`${lang}: her liderin adı, unvanı, kişiliği ve yedi sözü yazılı`, CIVS.every((c) => ["name", "title", "persona", "desc", "friendly", "neutral", "hostile", "war", "yes", "no", "demand"].every((k) => L[c.id]?.[k])));
+  }
+  check("lider adları generallerde yok (Scipio, İskender, Mithridates, Tomris)", !["Scipio", "Alexander", "Mithridates", "Tomris"].some((n) => Object.values(GEN.NAMES).flat().includes(n)));
+
+  const s = S.newGame("rome", 7);
+  const partsOf = (who, other) => Object.fromEntries(LD.moodOf(s, who, other).parts);
+  check("başlangıç tutumu kişilikten: Kleopatra +10, Hannibal Roma'ya yeminli", partsOf("egypt", "rome").persona === 10 && partsOf("carthage", "rome").hates === -15 && !partsOf("carthage", "egypt").hates);
+  for (const id of LD.moodOf(s, "carthage", "rome").parts.map(([k]) => k)) check(`tutum gerekçesi yazılı: ${id}`, TEXT.en.moodParts[id] && TEXT.tr.moodParts[id]);
+  D.declareWar(s, "rome", "egypt");
+  check("savaş ilanı: savaştayız -40, bize savaş açtın -25", partsOf("egypt", "rome").atWar === -40 && partsOf("egypt", "rome").declaredOnUs === -25 && LD.moodLevel(LD.moodOf(s, "egypt", "rome").score) === "hostile");
+  s.turn += 25;
+  check("savaş ilanı zamanla unutulur (Kleopatra 25 turda)", !partsOf("egypt", "rome").declaredOnUs);
+  const t = S.newGame("rome", 7);
+  D.declareWar(t, "rome", "saka");
+  t.turn += 30;
+  check("Tomris kindar: 30 tur sonra hâlâ hatırlar", Object.fromEntries(LD.moodOf(t, "saka", "rome").parts).declaredOnUs < 0);
+
+  // Hediye: para gider, tutum yükselir, söner; Kleopatra hediyeyi bir buçuk kat sever.
+  const g = S.newGame("rome", 7);
+  g.civs.rome.money = 100;
+  const add = LD.gift(g, "rome", "egypt", 50);
+  const m0 = LD.moodOf(g, "egypt", "rome").score;
+  check("hediye: para gider, Kleopatra'da 50 para +38", g.civs.rome.money === 50 && add === Math.round(50 * N.diplo.giftPoints * 1.5) && Object.fromEntries(LD.moodOf(g, "egypt", "rome").parts).gifts === add);
+  check("hediyeye para yetmezse olmaz", LD.gift(g, "rome", "gaul", 80) === 0 && g.civs.rome.money === 50);
+  g.turn += 10;
+  check("hediyenin etkisi turda 1 söner", LD.moodOf(g, "egypt", "rome").score === m0 - 10);
+
+  // Ticaret: kabul edilirse iki tarafa turda para; süresi dolunca biter, savaş da bitirir.
+  const tr = S.newGame("rome", 7);
+  tr.relations[S.key("rome", "egypt")] = "ally";
+  const money0 = S.budget(tr, "rome").money;
+  const ev = D.proposeTrade(tr, "rome", "egypt");
+  check("müttefik ticareti kabul eder; iki tarafa turda +3 para", ev?.type === "trade" && S.budget(tr, "rome").money === money0 + N.diplo.tradeMoney && LD.dealOf(tr, "egypt", "rome"));
+  check("ticaret tutuma +15", Object.fromEntries(LD.moodOf(tr, "egypt", "rome").parts).trade === 15);
+  check("aynı turda ikinci teklif olmaz", !D.canTrade(tr, "rome", "egypt") && D.proposeTrade(tr, "rome", "egypt") === null);
+  for (let i = 0; i < N.diplo.tradeTurns; i++) T.endTurn(tr);
+  check("ticaret anlaşması süresi dolunca biter", !(tr.deals ?? []).some((d) => d.a === "rome" || d.b === "rome") && S.budget(tr, "rome").money < money0 + 100);
+  const w = S.newGame("rome", 7);
+  D.makeDeal(w, "rome", "gaul");
+  D.declareWar(w, "gaul", "rome");
+  check("savaş ticareti bitirir", !LD.dealOf(w, "rome", "gaul"));
+  check("düşmanca olan ticaret de ittifak da kabul etmez", !D.wantsTrade(w, "gaul", "rome") && !D.wantsAlliance(w, "gaul", "rome"));
+
+  // Para karşılığı barış: kabul edilirse para karşıya geçer.
+  const p = S.newGame("rome", 7);
+  p.relations[S.key("rome", "parthia")] = "war";
+  for (const id of S.placesOf(p, "rome")) p.places[id].inf += 400; // Roma çok güçlü: Partlar kabul eder
+  p.civs.rome.money = 100;
+  const pm = p.civs.parthia.money;
+  const pe = D.proposePeace(p, "parthia", "rome", 0);
+  const pe2 = D.proposePeace(p, "rome", "parthia", 30);
+  check("para karşılığı barış: para karşıya geçer", pe2?.type === "peace" ? p.civs.rome.money === 70 && p.civs.parthia.money === pm + 30 : p.civs.rome.money === 100, JSON.stringify(pe2));
+  check("parası yetmeyen para karşılığı barış öneremez", D.proposePeace(S.newGame("rome", 7), "rome", "gaul", 9999) === null);
+
+  // Gururlu Vercingetorix: toprağında iki tur kalan ordu savaş sebebi.
+  check("Vercingetorix iki turda öfkelenip savaşır, öteki liderler üç", LD.persona("gaul").anger === 2 && LD.persona("rome").anger === 3);
+  const v = S.newGame("rome", 7);
+  v.turn = 20;
+  v.anger = { "gaul>rome": 2 };
+  for (const id of S.placesOf(v, "gaul")) v.places[id].inf += 300;
+  const vev = [];
+  const { aiTurn: AI2 } = await import("../src/rules/ai.js");
+  AI2(v, "gaul", vev);
+  check("öfkesi 2 olan Galya savaş açar", S.relation(v, "gaul", "rome") === "war");
+
+  // Eski kayıt: hafıza ve anlaşmalar boş.
+  const old = S.newGame("rome", 7);
+  delete old.memory; delete old.deals;
+  old.version = 13;
+  S.migrate(old);
+  check("eski kayıt: hafıza ve ticaret boş başlar", old.version === S.VERSION && old.memory && Array.isArray(old.deals));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Öğretici haydutlar");
 
 {

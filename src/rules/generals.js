@@ -12,13 +12,13 @@ import { holds } from "./wonders.js";
 // Tarihî adlar, medeniyete göre. Aynı medeniyette aynı ad iki kez kullanılmaz; liste biterse
 // "II" eklenir.
 export const NAMES = {
-  rome: ["Scipio", "Fabius", "Marcellus", "Regulus", "Flaminius", "Aemilius", "Claudius", "Duilius", "Metellus", "Cato"],
+  rome: ["Paullus", "Fabius", "Marcellus", "Regulus", "Flaminius", "Aemilius", "Claudius", "Duilius", "Metellus", "Cato"],
   carthage: ["Hamilcar", "Hasdrubal", "Hanno", "Mago", "Himilco", "Bomilcar", "Carthalo", "Maharbal", "Gisco", "Adherbal"],
   egypt: ["Ptolemy", "Sosibius", "Agathocles", "Scopas", "Patroclus", "Callicrates", "Tlepolemus", "Andromachus", "Echecrates", "Philammon"],
-  macedon: ["Antigonus", "Demetrius", "Craterus", "Perseus", "Alexander", "Cassander", "Taurion", "Leontius", "Apelles", "Philocles"],
-  parthia: ["Arsaces", "Tiridates", "Mithridates", "Surena", "Vologases", "Phraates", "Artabanus", "Sinatruces", "Orodes", "Pacorus"],
+  macedon: ["Antigonus", "Demetrius", "Craterus", "Perseus", "Polyperchon", "Cassander", "Taurion", "Leontius", "Apelles", "Philocles"],
+  parthia: ["Arsaces", "Tiridates", "Gotarzes", "Surena", "Vologases", "Phraates", "Artabanus", "Sinatruces", "Orodes", "Pacorus"],
   gaul: ["Brennus", "Bolgios", "Ambiorix", "Dumnorix", "Litaviccus", "Commius", "Cingetorix", "Indutiomarus", "Lutorius", "Leonnorius"],
-  saka: ["Tomris", "Alp Er Tunga", "Skunkha", "Saulius", "Spargapises", "Ariapeithes", "Scylas", "Octamasades", "Idanthyrsus", "Ateas"],
+  saka: ["Madyes", "Alp Er Tunga", "Skunkha", "Saulius", "Spargapises", "Ariapeithes", "Scylas", "Octamasades", "Idanthyrsus", "Ateas"],
 };
 
 export const TRAITS = ["siege", "swift", "tactician", "archer", "supply", "stern"];
