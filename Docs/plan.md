@@ -15,7 +15,7 @@ her biri ayrı push:
 1. **Zafer yolları ve skor** (d13500f): kurallar.md 12c. Fetih / 5 harika 20 tur / 200. turda
    skor; üst bantta sıra ve skor, Zafer yolları penceresi; bilgisayar harika yarışında öndekinin
    üstüne gider. Kayıt 12.
-2. **Canlı savaşlar** (bu adım): kurallar.md bölüm 7 sonu. Savaş penceresi Civilization'ın
+2. **Canlı savaşlar** (51389c5): kurallar.md bölüm 7 sonu. Savaş penceresi Civilization'ın
    önizlemesi gibi (iki taraf, güç çubuğu, artı/eksi dökümü `combat.js explain`); savaş
    haritada oynar (sahne yerin üstünde, sonuç şeridi - eski savaş sonucu penceresi kalktı);
    tecrübe ve rütbe (Kıdemli / Usta / Seçkin, +%5'er; `N.veteran`), haritada altın V'ler.
