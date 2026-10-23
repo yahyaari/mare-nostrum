@@ -446,7 +446,11 @@ function dispatch(act) {
       // ?seed=123 aynı oyunu tekrar kurar (araçlar ve hata ayıklama için).
       game = newGame(ui.pick, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level);
       // Öğretici açıksa (ve bitirilmediyse) başkentin yanında haydutlar: ilk ordu, ilk savaş.
-      if (!ui.coach.off && !ui.coach.done.has("loot")) spawnBandits(game);
+      // Zincirin balonları baştan: önceki oyunlarda görülmüş olsalar da (öğretici bitene kadar).
+      if (!ui.coach.off && !ui.coach.done.has("loot") && spawnBandits(game)) {
+        for (const id of ["city", "recruit", "garrison", "pick", "form", "hunt", "strike", "preview"]) ui.coach.done.delete(id);
+        saveCoach();
+      }
       ui.screen = "game";
       cam.pad = null;
       ui.sel = null;
