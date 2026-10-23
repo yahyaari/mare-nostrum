@@ -12,7 +12,7 @@ import { POS, cellOf, dist, isLand } from "./map.js";
 import { TECHS, freeTech, grant, knows, techMul, unlocked, unlockerOf } from "./research.js";
 import { dealMoney } from "./leaders.js";
 
-export const VERSION = 16;
+export const VERSION = 17;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -119,6 +119,11 @@ export function migrate(s) {
     s.players ??= [s.player];
     s.version = 16;
   }
+  if (s.version === 16) {
+    // Şehir binaları: hiçbiri yok.
+    for (const p of Object.values(s.places)) { p.temple ??= 0; p.market ??= 0; p.school ??= 0; p.baths ??= 0; }
+    s.version = 17;
+  }
   return s;
 }
 
@@ -146,6 +151,8 @@ export function newGame(player, seed = 1, level = "normal") {
       builds: [], // süren inşaatlar: { what, left, total, paid }
       // Liman yapıları (sadece limanda kullanılır). Tersane 1 ile başlar: gemi yapılabilsin.
       fishery: 0, shipyard: p.port ? 1 : 0, trade: 0, fort: 0, built: 0,
+      // Şehir binaları.
+      temple: 0, market: 0, school: 0, baths: 0,
       loyalty: 100, games: false,
     };
     place.pop = Math.round(popCap(place, p.kind) * N.startPop);
@@ -276,7 +283,7 @@ export function output(state, id) {
   const trade = p.port ? pl.trade * N.port.tradePerLevel * castle * (holds(state, c, "colossus") ? W.colossusTrade : 1) * (holds(state, c, "harbour") ? W.harbourTrade : 1) * techMul(state, c, "trade") : 0;
   const pilgrims = (holds(state, c, "artemis") ? W.artemisMoney : 1) * (holds(state, c, "treasury") ? W.treasuryMoney : 1);
   return {
-    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * techMul(state, c, "money") * ai * pilgrims * (shut ? N.navy.blockadeMoney : 1),
+    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * techMul(state, c, "money") * (1 + (pl.market ?? 0) * N.buildings.market) * ai * pilgrims * (shut ? N.navy.blockadeMoney : 1),
     weapons: pl.industry * castle * trait(c, "weapons") * techMul(state, c, "weapons") * ai,
     food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") * techMul(state, c, "wheat") + fish) * ai,
   };
@@ -339,6 +346,8 @@ export const enemiesOf = (state, civ) => CIVS.map((c) => c.id).filter((o) => sta
 export const UPGRADES = ["level", "farms", "industry", "barracks"];
 /** Sadece limanlarda: balıkçılık, tersane, ticaret, liman kalesi (bölüm 16). */
 export const PORT_UPGRADES = ["fishery", "shipyard", "trade", "fort"];
+/** Şehir binaları: Yapılar sekmesi (kullanıcı 23.10, önerilen küçük işlerin ilki). */
+export const BUILDINGS = ["temple", "market", "school", "baths"];
 
 /** Bir yükseltmenin fiyatı ve yapılıp yapılamayacağı. `why`: neden olmuyor. */
 /** İnşaatçı sayısı: şehirde 2, kalede 1. */
@@ -362,8 +371,10 @@ export function upgradeInfo(state, id, what) {
   const cost = Math.round((now + 1) * N.upgradeCost * (what === "level" ? N.levelCostMul : 1) * techMul(state, pl.owner, "build"));
   const building = pl.builds?.find((b) => b.what === what) ?? null;
   let why = null;
+  const needs = N.buildings.needs[what];
   if (PORT_UPGRADES.includes(what) && !p.port) why = "notPort";
   else if (building) why = "building";
+  else if (needs && !knows(state, pl.owner, needs)) why = "tech_" + needs;
   else if (now >= max) why = what === "level" ? "max" : "needLevel";
   else if (pl.upgraded) why = "done";
   else if (freeBuilders(state, id) <= 0) why = "busy";

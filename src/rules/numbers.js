@@ -131,6 +131,10 @@ export const N = {
   // `giftMax`, turda `giftFade` söner); ticaret anlaşması iki tarafa turda `tradeMoney` para,
   // `tradeTurns` tur; sınır komşusu `border` harita biriminden yakın yerleşimler. Hediye düğmeleri.
   diplo: { giftPoints: 0.5, giftMax: 40, giftFade: 1, tradeMoney: 3, tradeTurns: 20, border: 4, giftSizes: [25, 50], peaceGold: 30 },
+  // Şehir binaları (bölüm 4b; Yapılar sekmesi): her seviye tapınak sadakat turda +temple, pazar
+  // şehrin parası +market, okul +school bilim, hamam nüfus artışı +baths. Seviye şehir seviyesine
+  // kadar; pazar Sikke, okul Yazı, hamam Mühendislik ister.
+  buildings: { temple: 2, market: 0.1, school: 1, baths: 0.1, needs: { market: "currency", school: "writing", baths: "engineering" } },
   // Öğretici haydutlar (bandits.js): başkentten near-far uzakta (dist'e en yakın), dağıtana ganimet.
   bandits: { inf: 10, arch: 10, loot: 40, dist: 1.4, near: 1.1, far: 1.9 },
   // Skor: her yerleşim, seviyesinin her basamağı, başkent; her `popPer` nüfus; her harika; her

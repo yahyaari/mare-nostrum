@@ -56,7 +56,8 @@ harikaları inşa etme yarışı, aynı bilgisayarda arkadaşlarla) ve küçükl
 6. **Arkadaşlarla aynı bilgisayarda** (bu adım): kurallar.md bölüm 25. Oyuncular 1-4, sırayla
    seçim, devir ekranı (Escape kapatmaz, Enter = Hazırım), son oyuncudan sonra dünya turu, her
    oyuncuya kendi mektup/görev/haber; `state.players`, `humansOf`, `isHuman`, `aliveHumans`. Kayıt 16.
-7. Sırada küçükler: şehir binaları, geri çekilme ve dağlar, oyun sonu özeti.
+7. **Şehir binaları** (bu adım): kurallar.md 4b. Yapılar sekmesi: tapınak, pazar, okul, hamam. Kayıt 17.
+8. Sırada: geri çekilme ve dağlar, oyun sonu özeti.
 
 ## ÖNCEKİLER (22.10 akşam)
 

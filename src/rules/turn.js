@@ -52,7 +52,8 @@ export function economy(state, events) {
       const pl = state.places[id];
       const cap = popCap(pl, info(id).kind);
       const gardens = (holds(state, c.id, "gardens") ? N.wonders.gardensGrowth : 1) * (holds(state, c.id, "aqueduct") ? N.wonders.aqueductGrowth : 1);
-      const grow = starving ? 0 : cap * N.growth * trait(c.id, "growth") * techMul(state, c.id, "growth") * gardens;
+      const baths = 1 + (pl.baths ?? 0) * N.buildings.baths;
+      const grow = starving ? 0 : cap * N.growth * trait(c.id, "growth") * techMul(state, c.id, "growth") * gardens * baths;
       pl.pop = Math.min(cap, Math.round(pl.pop + grow));
     }
     tick(state, c.id, starving, events);

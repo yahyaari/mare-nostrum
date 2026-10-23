@@ -807,6 +807,38 @@ section("Harikaları inşa etme yarışı (bölüm 18b)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Şehir binaları (bölüm 4b)");
+
+{
+  const { drift } = await import("../src/rules/loyalty.js");
+  const { TEXT } = await import("../src/text.js");
+  const s = S.newGame("rome", 7);
+  s.civs.rome.money = 500;
+  s.places.rome.level = 3;
+  check("dört bina, yeni oyunda hiçbiri yok", S.BUILDINGS.length === 4 && Object.values(s.places).every((p) => S.BUILDINGS.every((k) => p[k] === 0)));
+  for (const lang of ["en", "tr"]) check(`${lang}: binaların adı ve açıklaması`, S.BUILDINGS.every((k) => TEXT[lang][k] && TEXT[lang].tipUpgrade[k] && TEXT[lang][k + "Fx"]));
+  check("tapınak hemen yapılır; pazar Sikke, okul Yazı, hamam Mühendislik ister",
+    S.upgradeInfo(s, "rome", "temple").why === null && S.upgradeInfo(s, "rome", "market").why === "tech_currency"
+    && S.upgradeInfo(s, "rome", "school").why === "tech_writing" && S.upgradeInfo(s, "rome", "baths").why === "tech_engineering");
+  const d0 = drift(s, "rome").total, sci0 = R.scienceOf(s, "rome"), m0 = S.output(s, "rome").money;
+  Object.assign(s.places.rome, { temple: 2, market: 2, school: 3, baths: 1 });
+  check("tapınak: her seviye sadakat turda +2", Math.abs(drift(s, "rome").total - d0 - 4) < 1e-9);
+  check("pazar: her seviye şehrin parası +%10", Math.abs(S.output(s, "rome").money - m0 * 1.2) < 1e-9);
+  check("okul: her seviye +1 bilim", Math.abs(R.scienceOf(s, "rome") - sci0 - 3) < 1e-9);
+  const g1 = S.newGame("rome", 7), g2 = S.newGame("rome", 7);
+  for (const g of [g1, g2]) g.places.tarentum.pop = 10;
+  g2.places.tarentum.baths = 1;
+  T.economy(g1, []); T.economy(g2, []);
+  check("hamam: o şehrin nüfusu daha hızlı artar", g2.places.tarentum.pop > g1.places.tarentum.pop && g2.places.rome.pop === g1.places.rome.pop);
+  check("bina seviyesi şehir seviyesini geçmez", (() => { const t = S.newGame("rome", 7); t.civs.rome.money = 500; t.places.tarentum.temple = 1; return S.upgradeInfo(t, "tarentum", "temple").why === "needLevel"; })());
+  const old = S.newGame("rome", 7);
+  for (const p of Object.values(old.places)) for (const k of S.BUILDINGS) delete p[k];
+  old.version = 16;
+  S.migrate(old);
+  check("eski kayıt: binalar sıfır", old.version === S.VERSION && Object.values(old.places).every((p) => S.BUILDINGS.every((k) => p[k] === 0)));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Aynı bilgisayarda birkaç oyuncu (bölüm 25)");
 
 {
@@ -2319,6 +2351,7 @@ section("Bot: oyun boyunca değişmezler");
       if (!Array.isArray(p.builds) || p.builds.length > S.buildersOf(id) || new Set(p.builds.map((b) => b.what)).size !== p.builds.length
         || p.builds.some((b) => !(b.left >= 1 && b.left <= b.total && b.paid > 0)) || (!p.owner && p.builds.length)) bad.push(`t${s.turn} bozuk inşaat ${id} ${JSON.stringify(p.builds)}`);
       if (p.builds?.length) building++;
+      if (p.owner && p.owner !== s.player && S.BUILDINGS.some((k) => p[k] > 0)) buildingsSeen++;
     }
     for (const a of s.armies) {
       if (S.empty(a) || ![...UNITS, ...SHIPS].every((k) => Number.isInteger(a[k]) && a[k] >= 0)) bad.push(`t${s.turn} ordu ${a.id} ${UNITS.map((k) => a[k]).join("/")}`);
@@ -2349,7 +2382,7 @@ section("Bot: oyun boyunca değişmezler");
     }
     seenInbox += s.inbox.length;
   };
-  let seenInbox = 0, generals = 0, portWork = 0, building = 0;
+  let seenInbox = 0, generals = 0, portWork = 0, building = 0, buildingsSeen = 0;
   const games = [];
   for (let i = 0; i < 7; i++) games.push(play({ seed: 500 + i, player: CIVS[i].id, turns: 120, watch }));
   check("hiçbir turda bozuk sayı, bozuk ordu yok", !bad.length, bad.slice(0, 5).join(" | "));
@@ -2357,6 +2390,7 @@ section("Bot: oyun boyunca değişmezler");
   check("bilgisayar general atıyor", generals > 0, generals);
   check("bilgisayar liman yapıları kuruyor", portWork > 0, portWork);
   check("bilgisayar inşaatçılarını çalıştırıyor", building > 0, building);
+  check("bilgisayar şehir binaları yapıyor (tapınak, pazar, okul, hamam)", buildingsSeen > 0, buildingsSeen);
   const free25 = games.map((g) => g.freeLeft[24] ?? 0);
   check("25. tura kadar bağımsızların çoğu alınıyor", free25.every((n) => n <= 8), free25.join(" "));
   // Bilgisayarlar arası savaş eşiği 1.8 (sadakat gelince 1.5 erken yok ediyordu): ilk savaş geç olabilir.

@@ -26,7 +26,7 @@ import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
-  PORT_UPGRADES, UPGRADES, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  BUILDINGS, PORT_UPGRADES, UPGRADES, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -540,7 +540,7 @@ function gridHead(ctx, boxes, T, u, of, title, x, y, w, g, mine) {
  */
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const tabs = ["city", ...(p.port ? ["port"] : []), ...(p.kind === "castle" ? [] : ["wonders"]), "garrison"];
+  const tabs = ["city", ...(p.port ? ["port"] : []), "buildings", ...(p.kind === "castle" ? [] : ["wonders"]), "garrison"];
   const tab = tabs.includes(ui.cardTab) ? ui.cardTab : "city";
   const wonder = wondersAt(game, id)[0] ?? null;
   const A = 214, B = 300, C = 230, BC = B + GAP + C;
@@ -598,13 +598,29 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   // Sekmeler: ikinci ve üçüncü sütunun üstünde.
   x += A + GAP;
   vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-  const label = { city: T.tabCity, port: "⚓ " + T.tabPort, wonders: "✦ " + T.tabWonders, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
+  const label = { city: T.tabCity, port: "⚓ " + T.tabPort, buildings: "⌂ " + T.tabBuildings, wonders: "✦ " + T.tabWonders, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
   const tw = (BC - 8 * (tabs.length - 1)) / tabs.length;
   tabs.forEach((k, i) => {
-    button(ctx, boxes, { x: x + i * (tw + 8), y: y + 14, w: tw, h: 28, label: label[k], size: 13, main: tab === k, act: { do: "cardTab", tab: k } });
+    button(ctx, boxes, { x: x + i * (tw + 8), y: y + 14, w: tw, h: 28, label: label[k], size: tabs.length > 4 ? 12 : 13, main: tab === k, act: { do: "cardTab", tab: k } });
   });
   const top = y + 50;
   if (tab === "wonders") wondersTab(ctx, game, ui, boxes, T, id, x, top, BC, y + H - 12 - top);
+  else if (tab === "buildings") {
+    // Yapılar: dört bina solda (yükseltme satırları gibi), sağda bu şehirdeki etkileri.
+    buildersRow(ctx, game, boxes, T, id, x, top, B);
+    BUILDINGS.forEach((what, i) => upgradeRow(ctx, game, boxes, T, id, what, x, x + B, top + 26 + i * 40));
+    const xc = x + B + GAP;
+    vrule(ctx, xc - GAP / 2, top + 4, y + H - 14);
+    let ly = top + 16;
+    text(ctx, T.buildingsNow, xc, ly, { bold: true, size: 13 });
+    const B_ = N.buildings, rows = [
+      [pl.temple, fill(T.templeFx, pl.temple * B_.temple)], [pl.market, fill(T.marketFx, Math.round(pl.market * B_.market * 100))],
+      [pl.school, fill(T.schoolFx, pl.school * B_.school)], [pl.baths, fill(T.bathsFx, Math.round(pl.baths * B_.baths * 100))],
+    ].filter(([n]) => n > 0);
+    for (const [, s] of rows) { ly += 19; fit(ctx, "• " + s, xc, ly, C, { size: 12, color: INK.good }); }
+    if (!rows.length) { ly += 19; text(ctx, "—", xc, ly, { size: 12, color: INK.faint }); }
+    lines(ctx, T.buildingsHint, xc, ly + 26, C, { size: 11, italic: true, color: INK.soft }, 4, 14);
+  }
   else if (tab === "garrison") {
     const g = cardGrid(ctx, boxes, T, ui, pl, pl.owner, of, { x, y: top + 26, w: BC, h: y + H - 12 - (top + 26) }, true);
     gridHead(ctx, boxes, T, pl, of, T.garrison, x, top, BC, g, true);
@@ -782,6 +798,10 @@ function effect(game, id, what, T) {
   const castle = p.kind === "castle" ? N.castleOutput : 1;
   const r1 = (n) => String(Math.round(n * 10) / 10);
   if (what === "level") return fill(T.levelFx, Math.round(popCap({ ...pl, level: pl.level + 1 }, p.kind)));
+  if (what === "temple") return fill(T.templeFx, N.buildings.temple);
+  if (what === "market") return fill(T.marketFx, Math.round(N.buildings.market * 100));
+  if (what === "school") return fill(T.schoolFx, N.buildings.school);
+  if (what === "baths") return fill(T.bathsFx, Math.round(N.buildings.baths * 100));
   if (what === "farms") return fill(T.farmsFx, r1(N.wheatPerFarm * castle * trait(c, "wheat")));
   if (what === "industry") return fill(T.industryFx, r1(castle * trait(c, "weapons"))) + (pl.industry + 1 === 3 ? " · " + T.industrySiege : "");
   if (what === "fishery") return fill(T.fisheryFx, r1(N.port.fishPerLevel * castle * trait(c, "fish")));
@@ -994,7 +1014,7 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
   const area = sideRect(cam, bottomTop);
   const armyRows = (n) => (n ? Math.min(n, 3) * 17 + (n > 3 ? 15 : 0) : 0);
   const rowsH = 18 + (old ? 18 : 0) + (f.pop !== undefined ? 18 : 0) + (f.loyalty !== null && f.loyalty !== undefined ? 18 : 0)
-    + (f.works ? (p.port ? 52 : 17) + (f.builds?.length ? 18 : 0) : 0)
+    + (f.works ? (p.port ? 52 : 17) + (f.builds?.length ? 18 : 0) + (BUILDINGS.some((k) => (f.works[k] ?? 0) > 0) ? 17 : 0) : 0)
     + (f.garrison ? 18 + armyRows(f.inside.length) + armyRows(f.gate.length) : 50);
   const actsH = own ? 0 : 42 + 42 + (pl.owner && relation(game, me, pl.owner) === "neutral" ? 42 : 0);
   const need = 8 + 26 + 36 + wondersAt(game, id).length * 16 + 26 + rowsH + actsH + 12;
@@ -1061,6 +1081,9 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
       row("", `${T.fishery} ${wk.fishery} · ${T.shipyard} ${wk.shipyard}`, tone, 17, 12);
       row("", `${T.trade} ${wk.trade} · ${T.fort} ${wk.fort}`, tone, 18, 12);
     }
+    // Şehir binaları: sadece olanlar.
+    const bl = BUILDINGS.filter((k) => (wk[k] ?? 0) > 0).map((k) => `${T[k]} ${wk[k]}`).join(" · ");
+    if (bl) row("", bl, tone, 17, 12);
     if (f.builds?.length) row(T.buildingShort, f.builds.map((b) => `${buildName(T, b.what)} (${b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left)})`).join(" · "), INK.warn);
   }
   if (f.garrison) {

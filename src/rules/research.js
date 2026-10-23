@@ -95,7 +95,7 @@ export function scienceOf(state, civ) {
   for (const p of PLACES) {
     const pl = state.places[p.id];
     if (pl.owner !== civ) continue;
-    n += pl.pop / N.research.popPer + (p.capital ? N.research.capital : 0);
+    n += pl.pop / N.research.popPer + (p.capital ? N.research.capital : 0) + (pl.school ?? 0) * N.buildings.school;
   }
   const human = (state.players ?? [state.player]).includes(civ);
   const ai = !human ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;

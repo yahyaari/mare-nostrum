@@ -221,10 +221,12 @@ function buildOne(state, civ, id, mine, reserve) {
   // Liman: ablukadaysa kale, ve erken bir ticaret (10 paraya turda +2: beş turda kendini öder).
   if (port && blockaded(state, id)) wish.push("fort");
   if (port && pl.trade < 1) wish.push("trade");
-  wish.push("farms", ...(port ? ["fishery", "trade"] : []), "level", "industry", "barracks", ...(port ? ["shipyard", "fort"] : []));
+  // Huzursuz şehre tapınak.
+  if (pl.loyalty < 60) wish.push("temple");
+  wish.push("farms", ...(port ? ["fishery", "trade"] : []), "level", "market", "school", "industry", "barracks", "baths", "temple", ...(port ? ["shipyard", "fort"] : []));
   for (const w of wish) {
     const u = upgradeInfo(state, id, w);
-    if (u.why === "max" || u.why === "needLevel" || u.why === "notPort" || u.why === "building") continue;
+    if (u.why === "max" || u.why === "needLevel" || u.why === "notPort" || u.why === "building" || u.why?.startsWith("tech_")) continue;
     if (!u.why && state.civs[civ].money >= u.cost + reserve) return upgrade(state, id, w);
     return false; // en çok istenene para yetmiyorsa ucuz olana kaçmıyor: biriktiriyor
   }

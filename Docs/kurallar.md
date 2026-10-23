@@ -123,6 +123,23 @@ Her yerleşimin dört yükseltmesi var:
 
 ---
 
+### 4b. Şehir binaları
+
+Kullanıcı 23.10, önerilen küçük işlerin ilki. Şehir kartında **Yapılar** sekmesi; her bina diğer
+yükseltmeler gibi seviye seviye (şehir seviyesine kadar), para başta, birkaç tur inşaatçıyla
+(`state.js` BUILDINGS, `N.buildings`).
+
+| Bina | Her seviye | Gerekli araştırma |
+|---|---|---|
+| Tapınak | Bu şehirde sadakat turda +2 | - |
+| Pazar | Bu şehrin parası +%10 | Sikke |
+| Okul | Turda +1 bilim | Yazı |
+| Hamam | Bu şehirde nüfus artışı +%10 | Mühendislik |
+
+Bilgisayar huzursuz şehre tapınak, sonra şehir seviyesinden sonra pazar ve okul, kışladan sonra
+hamam yapar. Kayıt 17. Denge (70 oyun, zaferler kapalı): ayakta kalan 298 -> 303, Partlar en büyük
+38 -> 31, ilk düşüş aynı.
+
 ## 5. Askerler
 
 Bir **bölük** 10 askerdir. Asker basmak şehrin nüfusundan düşer.

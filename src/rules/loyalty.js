@@ -52,10 +52,12 @@ export function drift(state, id, starving = false, dist = null) {
     // Sert bir generalin ordusu oradaysa halk hizaya gelir.
     general: state.armies.some((a) => a.at === id && a.owner === pl.owner && a.general?.traits.includes("stern")) ? 4 : 0,
     // Piramitleri tutan medeniyetin halkı huşu içinde.
+    // Tapınak: bu şehirde her seviye.
+    temple: (pl.temple ?? 0) * N.buildings.temple,
     // Kolezyum: gladyatör oyunları her yerde.
     wonder: (holds(state, pl.owner, "pyramids") ? N.wonders.pyramidsLoyalty : 0) + (holds(state, pl.owner, "colosseum") ? N.wonders.colosseumLoyalty : 0),
   };
-  return { total: parts.settle + parts.garrison + parts.far + parts.famine + parts.general + parts.wonder, parts };
+  return { total: parts.settle + parts.garrison + parts.far + parts.famine + parts.general + parts.wonder + parts.temple, parts };
 }
 
 /** İsyancıların gücü: nüfusun dörtte biri. */
