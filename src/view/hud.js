@@ -11,8 +11,10 @@ import { budget, placesOf } from "../rules/state.js";
 import { fill } from "../text.js";
 import { seasonOf, yearOf } from "../rules/season.js";
 import { drawMinimap } from "./draw.js";
-import { INK, SERIF, TAU, colorOf, delta, fmt, icon, over } from "./kit.js";
+import { INK, SERIF, TAU, civName, colorOf, delta, fmt, icon, over } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, TITLE, emblem, roundRect, shade } from "./pieces.js";
+import { rankOf, scoreOf } from "../rules/victory.js";
+import { CIVS } from "../data/world.js";
 
 export const TOP = 50;
 export const RIGHT_W = 244;
@@ -98,6 +100,51 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
     boxes.push({ x: x - 4, y: 4, w: 150, h: TOP - 8, act: null, tip: tips[k] });
   }
 
+  // Skor ve sıra (zafer yolları, rules/victory.js): defnenin içinde sıra, yanında skor. Basınca
+  // Zafer penceresi. Biri Harikalar zaferine gidiyorsa kırmızı bir ünlem: kaç tur kaldığı ipucunda.
+  {
+    const x = chipX("pop") + 158, cy = TOP / 2 - 1;
+    vline(ctx, x - 14, 9, TOP - 11, "rgba(201,164,90,0.35)");
+    const rank = rankOf(game, me), sc = scoreOf(game, me);
+    const racers = CIVS.filter((c) => c.id !== me && game.wonderHold?.[c.id]);
+    ctx.beginPath();
+    ctx.arc(x + 14, cy, 14, 0, TAU);
+    ctx.fillStyle = "#0f0c09";
+    ctx.fill();
+    ctx.strokeStyle = GOLD_DARK;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    laurel(ctx, x + 14, cy + 1, 9.5);
+    ctx.font = `700 12px ${SERIF}`;
+    ctx.fillStyle = CREAM;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(rank), x + 14, cy);
+    ctx.font = `600 18px ${TITLE}`;
+    ctx.textAlign = "left";
+    ctx.fillText(String(sc.total), x + 36, cy + 1);
+    const sw = ctx.measureText(String(sc.total)).width;
+    ctx.font = `600 13px ${SERIF}`;
+    ctx.fillStyle = GOLD_LIGHT;
+    ctx.fillText(fill(T.rankOf, rank, CIVS.filter((c) => game.civs[c.id].alive).length), x + 42 + sw, cy + 2);
+    if (racers.length) {
+      ctx.beginPath();
+      ctx.arc(x + 27, cy - 10, 6.5, 0, TAU);
+      ctx.fillStyle = "#b8342a";
+      ctx.fill();
+      ctx.font = `bold 10px ${SERIF}`;
+      ctx.fillStyle = CREAM;
+      ctx.textAlign = "center";
+      ctx.fillText("!", x + 27, cy - 9.5);
+    }
+    const p = sc.parts;
+    boxes.push({
+      x: x - 4, y: 4, w: 150, h: TOP - 8, act: { do: "open", modal: "victory" },
+      tip: [T.scoreChip, fill(T.scoreParts, p.lands, p.people, p.wonders, p.army, p.wins), T.tipScore,
+        ...racers.map((c) => [fill(T.vRace, civName(c.id, ui.lang), N.victory.hold - game.wonderHold[c.id]), "bad"])],
+    });
+  }
+
   // Sağda: tarih kutusu, rapor, menü.
   const mx = W - 14 - 38;
   medal(ctx, boxes, mx + 19, TOP / 2 - 1, 17, "menu", { do: "open", modal: "menu" });
@@ -120,7 +167,7 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
   ctx.fillText(`${T.seasons[season]} · ${fill(T.year, yearOf(game.turn))}`, dx + 33, TOP / 2 - 8);
   ctx.font = `italic 13px ${SERIF}`;
   ctx.fillStyle = GOLD_LIGHT;
-  ctx.fillText(fill(T.turn, game.turn), dx + 33, TOP / 2 + 8);
+  ctx.fillText(fill(T.turnOf, game.turn, N.victory.turns), dx + 33, TOP / 2 + 8);
 }
 
 /** Bandın sol köşesinden sarkan büyük sancak: oyuncunun medeniyeti. */

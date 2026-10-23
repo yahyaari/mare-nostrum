@@ -11,7 +11,7 @@
 
 - **Dönem:** MÖ 270, Akdeniz.
 - **Oyun:** Yedi medeniyetten birini seçersin, diğerlerini bilgisayar oynar.
-- **Kazanma:** Bütün medeniyetleri yenmek.
+- **Kazanma:** üç yol (bölüm 12c): Fetih, Harikalar, Skor (200. tur).
 - **Platform:** Düz HTML canvas, tarayıcıda açılır (telefon ve bilgisayar).
 - **Dil:** Arayüz İngilizce, Türkçe seçeneği var.
 
@@ -488,6 +488,28 @@ göre birkaç turda gidecek" (`src/rules/spies.js`).
   olur; son raporu kalır, yaşlanır ("3 tur önceki casus raporu").
 - Aynı anda en çok 3 casus; bir yere bir casus. Yer kendi ya da müttefik yeri olursa casus döner.
 - Bilgisayar casus kullanmaz (zaten her şeyi görüyor, bölüm 19).
+
+## 12c. Zafer yolları ve skor
+
+Kullanıcı 23.10: "şu ana kadar güzel şeyler yaptık ama hâlâ bir oyun gibi hissettirmiyor" - en
+çok "ne için oynadığım belli değil" ve "savaşlar cansız"; örnek Civilization. Zafer yolları
+Fetih, Harikalar, Skor (`src/rules/victory.js`).
+
+- **Fetih:** bütün rakipler yıkılır.
+- **Harikalar:** 6 dünya harikasından **5**'ini **20 tur** üst üste tutan kazanır. Sayaç başlayınca
+  herkes duyar (haber, üst bantta kırmızı ünlem, Zafer penceresinde "Mısır: 12 tur sonra
+  Harikalar zaferi!"). Bilgisayarlar öndekinin üstüne gider: gücü denkse savaş açar, onun harika
+  şehirlerini hedefler.
+- **Skor:** **200. turun** sonunda en yüksek skor kazanır. Skor: her yerleşim 10, seviyesinin her
+  basamağı 4, başkent 10; her 20 nüfus 1; her harika 30; her 25 asker 1; kazanılan her savaş 3.
+- Bilgisayar da Harikalar ya da Skor zaferi kazanabilir: o zaman oyuncu kaybeder.
+- **Ekran:** üst bantta defnenin içinde sıra, yanında skor ("7 medeniyette 2."); tarihte "Tur 12 /
+  200". Basınca **Zafer yolları** penceresi: fetihte kaç rakip ayakta, harikaların sahipleri ve
+  sayaçlar, skor sıralaması (kendi satırının üstüne gelince skorun parçaları). Oyun sonu penceresi
+  hangi yoldan kazanıldığını ya da kimin kazandığını söyler.
+- Denge (28 bot oyunu): 4 harika / 10 tur iken oyunların yarısı Harikalar zaferiyle, en erken 20.
+  turda bitiyordu (Mısır iki harikayla başlıyor). 5 / 20: beşte bir, en erken 55. tur; çoğu oyun
+  200. turda skorla, birkaçı fetihle biter.
 
 ## 13. İlk sürümde olmayanlar (sonra)
 

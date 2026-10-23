@@ -1392,6 +1392,74 @@ const SI = await import("../src/rules/sight.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Zafer yolları: Fetih, Harikalar, Skor");
+
+{
+  const V = await import("../src/rules/victory.js");
+  const W = await import("../src/rules/wonders.js");
+  const s = S.newGame("rome", 7);
+  const sc = V.scoreOf(s, "rome");
+  // Roma: başkent (10 + 2x4 + 10 = 28) + Tarentum (10 + 4) + Ariminum (10 + 4) = 56.
+  check("skor: toprak yerleşimler ve seviyeleri", sc.parts.lands === 56, sc.parts.lands);
+  check("skor parçaların toplamı", sc.total === Object.values(sc.parts).reduce((a, b) => a + b, 0));
+  const rk = V.ranking(s);
+  check("sıralama büyükten küçüğe, herkes var", rk.length === 7 && rk.every((r, i) => !i || rk[i - 1].total >= r.total));
+  check("Mısır iki harikayla önde başlar", rk[0].civ === "egypt" && V.rankOf(s, "egypt") === 1);
+  // Kazanılan savaş sayılır.
+  const a = before(raise(s, "rome", { inf: 200 }), "mediolanum");
+  M.attack(s, a.id, "mediolanum", [1, 1]);
+  check("kazanılan savaş skora girer", s.wins.rome === 1 && V.scoreOf(s, "rome").parts.wins === N.score.win);
+
+  // Harikalar: 5 harika tutanın sayacı.
+  const h = S.newGame("rome", 7);
+  for (const id of ["rhodes", "ephesus", "athens"]) h.places[id].owner = "egypt";
+  check("Mısır'da 5 harika", W.wondersOf(h, "egypt").length === 5);
+  const ev = V.tickVictory(h, []);
+  check("sayaç başlar, herkes duyar", h.wonderHold.egypt === 1 && ev.some((e) => e.type === "wonderRace" && e.civ === "egypt") && V.wonderTurnsLeft(h, "egypt") === N.victory.hold - 1);
+  for (let i = 1; i < N.victory.hold - 1; i++) V.tickVictory(h, []);
+  check("süre dolmadan bitmez", V.overOf(h) === null);
+  V.tickVictory(h, []);
+  const o = V.overOf(h);
+  check("süre dolunca Mısır kazanır, oyuncu kaybeder", o && o.kind === "wonders" && o.winner === "egypt" && o.result === "lost");
+  const k = S.newGame("rome", 7);
+  for (const id of ["rhodes", "ephesus", "athens"]) k.places[id].owner = "egypt";
+  V.tickVictory(k, []); V.tickVictory(k, []);
+  k.places.athens.owner = "rome";
+  const ev2 = V.tickVictory(k, []);
+  check("bir harika düşünce sayaç sıfırlanır", !k.wonderHold.egypt && ev2.some((e) => e.type === "wonderLost"));
+  // Skor: süre sonunda en yüksek.
+  const t = S.newGame("rome", 7);
+  t.turn = N.victory.turns + 1;
+  const ot = V.overOf(t);
+  check("süre bitince en yüksek skor kazanır", ot && ot.kind === "score" && ot.winner === V.ranking(t)[0].civ && ot.result === (ot.winner === "rome" ? "won" : "lost"));
+  // Fetih ve yenilgi.
+  const c = S.newGame("rome", 7);
+  for (const civ of ["carthage", "egypt", "macedon", "parthia", "gaul", "saka"]) c.civs[civ].alive = false;
+  check("herkes yıkılınca fetih zaferi", V.overOf(c)?.kind === "conquest" && V.overOf(c).result === "won");
+  const d = S.newGame("rome", 7);
+  for (const id of S.placesOf(d, "rome")) d.places[id].owner = "gaul";
+  check("son yeri düşen kaybeder", V.overOf(d)?.kind === "fallen" && V.overOf(d).result === "lost");
+  // Bilgisayar öndekini durdurur: Harikalar zaferine gidene güçlü komşu savaş açar.
+  const { aiTurn: AIt } = await import("../src/rules/ai.js");
+  let wars = 0;
+  for (let i = 0; i < 20; i++) {
+    const g = S.newGame("rome", 300 + i);
+    g.turn = 30;
+    g.wonderHold = { egypt: 3 };
+    g.places.carthage.inf = 300;
+    const evs = [];
+    AIt(g, "carthage", evs);
+    if (evs.some((e) => e.type === "war" && e.on === "egypt")) wars++;
+  }
+  check("Harikalar zaferine gidene bilgisayar savaş açar", wars > 0, wars);
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
+  old.version = 11;
+  delete old.wins; delete old.wonderHold;
+  S.migrate(old);
+  check("11. sürüm kayıt yükseltiliyor", old.version === S.VERSION && old.wins && old.wonderHold);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Casuslar");
 
 {

@@ -10,7 +10,7 @@ import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { holds } from "./wonders.js";
 import { POS, cellOf, dist, isLand } from "./map.js";
 
-export const VERSION = 11;
+export const VERSION = 12;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -78,6 +78,12 @@ export function migrate(s) {
     s.nextSpy ??= 1;
     s.version = 11;
   }
+  if (s.version === 11) {
+    // Zafer yolları: kazanılan savaşlar ve harika sayaçları sıfırdan.
+    s.wins ??= {};
+    s.wonderHold ??= {};
+    s.version = 12;
+  }
   return s;
 }
 
@@ -121,6 +127,7 @@ export function newGame(player, seed = 1, level = "normal") {
     inbox: [], // oyuncunun karar vermesi gereken olaylar ve teklifler
     anger: {}, // "kurban>giren" -> tarafsızın toprağında durmanın öfkesi (turn.js trespass)
     spies: [], intel: {}, nextSpy: 1, // casuslar ve son raporları (spies.js)
+    wins: {}, wonderHold: {}, // kazanılan savaşlar (skor) ve harika sayaçları (victory.js)
     missions: [], lastMission: 0, // oyuncunun görevleri (missions.js); kendi zarı mrng
     chronicle: { places: [], men: [] }, annals: [], // kronik (chronicle.js)
     mrng: Math.imul(seed | 0 || 1, 0x9e3779b1) | 0 || 7,

@@ -34,7 +34,8 @@ import {
 } from "./kit.js";
 import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal } from "./hud.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, galley, roundRect, shade, shield, soldier, wonderMark } from "./pieces.js";
-import { wonderAt } from "../rules/wonders.js";
+import { WONDERS, wonderAt } from "../rules/wonders.js";
+import { rankOf, ranking, scoreOf, wonderTurnsLeft } from "../rules/victory.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { sight } from "../rules/sight.js";
 import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
@@ -1356,7 +1357,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal, battle: battleModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, victory: victoryModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -1505,6 +1506,8 @@ export function eventLines(game, lang) {
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
+    if (e.type === "wonderRace") out.push([fill(e.civ === me ? T.evWonderRaceMe : T.evWonderRace, name(e.civ), N.victory.wonders, e.left), e.civ === me ? "good" : "bad"]);
+    if (e.type === "wonderLost") out.push([fill(T.evWonderLost, name(e.civ)), e.civ === me ? "bad" : "good"]);
     if (e.type === "spyArrived" && e.civ === me) out.push([fill(T.evSpyArrived, placeName(e.place, lang)), "good"]);
     if (e.type === "spyCaught" && e.civ === me) out.push([fill(T.evSpyCaught, placeName(e.place, lang), name(e.by)), "bad"]);
     if (e.type === "trespass" && e.by === me) out.push([fill(T.evTrespassBy, name(e.victim), Math.ceil(e.anger), N.anger.war), "bad"]);
@@ -1907,11 +1910,87 @@ function chronicleModal(ctx, cam, game, ui, boxes, T, m) {
   oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
 }
 
+/**
+ * Zafer yolları (rules/victory.js): Fetih (kaç rakip ayakta), Harikalar (altı harikanın sahipleri,
+ * sayaçlar), Skor (sıralama, kaç tur kaldığı). Üst banttaki skor çipinden açılır.
+ */
+function victoryModal(ctx, cam, game, ui, boxes, T) {
+  const me = game.player;
+  const r = modalFrame(ctx, cam, boxes, 556, 560);
+  const x = r.x + 24, w = r.w - 48;
+  text(ctx, T.victoryTitle, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  let y = r.y + 76;
+  const head = (title, sub) => {
+    text(ctx, title.toLocaleUpperCase(ui.lang), x, y, { title: true, bold: true, size: 13, color: INK.warn });
+    fit(ctx, sub, x + 110, y, w - 110, { italic: true, size: 12, color: INK.soft });
+    y += 20;
+  };
+  const bar = (f, color, h = 8) => {
+    ctx.fillStyle = "rgba(90,70,40,0.18)";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w * Math.max(0, Math.min(1, f)), h);
+    ctx.strokeStyle = "#5a4630";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  };
+  // Fetih
+  const rivals = CIVS.filter((c) => c.id !== me), standing = rivals.filter((c) => game.civs[c.id].alive).length;
+  head(T.vConquest, T.vConquestText);
+  bar((rivals.length - standing) / rivals.length, INK.bad);
+  y += 22;
+  text(ctx, fill(T.vConquestProg, standing, rivals.length, placesOf(game, me).length), x, y, { size: 13 });
+  y += 30;
+  // Harikalar: altı harika, her birinin şimdiki sahibi.
+  head(T.vWonders, fill(T.vWondersText, N.victory.wonders, N.victory.hold));
+  const cw = w / 3;
+  WONDERS.forEach((wd, i) => {
+    const cx = x + (i % 3) * cw, cy = y + Math.floor(i / 3) * 22 + 12;
+    const owner = game.places[wd.place].owner;
+    shield(ctx, owner, cx, cy - 11, 11);
+    fit(ctx, T.wonders[wd.id][0], cx + 15, cy, cw - 18, { size: 12, bold: owner === me, color: owner === me ? INK.good : INK.ink });
+  });
+  y += 52;
+  const mine = WONDERS.filter((wd) => game.places[wd.place].owner === me).length;
+  text(ctx, fill(T.vWondersYou, mine, WONDERS.length), x, y, { size: 13 });
+  for (const c of CIVS) {
+    const left = wonderTurnsLeft(game, c.id);
+    if (left === null) continue;
+    y += 18;
+    text(ctx, fill(T.vRace, civName(c.id, ui.lang), left), x, y, { size: 13, bold: true, color: c.id === me ? INK.good : INK.bad });
+  }
+  y += 30;
+  // Skor
+  head(T.vScore, fill(T.vScoreText, N.victory.turns) + " · " + fill(T.vTurnsLeft, Math.max(0, N.victory.turns - game.turn + 1)));
+  const rank = ranking(game), top = Math.max(1, rank[0].total);
+  rank.forEach((row, i) => {
+    const ry = y + i * 24, dead = !game.civs[row.civ].alive;
+    if (row.civ === me) { ctx.fillStyle = "rgba(201,164,90,0.18)"; ctx.fillRect(x - 6, ry - 4, w + 12, 22); }
+    text(ctx, `${i + 1}.`, x, ry + 12, { size: 13, bold: true, color: dead ? INK.faint : INK.ink });
+    shield(ctx, row.civ, x + 22, ry, 13);
+    fit(ctx, civName(row.civ, ui.lang), x + 42, ry + 12, 110, { size: 13, bold: row.civ === me, color: dead ? INK.faint : INK.ink });
+    ctx.fillStyle = dead ? "rgba(90,70,40,0.15)" : colorOf(row.civ);
+    ctx.fillRect(x + 160, ry + 3, (w - 210) * (row.total / top), 10);
+    text(ctx, String(row.total), x + w, ry + 12, { size: 13, bold: true, align: "right", color: dead ? INK.faint : INK.ink });
+    if (row.civ === me) {
+      const p = scoreOf(game, me).parts;
+      boxes.push({ x: x - 6, y: ry - 4, w: w + 12, h: 22, act: null, tip: [T.scoreChip, fill(T.scoreParts, p.lands, p.people, p.wonders, p.army, p.wins)] });
+    }
+  });
+  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+}
+
 function overModal(ctx, cam, game, ui, boxes, T) {
-  const won = game.over.result === "won";
-  const r = modalFrame(ctx, cam, boxes, 210);
+  const o = game.over, won = o.result === "won";
+  const r = modalFrame(ctx, cam, boxes, 236);
   text(ctx, won ? T.victory : T.defeat, r.x + r.w / 2, r.y + 56, { title: true, bold: true, size: 28, align: "center", color: won ? INK.good : INK.bad });
-  text(ctx, fill(won ? T.victoryText : T.defeatText, game.over.turn), r.x + r.w / 2, r.y + 94, { size: 14, align: "center" });
+  // Hangi yoldan: fetih, harikalar, skor; kaybedildiyse kim kazandı.
+  const kind = { conquest: T.vConquest, wonders: T.vWonders, score: T.vScore }[o.kind];
+  if (kind) text(ctx, kind.toLocaleUpperCase(ui.lang), r.x + r.w / 2, r.y + 82, { title: true, bold: true, size: 13, align: "center", color: INK.warn });
+  const who = civName(o.winner, ui.lang);
+  const line = won ? fill({ conquest: T.victoryText, wonders: T.winWonders, score: T.winScore }[o.kind] ?? T.victoryText, o.turn)
+    : o.kind === "wonders" ? fill(T.loseWonders, who) : o.kind === "score" ? fill(T.loseScore, who, rankOf(game, game.player)) : fill(T.defeatText, o.turn);
+  lines(ctx, line, r.x + 24, r.y + 112, r.w - 48, { size: 14, align: "center" }, 2, 18);
   twoButtons(ctx, boxes, r, { label: T.newGame, act: { do: "newGame" } }, { label: T.chronicle, act: { do: "open", modal: "chronicle" } });
 }
 

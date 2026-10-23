@@ -20,6 +20,7 @@ import { groundOf } from "./ground.js";
 import { isWinter } from "./season.js";
 import { CELL, H, PLACE_CELL, POS, W, around, cellOf, centre, dist, field, isLand, isRoad, pathNear, pathTo, placeAtCell, regionIndex, rings, stepCost } from "./map.js";
 import { project } from "../geo.js";
+import { countWin } from "./victory.js";
 
 /**
  * `civ` buraya girebilir mi, girerse ne olur:
@@ -364,6 +365,7 @@ export function attack(state, armyId, id, luck = null) {
     sinkAt(state, id, nr.def);
     for (const k of SHIPS) army[k] = nr.att[k];
     if (!nr.attWins) {
+      countWin(state, pl.owner);
       state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path, at: id, won: false, oldOwner: pl.owner });
       bury(state, army.owner, army.general);
       state.armies = state.armies.filter((a) => a !== army);
@@ -387,6 +389,7 @@ export function attack(state, armyId, id, luck = null) {
   state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path, at: id, won: r.attWins, oldOwner: pl.owner });
   army.mp = 0;
   army.route = [];
+  countWin(state, r.attWins ? army.owner : pl.owner);
 
   if (r.attWins) {
     for (const k of UNITS) army[k] = r.att[k];
@@ -473,6 +476,7 @@ export function strike(state, armyId, targetId, luck = null) {
   army.mp = 0;
   army.route = [];
   const [winner, loser] = won ? [army, b] : [b, army];
+  countWin(state, winner.owner);
   bury(state, loser.owner, loser.general);
   if (loser.general) ev.genFell = loser.general.name;
   if (winner.general) {

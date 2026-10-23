@@ -9,6 +9,7 @@ import { CIVS } from "../data/world.js";
 import { aiTurn } from "./ai.js";
 import { trespass } from "./diplomacy.js";
 import { tickSpies } from "./spies.js";
+import { overOf, tickVictory } from "./victory.js";
 import { roll, settleInbox } from "./events.js";
 import { check as checkMissions, issue } from "./missions.js";
 import { tick } from "./loyalty.js";
@@ -100,6 +101,8 @@ export function endTurn(state) {
   tickSpies(state, events);
   refresh(state, state.player);
   for (const a of armiesOf(state, state.player)) advance(state, a);
+  // Harikalar zaferinin sayaçları.
+  tickVictory(state, events);
   // Görevler: tamamlanan ödülünü alır, süresi geçen düşer, belki yenisi gelir.
   checkMissions(state, events);
   issue(state, events);
@@ -113,11 +116,9 @@ export function endTurn(state) {
   return events;
 }
 
+/** Oyun bitti mi (victory.js overOf): bittiyse state.over'a yazılır. */
 export function checkOver(state) {
   if (state.over) return state.over;
-  if (!placesOf(state, state.player).length) state.over = { result: "lost", turn: state.turn };
-  else if (CIVS.every((c) => c.id === state.player || !state.civs[c.id].alive)) {
-    state.over = { result: "won", turn: state.turn };
-  }
+  state.over = overOf(state);
   return state.over;
 }

@@ -14,6 +14,7 @@ import {
   access, advance, attack, avoidFor, bySea, canAttack, canStrike, defenders, forecast, forecastField, hostile, nearest, order, reachOf, refresh, routeTo, strike,
 } from "./moves.js";
 import { POS, centre, dist } from "./map.js";
+import { wonderAt } from "./wonders.js";
 import { besiege, canBesiege } from "./siege.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { random } from "./rng.js";
@@ -80,6 +81,13 @@ function diplomacy(state, civ, events) {
     if (angerOf(state, civ, o) >= N.anger.war && me >= N.anger.ratio * strength(state, o)) events.push(declareWar(state, civ, o));
   }
   if (state.turn < Math.min(N.aiPeace, level.peace)) return;
+  // Harikalar zaferine giden medeniyet: herkes için hedef (gücü denkse savaş açılır).
+  for (const c of CIVS) {
+    const o = c.id;
+    if (o === civ || !state.wonderHold?.[o] || !canDeclare(state, civ, o)) continue;
+    if (o === state.player && state.turn < level.peace) continue;
+    if (me >= 0.8 * strength(state, o) && random(state) < 0.35) events.push(declareWar(state, civ, o));
+  }
   const wars = enemiesOf(state, civ);
 
   // Savaş: en fazla bir cephe, ve ancak açıkça güçlüyken.
@@ -273,8 +281,12 @@ function need(state, civ, id) {
   return Math.max(info(id).capital ? 20 : 10, unrest, Math.ceil(threat(state, civ, id) * 1.1));
 }
 
-/** Bir yerin değeri: başkent ve büyük şehir daha değerli, savunması zayıf olan daha cazip. */
-const worth = (state, id) => state.places[id].level * 10 + (info(id).capital ? 25 : 0) - men(defenders(state, id)) * 0.3;
+/**
+ * Bir yerin değeri: başkent ve büyük şehir daha değerli, savunması zayıf olan daha cazip; Harikalar
+ * zaferine gidenin harika şehri çok değerli (öndekini durdur).
+ */
+const worth = (state, id) => state.places[id].level * 10 + (info(id).capital ? 25 : 0) - men(defenders(state, id)) * 0.3
+  + (wonderAt(id) && state.wonderHold?.[state.places[id].owner] ? 60 : 0);
 
 /** Bir kuvvet bir noktadan saldırsa: tahmin (ordunun askerleri, gemileri, generali o noktada). */
 const oddsFrom = (state, u, civ, id, at) => forecast(state, { ...u, x: at.x, y: at.y }, civ, id).odds;

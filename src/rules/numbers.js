@@ -111,6 +111,15 @@ export const N = {
   // çok kaç casus, yerinde her tur yakalanma ihtimali (+ garnizonun her 100 askeri için), ve
   // vardığı yerde açtığı görüş (kapıdaki ordular da görünsün).
   spy: { cost: 15, speed: 4, max: 3, caught: 0.06, perHundred: 0.03, eye: 1.4 },
+  // Zafer yolları (kullanıcı 23.10: Fetih, Harikalar, Skor; victory.js). Harikalar: 6 harikadan
+  // `wonders` tanesini `hold` tur üst üste tutan; Skor: `turns`. turun sonunda en yüksek.
+  // 28 bot oyunuyla: 4 harika / 10 tur iken oyunların yarısı Harikalar zaferiyle, en erken 20. turda
+  // bitiyordu (Mısır iki harikayla başlıyor, yanındaki Rodos ve Efes bağımsız). 5 / 20: beşte bir,
+  // en erken 55. tur; çoğu oyun 200. turda skorla biter.
+  victory: { wonders: 5, hold: 20, turns: 200 },
+  // Skor: her yerleşim, seviyesinin her basamağı, başkent; her `popPer` nüfus; her harika; her
+  // `armyPer` asker; kazanılan her savaş.
+  score: { place: 10, level: 4, capital: 10, popPer: 20, wonder: 30, armyPer: 25, win: 3 },
 
   // Bilgisayar
   // Bilgisayarlar arası: bu turdan önce kimse kimseye savaş açmaz (önce bağımsızlar), ve ancak
