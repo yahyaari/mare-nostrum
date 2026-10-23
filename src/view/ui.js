@@ -32,7 +32,7 @@ import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
 import {
   INK, SERIF, TAU, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, over, panel, pointer, text, wrap,
 } from "./kit.js";
-import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal, rightColumn } from "./hud.js";
+import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal } from "./hud.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, galley, roundRect, shade, shield, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
@@ -59,14 +59,14 @@ export function drawUI(ctx, cam, game, ui, boxes, view) {
     // Seçim kartı altta ortada; açıkken alttaki menünün yerini alır.
     let side = null;
     if (ui.sel?.kind === "place") {
-      // Sağda şehrin kartı (her yer için); kendi şehrinse altta yükseltme ve asker paneli.
+      // Solda şehrin kartı (her yer için); kendi şehrinse altta yükseltme ve asker paneli.
       card = game.places[ui.sel.id].owner === game.player ? cityCard(ctx, cam, game, ui, boxes, T) : null;
       side = sideCard(ctx, cam, game, ui, boxes, T, card?.y);
     } else if (ui.sel?.kind === "army" && armyById(game, ui.sel.id)) {
       card = armyCard(ctx, cam, game, ui, boxes, T);
     }
     if (!game.over && !card) drawBottomBar(ctx, cam, game, ui, boxes, T);
-    if (ui.news && !ui.modal) drawNews(ctx, cam, ui, boxes, T, !!side);
+    if (ui.news && !ui.modal) drawNews(ctx, cam, ui, boxes, T);
     drawCoach(ctx, cam, game, ui, boxes, T);
   }
   if (ui.toast && ui.toast.until > performance.now()) drawToast(ctx, cam, ui.toast.text, card ? card.y - 56 : cam.h - BOTTOM_H - 58);
@@ -509,7 +509,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const wonder = wonderAt(id);
   const A = 214, B = 300, C = 230, BC = B + GAP + C;
   const body = A + GAP + BC + PAD;
-  // Görsel, garnizon ve içeridekiler sağdaki kartta (sideCard); burada ne yapılacağı.
+  // Görsel, garnizon ve içeridekiler soldaki kartta (sideCard); burada ne yapılacağı.
   const r = cardRect(cam, PAD + body, 252 + (wonder ? 18 : 0));
   panel(ctx, r.x, r.y, r.w, r.h, boxes);
   const y = r.y, H = r.h;
@@ -890,7 +890,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Sağdaki şehir kartı
+// Soldaki şehir kartı
 //
 // Kullanıcı 22.10: "şehre tıkladığımızda ekranın sağında kart çıksın: şehir bilgileri, güzel bir
 // şehir görseli, hangi millet, garnizon kaç kişi, şehir seviyeleri, içeride kim var; aşağıdaki
@@ -900,11 +900,13 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
 
 export const SIDE_W = 284;
 
-/** Sağ kartın yeri: sağ sütunun (sıradaki ordu, mini harita) üstünde; altta kart varsa onun üstünde biter. */
+/**
+ * Şehir kartının yeri: ekranın solunda, medeniyetin sancağının altında (kullanıcı 23.10: "sağa
+ * değil sola alalım"); altta kart varsa onun üstünde biter.
+ */
 export function sideRect(cam, bottomTop = Infinity) {
-  const { next } = rightColumn(cam);
-  const y = TOP + 10;
-  return { x: cam.w - 12 - SIDE_W, y, w: SIDE_W, h: Math.max(240, Math.min(next.y, bottomTop) - 10 - y) };
+  const y = 92; // sancak (hud.js hanging) 80 piksel iner
+  return { x: 12, y, w: SIDE_W, h: Math.max(240, Math.min(cam.h - 12, bottomTop - 10) - y) };
 }
 
 /** Bir yer hakkında oyuncunun bildikleri: canlı (kendi, müttefik, casus içeride), görülen (sis), ya da eski rapor. */
@@ -1115,13 +1117,12 @@ function darkPanel(ctx, x, y, w, h) {
  * Basılınca bütün rapor açılır. (Kullanıcı 22.10: "tepki az / donuk"; her tur açılan rapor
  * penceresi araya giriyordu.) Kararlar ve görevler yine pencere olarak sorulur.
  */
-function drawNews(ctx, cam, ui, boxes, T, onLeft = false) {
+function drawNews(ctx, cam, ui, boxes, T) {
   const now = performance.now();
   ui.news.since ??= now;
   const left = ui.news.since + 9000 - now;
   if (left <= 0) return;
-  // Sağda şehir kartı açıksa haberler solda (sancağın sağında).
-  const W = 340, x = onLeft ? 96 : cam.w - 12 - W, y = TOP + 14;
+  const W = 340, x = cam.w - 12 - W, y = TOP + 14;
   const rows = ui.news.lines.flatMap(([s, tone]) => wrap(ctx, s, W - 40, { size: 13 }).map((l, i) => [l, tone, i === 0])).slice(0, 9);
   const h = 42 + rows.length * 19;
   ctx.save();

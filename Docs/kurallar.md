@@ -449,14 +449,13 @@ oyundan çıkar.
   "solda istemiyorum"): şehir (nüfus, garnizon, üretim, sadakat, Ordu çıkar) | sekmeler: Şehir
   (yükseltmeler, asker bas), Liman (liman yapıları, gemi yap), Garnizon (askerler kart kart). Panel açıkken alttaki menü gizlenir;
   seçilen yer panelin arkasında kalacaksa harita onu yukarı kaydırır.
-- **Sağdaki şehir kartı** (kullanıcı 22.10: "şehre tıklayınca ekranın sağında kart çıksın"): her
-  yerleşime tıklayınca sağda, sağ sütunun üstünde: şehrin görseli (kendi arazisinde maketi,
+- **Şehir kartı, solda** (kullanıcı 22.10 sağda istedi, 23.10 "sola alalım"): her yerleşime
+  tıklayınca solda, medeniyetin sancağının altında: şehrin görseli (kendi arazisinde maketi,
   içi biliniyorsa önünde garnizonu kadar asker), adı, sahibi ve ilişkisi, türü ve seviyesi; sur,
   nüfus, sadakat, yapılar, süren inşaat, garnizon, içerideki ve kapıdaki ordular. Kendi şehrinde
   altta yine yükseltme / liman / garnizon paneli. Yabancı yerin içi ancak görülüyorsa (sis) ya da
   casusu oradaysa bilinir; yoksa son casus raporu soluk, kaç tur önceki olduğuyla. Yabancı yerin
-  kartında: menzildeki ordun için saldırı, *Casus gönder*, tarafsızsa *Savaş ilan et*. Kart
-  açıkken haberler solda.
+  kartında: menzildeki ordun için saldırı, *Casus gönder*, tarafsızsa *Savaş ilan et*.
 - **Ordu kartı:** solda ordu (general, askerler, hareket), sağda birlik kartları; altta Yürü, Ayır,
   Birleştir, Garnizona kat. **Yürü**'ye basınca haritada basılan yer ordunun gideceği yer olur.
 - **Sol tık seçer, sağ tık yürütür:** orduya tıkla, gideceği yere sağ tıkla; yanındaki düşmana

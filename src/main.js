@@ -346,10 +346,10 @@ function stepGlide() {
 function keepVisible(pt, side = false) {
   const s = toScreen(cam, pt.x, pt.y);
   const bottom = cam.h - 12 - CARD_H - 40;
-  // Yer seçilince sağda da kart açılır: yer onun arkasında kalmasın.
-  const right = side ? cam.w - 12 - SIDE_W - 40 : cam.w - 40;
+  // Yer seçilince solda da kart açılır: yer onun arkasında kalmasın.
+  const left = side ? 12 + SIDE_W + 40 : 40;
   const dy = s.y > TOP + 40 && s.y < bottom ? 0 : s.y - (TOP + bottom) / 2;
-  const dx = s.x > right ? s.x - (right - 120) : 0;
+  const dx = s.x < left ? s.x - (left + 120) : 0;
   if (!dx && !dy) return;
   glide(cam.x + dx / cam.scale, cam.y + dy / cam.scale);
 }
