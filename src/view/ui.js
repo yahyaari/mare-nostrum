@@ -18,7 +18,7 @@ import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import {
   access, canAttack, canStrike, defenders, fieldSides, forecast, forecastField, fortOf, hostile, menace, mpMax, nearestPlace, shipsAt, sides, wallsOf,
 } from "../rules/moves.js";
-import { POS, cellOf, centre, dist, isLand, placeAtCell } from "../rules/map.js";
+import { POS, cellOf, centre, dist, isLand, isMountain, placeAtCell } from "../rules/map.js";
 import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
 import { banditsOf } from "../rules/bandits.js";
 import { dealLeft, dealOf, moodLevel, moodOf, persona } from "../rules/leaders.js";
@@ -1256,11 +1256,15 @@ function fightScene(ctx, cam, game, e, t) {
 function fightRibbon(ctx, cam, ui, boxes, T, e, t) {
   if (t > RIBBON_MS) return;
   const where = placeName(e.place, ui.lang);
-  const lost = men(e.before.att) - men(e.after.att), killed = men(e.before.def) - men(e.after.def);
-  const head = e.bandits && e.won ? T.banditsWon : e.field ? (e.won ? T.fieldWon : T.fieldLost) : e.won ? T.won : T.lost;
+  // Geri çekilenler kayıp sayılmaz.
+  const back = (who) => (e.retreat?.owner === who ? e.retreat.men : 0);
+  const lost = men(e.before.att) - men(e.after.att) - back(e.attacker), killed = men(e.before.def) - men(e.after.def) - back(e.defender);
+  const fled = e.retreat && e.retreat.owner === e.attacker && !e.won;
+  const head = e.bandits && e.won ? T.banditsWon : e.field ? (e.won ? T.fieldWon : fled ? T.fieldLostFled : T.fieldLost) : e.won ? T.won : fled ? T.lostFled : T.lost;
   const lines = [[e.drowned ? T.drowned : fill(T.fightLine, lost, killed), e.drowned ? "bad" : null]];
   if (!e.drowned && e.naval?.won && e.naval.sunk) lines.push([fill(T.navalWin, e.naval.sunk), "good"]);
   if (e.loot) lines.push([fill(T.lootLine, e.loot), "good"]);
+  if (e.retreat) lines.push(e.retreat.owner === e.attacker ? [fill(T.retreatYou, e.retreat.men), "warn"] : [fill(T.retreatThem, e.retreat.men), null]);
   if (e.rankUp) lines.push([fill(T.rankUp, T.ranks[e.rankUp], Math.round(e.rankUp * N.veteran.per * 100)), "warn"]);
   if (e.fallen) lines.push([fill(T.evFallen, civName(e.fallen, ui.lang)), "good"]);
   if (e.gen?.up) lines.push([fill(T.genUp, e.gen.name, e.gen.up), "warn"]);
@@ -1293,7 +1297,7 @@ function fightRibbon(ctx, cam, ui, boxes, T, e, t) {
   // Kazananın renginde ince şerit.
   ctx.fillStyle = colorOf(e.won ? e.attacker : e.defender);
   ctx.fillRect(x + 8, y + 5, W - 16, 3);
-  text(ctx, fill(head, where).toLocaleUpperCase(ui.lang), cam.w / 2, y + 32, { title: true, bold: true, size: 18, align: "center", color: e.won ? GOLD_LIGHT : TONE.bad });
+  fit(ctx, fill(head, where).toLocaleUpperCase(ui.lang), cam.w / 2, y + 32, W - 40, { title: true, bold: true, size: 18, align: "center", color: e.won ? GOLD_LIGHT : TONE.bad });
   lines.forEach(([s, tone], i) => text(ctx, s, cam.w / 2, y + 54 + i * 20, { size: 14, align: "center", color: TONE[tone] ?? CREAM, bold: !!tone }));
   ctx.restore();
   boxes.push({ x: x - n, y, w: W + 2 * n, h: H, act: { do: "fightOff" } });
@@ -1344,7 +1348,8 @@ export function goLine(go, lang) {
   const T = TEXT[lang];
   const when = (n) => (n <= 1 ? T.tipOneTurn : fill(T.tipTurns, n));
   const tone = (o) => (o === "easy" ? "good" : o === "risky" ? "warn" : "bad");
-  if (go.kind === "walk") return [`${T.tipWalk} · ${when(go.turns)}`, "warn"];
+  const hills = go.cells?.length && isMountain(go.cells[go.cells.length - 1]) ? ` · ${T.mountainNote}` : "";
+  if (go.kind === "walk") return [`${T.tipWalk} · ${when(go.turns)}${hills}`, "warn"];
   if (go.kind === "attack") return [`${T.tipAttack} · ${T.odds}: ${oddsLabel(go.odds, T)[0]}`, tone(go.odds)];
   if (go.kind === "strike") return [`${T.tipStrike} · ${T.odds}: ${oddsLabel(go.odds, T)[0]}`, tone(go.odds)];
   if (go.kind === "approach") return [`${T.tipWalk} · ${when(go.turns)} → ${T.attack}`, "warn"];

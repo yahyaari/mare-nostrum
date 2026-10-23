@@ -807,6 +807,60 @@ section("Harikaları inşa etme yarışı (bölüm 18b)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Dağlar ve geri çekilme (bölüm 7, 22b)");
+
+{
+  const { project } = await import("../src/geo.js");
+  const at = (lat, lon) => { const p = project(lon, lat); return MAP.cellOf(p.x, p.y); };
+  check("Alpler, Toroslar, Zagros dağ; Roma, Po ovası, Mısır değil",
+    MAP.isMountain(at(46.5, 9.0)) && MAP.isMountain(at(37.2, 33.0)) && MAP.isMountain(at(34.4, 46.8))
+    && !MAP.isMountain(MAP.PLACE_CELL.rome) && !MAP.isMountain(at(45.1, 10.5)) && !MAP.isMountain(at(30.0, 31.2)));
+  check("yerleşimin karesi dağ sayılmaz", PLACES.every((p) => !MAP.isMountain(MAP.PLACE_CELL[p.id])));
+  const m = at(46.5, 9.0);
+  const nb = MAP.around(m).find(([c]) => MAP.isLand(c) && !MAP.isRoad(c) && !MAP.isRoad(m));
+  check("dağda yol dışı adım iki kat", nb && Math.abs(MAP.stepCost(m, nb[0], nb[1]) - nb[1] * N.march.land * N.march.mountain) < 1e-9);
+  const road = [...Array(MAP.W * MAP.H).keys()].find((c) => MAP.isMountain(c) && MAP.isRoad(c) && MAP.around(c).some(([x]) => MAP.isRoad(x)));
+  const rn = road !== undefined && MAP.around(road).find(([x]) => MAP.isRoad(x));
+  check("dağdaki yol (geçit) yol hızında", rn && Math.abs(MAP.stepCost(road, rn[0], rn[1]) - rn[1] * N.march.road) < 1e-9);
+
+  // Dağda savunan güçlü.
+  const s = S.newGame("rome", 7);
+  s.relations[S.key("rome", "gaul")] = "war";
+  const a = raise(s, "rome", { inf: 60 });
+  const b = raise(s, "bibracte", { inf: 60 });
+  Object.assign(a, MAP.centre(m), { at: null, route: [] });
+  Object.assign(b, MAP.centre(MAP.around(m).find(([c]) => MAP.isLand(c))[0]), { at: null, route: [] });
+  b.x = MAP.centre(m).x; b.y = MAP.centre(m).y; a.x += 0.3;
+  check("dağdaki savunan dağ geçidi gibi x1.25", M.fieldSides(s, a, b).def.terrain === N.ground.pass);
+
+  // Geri çekilme: yakın savaşta yenilen askerinin bir kısmıyla çekilir, generali sağ kalır.
+  const f = S.newGame("rome", 7);
+  f.relations[S.key("rome", "gaul")] = "war";
+  const ro = before(raise(f, "rome", { inf: 100 }), "mediolanum");
+  const ga = raise(f, "bibracte", { inf: 80 });
+  ga.at = null; ga.x = ro.x + 0.25; ga.y = ro.y;
+  ga.general = { name: "Bolgios", level: 1, xp: 0, traits: [] };
+  const ev = M.strike(f, ro.id, ga.id, [1, 1]);
+  check("yakın meydan muharebesinde yenilen geri çekilir", ev.won && ev.retreat && S.armyById(f, ga.id) && S.men(ga) === ev.retreat.men && S.men(ga) <= 40 && S.men(ga) >= N.retreat.min, JSON.stringify(ev.retreat));
+  check("çekilen kazanandan uzaklaşır, hareketi biter, generali yaşar", MAP.dist(ga, ro) > 0.25 && ga.mp === 0 && ga.general?.name === "Bolgios" && !ev.genFell);
+  check("çekilen kara karesinde, yerleşimin dışında", MAP.isLand(MAP.cellOf(ga.x, ga.y)) && !ga.at && !MAP.placeAtCell(MAP.cellOf(ga.x, ga.y)));
+  // Ezilen dağılır.
+  const g = S.newGame("rome", 7);
+  g.relations[S.key("rome", "gaul")] = "war";
+  const big = before(raise(g, "rome", { inf: 300 }), "mediolanum");
+  const small = raise(g, "bibracte", { inf: 30 });
+  small.at = null; small.x = big.x + 0.25; small.y = big.y;
+  const ev2 = M.strike(g, big.id, small.id, [1, 1]);
+  check("ezilen ordu dağılır", ev2.won && !ev2.retreat && !S.armyById(g, small.id));
+  // Saldırıda püskürtülen saldıran: kapının önünde, askerinin bir kısmıyla kalır.
+  const h = S.newGame("rome", 7);
+  const weak = before(raise(h, "rome", { inf: 40 }), "massalia");
+  const x0 = weak.x;
+  const ev3 = M.attack(h, weak.id, "massalia", [1, 1]);
+  check("püskürtülen saldıran yok olmaz, askerinin bir kısmıyla kapıda kalır", !ev3.won && ev3.retreat && S.armyById(h, weak.id) && S.men(weak) < 40 && weak.x === x0, JSON.stringify(ev3.retreat));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Şehir binaları (bölüm 4b)");
 
 {

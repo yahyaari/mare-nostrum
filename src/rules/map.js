@@ -6,13 +6,15 @@
 // puanı (N.march.mp) sınırlı:
 //   yol üstünde birim başına 1, yol dışında 2.5, denizde 1; karadan gemiye binmek ya da gemiden
 //   karaya çıkmak ayrıca N.march.embark.
-// Yani yolda turda 4, yol dışında 1.6 harita birimi (~440 / ~180 km), denizde 4.
+// Yani yolda turda 4, yol dışında 1.6 harita birimi (~440 / ~180 km), denizde 4. Dağda (yol dışı)
+// iki kat: Alpleri, Torosları yoldan (geçitten) aşmak hızlı, dağın sırtından yavaş.
 //
 // Toprak: her kara karesi kendisine en yakın yerleşimin (en fazla REACH uzakta), ekranda çizilen
 // topraklarla aynı kural (view/regions.js). Deniz kimsenin değil.
 
 import { CELL, GRID, GRID_H, GRID_W } from "../data/grid.js";
 import { PLACES } from "../data/world.js";
+import { MOUNTAINS } from "../data/mountains.js";
 import { project } from "../geo.js";
 import { N } from "./numbers.js";
 
@@ -32,10 +34,28 @@ const CX = new Float64Array(W * H), CY = new Float64Array(W * H);
 for (let c = 0; c < W * H; c++) { CX[c] = ((c % W) + 0.5) * CELL; CY[c] = (Math.floor(c / W) + 0.5) * CELL; }
 export const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+// Dağlar (src/data/mountains.js): çizgiye yarı genişliğinden yakın kara kareleri. Izgaranın 6 biti
+// dolu (kara, yol, dört kesik), dağ açılışta hesaplanır.
+const mountain = new Uint8Array(W * H);
+{
+  const segs = MOUNTAINS.flatMap((m) => m.pts.slice(1).map((p, i) => [project(m.pts[i][1], m.pts[i][0]), project(p[1], p[0]), m.w]));
+  for (let c = 0; c < W * H; c++) {
+    if (!(bits[c] & 1)) continue;
+    const x = CX[c], y = CY[c];
+    for (const [a, b, w] of segs) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+      if (Math.hypot(a.x + t * dx - x, a.y + t * dy - y) < w) { mountain[c] = 1; break; }
+    }
+  }
+}
+export const isMountain = (c) => mountain[c] === 1;
+
 /** Yerleşimlerin yerleri (harita birimi) ve kareleri; bir karedeki yerleşim. */
 export const POS = Object.fromEntries(PLACES.map((p) => [p.id, project(p.lon, p.lat)]));
 export const PLACE_CELL = Object.fromEntries(PLACES.map((p) => [p.id, cellOf(POS[p.id].x, POS[p.id].y)]));
 const placeIn = new Map(PLACES.map((p) => [PLACE_CELL[p.id], p.id]));
+for (const c of placeIn.keys()) mountain[c] = 0;
 export const placeAtCell = (c) => placeIn.get(c) ?? null;
 
 // ---- komşular ----
@@ -78,7 +98,7 @@ export function stepCost(a, b, len) {
   // Yol üstünde yol hızı - boğazı aşan yolda (feribot, su karesi) da.
   if (isRoad(a) && isRoad(b)) return len * N.march.road;
   const la = isLand(a), lb = isLand(b);
-  if (la && lb) return len * N.march.land;
+  if (la && lb) return len * N.march.land * (mountain[a] || mountain[b] ? N.march.mountain : 1);
   if (!la && !lb) return len * N.march.sea;
   return len * N.march.land + N.march.embark;
 }

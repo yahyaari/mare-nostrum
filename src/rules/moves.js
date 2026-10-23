@@ -18,7 +18,7 @@ import { armiesAt, armyById, canSail, empty, fleetOf, info, isHuman, men, places
 import { holds } from "./wonders.js";
 import { groundOf } from "./ground.js";
 import { isWinter } from "./season.js";
-import { CELL, H, PLACE_CELL, POS, W, around, cellOf, centre, dist, field, isLand, isRoad, pathNear, pathTo, placeAtCell, regionIndex, rings, stepCost } from "./map.js";
+import { CELL, H, PLACE_CELL, POS, W, around, cellOf, centre, dist, field, isLand, isMountain, isRoad, pathNear, pathTo, placeAtCell, regionIndex, rings, stepCost } from "./map.js";
 import { project } from "../geo.js";
 import { countWin } from "./victory.js";
 import { modsOf } from "./research.js";
@@ -324,10 +324,11 @@ function insideVet(state, id) {
   return (men(pl) + own.reduce((n, a) => n + men(a) * veteranMul(a.xp), 0)) / total;
 }
 
-/** Meydan muharebesinin iki tarafı: { att, def }. */
+/** Meydan muharebesinin iki tarafı: { att, def }. Dağda duran savunan dağ geçidi gibi güçlü. */
 export const fieldSides = (state, army, b) => ({
   att: { civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp), mods: modsOf(state, army.owner) },
-  def: { civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp), mods: modsOf(state, b.owner) },
+  def: { civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp), mods: modsOf(state, b.owner),
+    terrain: isMountain(cellOf(b.x, b.y)) ? N.ground.pass : 1 },
 });
 
 /** Deniz savaşının bir tarafı: gemileri ve araştırması. */
@@ -419,7 +420,8 @@ export function attack(state, armyId, id, luck = null) {
     won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },
     after: { att: r.att, def: r.def }, naval: navalEv,
   };
-  state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path, at: id, won: r.attWins, oldOwner: pl.owner });
+  const trace = { type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path, at: id, won: r.attWins, oldOwner: pl.owner };
+  state.trace?.push(trace);
   army.mp = 0;
   army.route = [];
   countWin(state, r.attWins ? army.owner : pl.owner);
@@ -442,14 +444,24 @@ export function attack(state, armyId, id, luck = null) {
       const keep = def[k] > 0 ? r.def[k] / def[k] : 0;
       for (const u of units) u[k] = Math.floor(u[k] * keep);
     }
-    // Saldıranın generali ordusuyla öldü; savunmayı tutan general tecrübe kazandı.
-    bury(state, army.owner, army.general);
-    if (army.general) ev.genFell = army.general.name;
+    // Saldıran, savaş yakınsa askerinin bir kısmıyla geri çekilir (durduğu yerde, kapının önünde
+    // kalır); ezildiyse ordusu ve generali yok olur. Savunmayı tutan general tecrübe kazandı.
+    const keep = N.retreat.keep * Math.max(0, Math.min(1, r.attPow / Math.max(1e-6, r.defPow)));
+    const left = Object.fromEntries(UNITS.map((k) => [k, Math.floor((ev.before.att[k] ?? 0) * keep)]));
+    const fled = men(left) >= N.retreat.min;
+    if (fled) {
+      for (const k of UNITS) army[k] = left[k];
+      ev.retreat = { army: army.id, owner: army.owner, men: men(army) };
+      trace.fled = true;
+    } else {
+      bury(state, army.owner, army.general);
+      if (army.general) ev.genFell = army.general.name;
+    }
     if (defGen) learn(state, defGen, true, pl.owner);
     // Yerleşimini tutan içerideki ordular tecrübe kazanır.
     for (const a of armiesAt(state, id)) if (a.owner === pl.owner) a.xp = (a.xp ?? 0) + N.veteran.held;
     for (const a of state.armies) if (a.at === id && a.owner === pl.owner && empty(a)) bury(state, a.owner, a.general);
-    state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && empty(a)));
+    state.armies = state.armies.filter((a) => (a !== army || fled) && !(a.at === id && a.owner === pl.owner && empty(a)));
   }
   return ev;
 }
@@ -505,33 +517,73 @@ export function strike(state, armyId, targetId, luck = null) {
     const sd = fieldSides(state, army, b);
     const r = fight(sd.att, sd.def, null, luck ?? rollLuck(state));
     won = r.attWins;
+    ev.power = won ? r.defPow / Math.max(1e-6, r.attPow) : r.attPow / Math.max(1e-6, r.defPow);
     for (const k of UNITS) (won ? army : b)[k] = (won ? r.att : r.def)[k];
     ev.after = { att: r.att, def: r.def };
   }
   ev.won = won;
-  state.trace?.push({ type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path: [[army.x, army.y], [at.x, at.y]], at: null, point: at, won, oldOwner: b.owner });
+  const trace = { type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path: [[army.x, army.y], [at.x, at.y]], at: null, point: at, won, oldOwner: b.owner };
+  state.trace?.push(trace);
   army.mp = 0;
   army.route = [];
   const [winner, loser] = won ? [army, b] : [b, army];
+  // Karada yenilen geri çekilebilir (denizde yenilen filo askerleriyle batar).
+  const fled = !ev.naval && retreat(state, loser, winner, won ? ev.before.def : ev.before.att, ev.power);
+  if (fled) ev.retreat = { army: loser.id, owner: loser.owner, men: men(loser) };
+  if (fled && loser === army) trace.fled = true;
   countWin(state, winner.owner);
   const up = gainXp(winner, N.veteran.win);
   if (won) ev.rankUp = up;
-  bury(state, loser.owner, loser.general);
-  if (loser.general) ev.genFell = loser.general.name;
+  if (!fled) {
+    bury(state, loser.owner, loser.general);
+    if (loser.general) ev.genFell = loser.general.name;
+  }
   if (winner.general) {
     const l = learn(state, winner.general, true, winner.owner);
     if (won) ev.gen = { name: winner.general.name, ...l };
   }
-  // Haydutları dağıtan ganimetlerini alır.
+  // Haydutları dağıtan ganimetlerini alır (geri çekilseler de).
   if (loser.bandit && winner.owner) {
     state.civs[winner.owner].money += N.bandits.loot;
     ev.loot = N.bandits.loot;
   }
-  state.armies = state.armies.filter((x) => x !== loser);
+  if (!fled) state.armies = state.armies.filter((x) => x !== loser);
   return ev;
 }
 
 const pickUnits = (u) => Object.fromEntries(UNITS.map((k) => [k, u[k] ?? 0]));
+
+/**
+ * Yenilen ordu geri çekilir (kullanıcı 23.10 önerilerden: "kaybeden kaçmıyor, yok oluyor"):
+ * savaştan önceki askerlerinden `keep` x (yenilenin gücü / kazananın gücü) kadarı, kazanandan
+ * uzak, karadan yürünebilir bir kareye (en çok `dist` birim). Pek az asker kalırsa ya da gidecek
+ * yer yoksa dağılır. `ratio` 0..1: savaş ne kadar yakındı. Dönen: çekildi mi.
+ */
+function retreat(state, loser, winner, before, ratio) {
+  const R = N.retreat;
+  const keep = R.keep * Math.max(0, Math.min(1, ratio ?? 0));
+  const left = Object.fromEntries(UNITS.map((k) => [k, Math.floor((before[k] ?? 0) * keep)]));
+  if (men(left) < R.min) return false;
+  const from = cellOf(loser.x, loser.y);
+  const enter = enterFor(state, { ...loser, ...left }, "land");
+  const cand = [];
+  for (let c = 0; c < W * H; c++) {
+    if (!isLand(c) || placeAtCell(c)) continue;
+    const p = centre(c), d = dist(p, loser);
+    if (d < 0.4 || d > R.dist || !enter(c)) continue;
+    cand.push([dist(p, winner) - d * 0.3, c]);
+  }
+  cand.sort((a, b) => b[0] - a[0]);
+  for (const [, c] of cand.slice(0, 6)) {
+    if (!pathTo(from, c, { enter }, N.march.mp * 2)) continue;
+    for (const k of UNITS) loser[k] = left[k];
+    Object.assign(loser, centre(c), { at: null, route: [], mp: 0 });
+    delete loser.besieging;
+    delete loser.besiegedSince;
+    return true;
+  }
+  return false;
+}
 
 /** Tecrübe ekler; rütbe atladıysa yeni rütbeyi, atlamadıysa 0 döndürür (olay ekranda gösterir). */
 function gainXp(army, n) {

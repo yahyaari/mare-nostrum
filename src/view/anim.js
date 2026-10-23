@@ -243,7 +243,7 @@ function segments(trace) {
       sm[sm.length - 1] = pts[pts.length - 1];
       m.pts.push(...sm.slice(1));
     } else m.pts.push(...pts.slice(1));
-    if (e.type === "attack") m.attack = { won: e.won, oldOwner: e.oldOwner, at: e.at ?? null };
+    if (e.type === "attack") m.attack = { won: e.won, oldOwner: e.oldOwner, at: e.at ?? null, fled: !!e.fled };
   }
   return out;
 }
@@ -304,10 +304,18 @@ export function shape(view) {
         walking = e > 0;
         fx.push({ kind: "trail", pts: [...P.slice(0, k + 1), pos], color: colorOf(i.owner), sea: !isLand(cellOf(pos.x, pos.y)) });
       } else if (n > 0 && i.attack) {
-        // Kapıda çarpışırken; kazanırsa içeri girer, kaybederse söner.
+        // Kapıda çarpışırken; kazanırsa içeri girer, geri çekilirse kapıdan geri yürür, ezildiyse söner.
         dir = P[n].x < P[n - 1].x ? -1 : 1;
-        pos = lerp(P[n - 1], P[n], i.attack.won ? 0.78 + 0.22 * Math.min(1, (e - walk) / (i.dur - walk)) : 0.78);
-        if (!i.attack.won) alpha = Math.max(0, 1 - (e - walk) / (i.dur - walk));
+        const f = Math.min(1, (e - walk) / (i.dur - walk));
+        if (i.attack.won) pos = lerp(P[n - 1], P[n], 0.78 + 0.22 * f);
+        else if (i.attack.fled) {
+          pos = lerp(P[n - 1], P[n], 0.78 * (1 - 0.7 * f));
+          dir = -dir;
+          walking = true;
+        } else {
+          pos = lerp(P[n - 1], P[n], 0.78);
+          alpha = Math.max(0, 1 - f);
+        }
       } else pos = P[n];
       const sea = !isLand(cellOf(pos.x, pos.y));
       moving.push({ id: i.army, owner: i.owner, men: i.men, ships: i.ships ?? 0, float: pos, alpha, at: null, sea, walking, dir, moving: true });

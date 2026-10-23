@@ -249,6 +249,13 @@ filoya saldıramaz. Kaybeden ordu her zaman yok olur, generali ölür.
 | Başkent, ve seviye 3 ve üstü şehir | Herkes × 1.25 |
 | Diğerleri | Yok |
 
+**Geri çekilme** (kullanıcı 23.10 önerilerden; eskiden kaybeden ordu her zaman yok oluyordu):
+meydan muharebesini kaybeden ordu, savaştan önceki askerlerinin yarısı x (yenilenin gücü / kazananın
+gücü) kadarıyla, kazanandan uzak bir kara karesine (en çok 1.6 birim) çekilir; hareketi biter,
+generali yaşar. Bir yerleşime saldırıp püskürtülen saldıran da aynı hesapla kapının önünde kalır.
+10 askerden azı kalırsa ya da gidecek yer yoksa (denizde batan filo dahil) ordu yine dağılır.
+Animasyonda püskürtülen ordu kapıdan geri yürür; sonuç şeridi kaç askerin kurtulduğunu yazar.
+
 **Tecrübe ve rütbe** (kullanıcı 23.10: "savaşlar cansız"). Ordular savaştıkça usta olur:
 
 - Savaş kazanan ordu **+2** tecrübe (yerleşim alarak da meydanda da). Yerleşimini tutan, içerideki
@@ -751,6 +758,17 @@ bir yıl; oyun MÖ 270 ilkbaharında başlar. Üst bantta "Kış · MÖ 268".
 > geçiyor; önceki ölçümlerde Sakalar 30-38 arası oynadı - gürültünün alt ucu, izlenecek).
 
 ---
+
+### 22b. Dağlar
+
+Kullanıcı 23.10 önerilerden ("Alpler, Toroslar düz kara gibi yürünüyor"). Dağ sıraları elle çizildi
+(`src/data/mountains.js`: Alpler, Pireneler, Dinar Alpleri, Pindos, Balkanlar, Karpatlar, Toroslar,
+Ermeni yaylası, Kafkaslar, Zagros, Atlaslar); çizgiye yakın kara kareleri dağ (yerleşimin karesi
+hariç). Yol dışında dağ adımı iki kat pahalı; yollar geçittir, hızı aynı. Dağda duran orduyu meydan
+muharebesinde savunan, dağ geçidi gibi x1.25 güçlü. Yol önizlemesinde hedef dağdaysa "dağlık" notu.
+
+> Denge (70 oyun, zaferler kapalı): geri çekilme ve dağlarla ayakta kalan 303 -> 315, ilk düşüş
+> 44 -> 46, Mısır 41 -> 50/70.
 
 ## 23. Araştırma ağacı
 

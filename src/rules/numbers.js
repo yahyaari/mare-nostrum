@@ -95,7 +95,11 @@ export const N = {
   // Eskiden her yol bir turdu: yolların ortancası 3.6 birim, dörtte üçü 5.5'ten kısa, yani yolda
   // turda 5 birim eski hıza yakın.
   // 70 oyunla ayarlandı: 5 ve 2 iken (yolda turda 5 birim) dünya çok hızlı yanıyordu, ilk düşüş 36.
-  march: { mp: 4, road: 1, land: 2.5, sea: 1, embark: 0.5 },
+  march: { mp: 4, road: 1, land: 2.5, sea: 1, embark: 0.5, mountain: 2 },
+  // Geri çekilme (bölüm 7; kullanıcı 23.10 önerilerden): yenilen ordu yok olmaz, savaş ne kadar
+  // yakınsa o kadar askerle (en çok `keep` payı) `dist` birim uzağa çekilir; `min` askerden azı
+  // kalırsa dağılır.
+  retreat: { keep: 0.5, min: 10, dist: 1.6 },
   // Uzaklıklar, harita birimi: saldırı menzili (bir yerleşime ya da orduya bu kadar yakından
   // saldırılır), önünü kesme (yürüyen ordu savaştığı birinin ordusuna bu kadar yaklaşınca durur),
   // tehdit (bir yerin bu kadar yakınındaki düşman ordusu uyarı), görüş (yerleşim ve ordu), abluka.

@@ -57,7 +57,9 @@ harikaları inşa etme yarışı, aynı bilgisayarda arkadaşlarla) ve küçükl
    seçim, devir ekranı (Escape kapatmaz, Enter = Hazırım), son oyuncudan sonra dünya turu, her
    oyuncuya kendi mektup/görev/haber; `state.players`, `humansOf`, `isHuman`, `aliveHumans`. Kayıt 16.
 7. **Şehir binaları** (bu adım): kurallar.md 4b. Yapılar sekmesi: tapınak, pazar, okul, hamam. Kayıt 17.
-8. Sırada: geri çekilme ve dağlar, oyun sonu özeti.
+8. **Geri çekilme ve dağlar** (bu adım): kurallar.md bölüm 7 ve 22b. Yenilen ordu yarıdan azıyla
+   çekilir, generali yaşar; dağlar yol dışında iki kat yavaş, dağda savunan x1.25.
+9. Sırada: oyun sonu özeti.
 
 ## ÖNCEKİLER (22.10 akşam)
 
