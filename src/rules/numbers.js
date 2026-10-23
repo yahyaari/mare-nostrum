@@ -121,6 +121,8 @@ export const N = {
   // kazandıkça tecrübe toplar (`win`; yerleşimini savunan içerideki ordu `held`). Rütbeler:
   // Acemi, Kıdemli (`xp[0]`), Usta (`xp[1]`), Seçkin (`xp[2]`); her rütbe güce +`per`.
   veteran: { xp: [2, 5, 9], per: 0.05, win: 2, held: 1 },
+  // Öğretici haydutlar (bandits.js): başkentten near-far uzakta (dist'e en yakın), dağıtana ganimet.
+  bandits: { inf: 10, arch: 10, loot: 40, dist: 1.4, near: 1.1, far: 1.9 },
   // Skor: her yerleşim, seviyesinin her basamağı, başkent; her `popPer` nüfus; her harika; her
   // `armyPer` asker; kazanılan her savaş.
   score: { place: 10, level: 4, capital: 10, popPer: 20, wonder: 30, armyPer: 25, win: 3 },

@@ -452,9 +452,12 @@ export function attack(state, armyId, id, luck = null) {
 // Kaybeden yok olur (yerleşim savaşındaki gibi); denizde kaybeden filo askerleriyle batar.
 
 /** Bu ordu şu orduya saldırabilir mi: savaştığı birinin, yerleşimin dışındaki, menzilde. */
+/** Bir orduya saldırılabilir mi: savaştığın birinin ordusu ya da sahipsiz (haydut) ordu. */
+export const isFoe = (state, a, b) => { const r = relation(state, a, b); return r === "war" || r === "free"; };
+
 export function canStrike(state, army, b) {
   if (!army || !b || army === b || army.mp <= 0 || b.at) return false;
-  if (relation(state, army.owner, b.owner) !== "war") return false;
+  if (!isFoe(state, army.owner, b.owner)) return false;
   if (dist(army, b) > N.reach.strike + 1e-9) return false;
   const sa = !isLand(cellOf(army.x, army.y)), sb = !isLand(cellOf(b.x, b.y));
   if (sa !== sb) return false; // biri denizde biri karada
@@ -477,7 +480,7 @@ export function strike(state, armyId, targetId, luck = null) {
   const at = { x: b.x, y: b.y };
   const ev = {
     type: "battle", field: true, turn: state.turn, attacker: army.owner, defender: b.owner, place: nearestPlace(at), at,
-    before: { att: pickUnits(army), def: pickUnits(b) }, naval: null,
+    before: { att: pickUnits(army), def: pickUnits(b) }, naval: null, bandits: !!b.bandit,
   };
   let won;
   if (!isLand(cellOf(b.x, b.y))) {
@@ -509,6 +512,11 @@ export function strike(state, armyId, targetId, luck = null) {
   if (winner.general) {
     const l = learn(state, winner.general, true, winner.owner);
     if (won) ev.gen = { name: winner.general.name, ...l };
+  }
+  // Haydutları dağıtan ganimetlerini alır.
+  if (loser.bandit && winner.owner) {
+    state.civs[winner.owner].money += N.bandits.loot;
+    ev.loot = N.bandits.loot;
   }
   state.armies = state.armies.filter((x) => x !== loser);
   return ev;

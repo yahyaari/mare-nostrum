@@ -20,6 +20,7 @@ import {
 } from "../rules/moves.js";
 import { POS, cellOf, centre, dist, isLand, placeAtCell } from "../rules/map.js";
 import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
+import { banditsOf } from "../rules/bandits.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
   PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
@@ -47,6 +48,8 @@ import { toScreen } from "./camera.js";
 import { SIZE } from "../geo.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
+/** Bir ordunun sahibinin adı: haydutların sahibi yok (rules/bandits.js). */
+const ownerName = (a, T, lang) => (a.bandit ? T.bandits : civName(a.owner, lang, T.free));
 
 /** Pencere açılırken süzülerek gelsin: bu kadar milisaniye. */
 export const MODAL_MS = 180;
@@ -83,6 +86,7 @@ export function drawUI(ctx, cam, game, ui, boxes, view) {
     ctx.translate(0, (1 - e) * 14);
     drawModal(ctx, cam, game, ui, boxes, T);
     ctx.restore();
+    if (ui.screen === "game") drawCoach(ctx, cam, game, ui, boxes, T, true);
   }
   if (ui.tip && performance.now() - ui.tip.since > 250) drawTip(ctx, cam, ui.tip.lines);
 }
@@ -823,7 +827,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   const of = "a:" + a.id;
 
   shield(ctx, a.owner, x, y + 15, 17);
-  text(ctx, `${T.army} · ${civName(a.owner, ui.lang)}`, x + 24, y + 32, { title: true, bold: true, size: 17 });
+  text(ctx, a.bandit ? T.bandits : `${T.army} · ${civName(a.owner, ui.lang)}`, x + 24, y + 32, { title: true, bold: true, size: 17 });
   let ly = y + 56;
   if (g) {
     // General: yıldızlar seviyesi kadar, adı, ve yetenekleri.
@@ -1202,9 +1206,10 @@ function fightRibbon(ctx, cam, ui, boxes, T, e, t) {
   if (t > RIBBON_MS) return;
   const where = placeName(e.place, ui.lang);
   const lost = men(e.before.att) - men(e.after.att), killed = men(e.before.def) - men(e.after.def);
-  const head = e.field ? (e.won ? T.fieldWon : T.fieldLost) : e.won ? T.won : T.lost;
+  const head = e.bandits && e.won ? T.banditsWon : e.field ? (e.won ? T.fieldWon : T.fieldLost) : e.won ? T.won : T.lost;
   const lines = [[e.drowned ? T.drowned : fill(T.fightLine, lost, killed), e.drowned ? "bad" : null]];
   if (!e.drowned && e.naval?.won && e.naval.sunk) lines.push([fill(T.navalWin, e.naval.sunk), "good"]);
+  if (e.loot) lines.push([fill(T.lootLine, e.loot), "good"]);
   if (e.rankUp) lines.push([fill(T.rankUp, T.ranks[e.rankUp], Math.round(e.rankUp * N.veteran.per * 100)), "warn"]);
   if (e.fallen) lines.push([fill(T.evFallen, civName(e.fallen, ui.lang)), "good"]);
   if (e.gen?.up) lines.push([fill(T.genUp, e.gen.name, e.gen.up), "warn"]);
@@ -1330,7 +1335,7 @@ function moveBar(ctx, boxes, T, a, x, y, w) {
 /** Haritada bir ordunun ipucu. */
 export function armyTip(game, a, lang) {
   const T = TEXT[lang];
-  const out = [`${T.army} · ${civName(a.owner, lang)}`, troops(T, a)];
+  const out = [a.bandit ? T.bandits : `${T.army} · ${civName(a.owner, lang)}`, troops(T, a)];
   if (a.general) out.push(`★ ${fill(T.general, a.general.name)} · ${fill(T.rank, a.general.level)}`);
   const rk = veteranRank(a.xp);
   if (rk) out.push([`${T.ranks[rk]} · +${fill(T.pct, Math.round((veteranMul(a.xp) - 1) * 100))}`, "warn"]);
@@ -1373,23 +1378,43 @@ const armySpot = (cam, a) => {
   return { x: s.x - 24, y: s.y - 44, w: 48, h: 58, ring: true };
 };
 
+// Öğretici (kullanıcı 23.10): yeni oyunda başkentin yanında haydutlar (rules/bandits.js). Balonlar
+// sırayla: haydutlar -> başkente tıkla -> asker bas -> Garnizon sekmesi -> kartları seç -> Dışarı
+// çık -> haydutlara yürü -> saldır -> savaş penceresi -> ganimet. Şehri büyütmek haydutlardan sonra.
+const garrisonOf = (g, ui) => (ownPlace(g, ui) && men(g.places[ui.sel.id]) >= 40 ? ui.sel.id : null);
+const picked = (ui, id) => ui.cards?.of === "p:" + id && ui.cards.picks.size > 0;
+/** Haydutlar dururken turu bitirmek ancak ordusu bu tur bir şey yapamayacaksa önerilir. */
+const idle = (g) => { const own = g.armies.filter((a) => a.owner === g.player); return !banditsOf(g) || (own.length > 0 && own.every((a) => a.mp <= 0.05)); };
+
 /** Adımlar, öncelik sırasıyla: ne zaman gösterilir, neyi gösterir. */
 const COACH = [
+  { id: "bandits", when: (g, ui) => !ui.sel && !!banditsOf(g), at: (g, ui, boxes, cam) => armySpot(cam, banditsOf(g)) },
+  { id: "loot", when: (g, ui) => !!g.tutorial && !banditsOf(g) && !ui.fight, at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.money)) },
   { id: "city", when: (g, ui) => !ui.sel, at: (g, ui, boxes, cam) => placeSpot(cam, capitalOf(g)) },
-  { id: "food", when: (g) => budget(g, g.player).food < 0, at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.food)) },
-  { id: "upgrade", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "upgrade")) },
+  // Haydutlar dururken yiyecek uyarısı öğreticiyi bölmesin (Sakaların fazladan askeri başta yiyeceği eksiye düşürür, 10 tur yeter).
+  { id: "food", when: (g) => budget(g, g.player).food < 0 && !banditsOf(g), at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.food)) },
+  { id: "upgrade", when: (g, ui) => ownPlace(g, ui) && !banditsOf(g), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "upgrade")) },
   { id: "recruit", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "recruit")) },
-  { id: "form", when: (g, ui) => ownPlace(g, ui) && men(g.places[ui.sel.id]) >= 40, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "march" && !a.general) ?? findBox(boxes, (a) => a.do === "cardTab" && a.tab === "garrison")) },
+  { id: "garrison", when: (g, ui) => !!garrisonOf(g, ui) && ui.cardTab !== "garrison", at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "cardTab" && a.tab === "garrison")) },
+  { id: "pick", when: (g, ui) => { const id = garrisonOf(g, ui); return !!id && !picked(ui, id); }, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "pickAll" && a.all)) },
+  { id: "form", when: (g, ui) => !!garrisonOf(g, ui), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "march" && !a.general) ?? findBox(boxes, (a) => a.do === "cardTab" && a.tab === "garrison")) },
+  { id: "strike", when: (g, ui) => { const a = ownArmy(g, ui), b = banditsOf(g); return !!(a && b && canStrike(g, a, b)); }, at: (g, ui, boxes, cam) => armySpot(cam, banditsOf(g)) },
   { id: "attack", when: (g, ui) => { const a = ownArmy(g, ui); return !!(a && prey(g, a)); }, at: (g, ui, boxes, cam) => placeSpot(cam, prey(g, ownArmy(g, ui))) },
+  { id: "hunt", when: (g, ui) => !!(ownArmy(g, ui) && banditsOf(g)), at: (g, ui, boxes, cam) => armySpot(cam, banditsOf(g)) },
   { id: "move", when: (g, ui) => !!ownArmy(g, ui), at: (g, ui, boxes, cam) => armySpot(cam, ownArmy(g, ui)) },
-  { id: "endturn", when: (g, ui, done) => !ui.sel && (done.has("upgrade") || done.has("recruit") || g.turn > 1), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "endTurn")) },
+  { id: "endturn", when: (g, ui, done) => !ui.sel && idle(g) && (done.has("upgrade") || done.has("recruit") || g.turn > 1), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "endTurn")) },
   { id: "news", when: (g, ui) => !!ui.news, at: (g, ui, boxes) => boxSpot(boxes.find((b) => b.act?.do === "open" && b.act.modal === "report" && b.w > 100)) },
   { id: "diplo", when: (g, ui) => !ui.sel && g.turn >= 4, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "open" && a.modal === "diplo")) },
 ];
 
-function drawCoach(ctx, cam, game, ui, boxes, T) {
-  if (!ui.coach || ui.coach.off || ui.modal || game.over) return;
-  for (const step of COACH) {
+/** Pencerenin üstündeki adımlar: haydutlara saldırı penceresinde güç çubuğu ve artılar/eksiler. */
+const MODAL_COACH = [
+  { id: "preview", when: (g, ui) => ui.modal?.kind === "attack" && !!armyById(g, ui.modal.target)?.bandit, at: (g, ui, boxes) => boxes.find((b) => b.coach === "power") },
+];
+
+function drawCoach(ctx, cam, game, ui, boxes, T, modal = false) {
+  if (!ui.coach || ui.coach.off || !!ui.modal !== modal || game.over) return;
+  for (const step of modal ? MODAL_COACH : COACH) {
     if (ui.coach.done.has(step.id) || !step.when(game, ui, ui.coach.done)) continue;
     const spot = step.at(game, ui, boxes, cam, T);
     if (!spot || spot.x + spot.w < 0 || spot.y + spot.h < 0 || spot.x > cam.w || spot.y > cam.h) continue;
@@ -1425,14 +1450,17 @@ function bubble(ctx, cam, boxes, T, id, spot) {
   const rows = wrap(ctx, T.coach[id], W - 32, { size: 14 });
   const h = 24 + rows.length * 19 + 44;
   const ax = spot.x + spot.w / 2;
+  // `beside`: gösterilen şey bir pencerenin içinde; balon pencerenin sağına (sığarsa), ucu sola bakar.
+  const side = spot.beside && spot.beside + 18 + W < cam.w - 10;
   const above = spot.y - h - 18 > TOP + 6;
-  const y = above ? spot.y - h - 18 : spot.y + spot.h + 18;
-  const x = Math.max(10, Math.min(cam.w - W - 10, ax - W / 2));
+  const y = side ? Math.round(spot.y + spot.h / 2 - h / 2) : above ? spot.y - h - 18 : spot.y + spot.h + 18;
+  const x = side ? spot.beside + 18 : Math.max(10, Math.min(cam.w - W - 10, ax - W / 2));
   darkPanel(ctx, x, y, W, h);
   // Gösterdiği yere doğru küçük bir sivri uç.
   const tx = Math.max(x + 18, Math.min(x + W - 18, ax));
   ctx.beginPath();
-  if (above) { ctx.moveTo(tx - 9, y + h - 1); ctx.lineTo(tx, y + h + 10); ctx.lineTo(tx + 9, y + h - 1); }
+  if (side) { const ty = y + h / 2; ctx.moveTo(x + 1, ty - 9); ctx.lineTo(x - 10, ty); ctx.lineTo(x + 1, ty + 9); }
+  else if (above) { ctx.moveTo(tx - 9, y + h - 1); ctx.lineTo(tx, y + h + 10); ctx.lineTo(tx + 9, y + h - 1); }
   else { ctx.moveTo(tx - 9, y + 1); ctx.lineTo(tx, y - 10); ctx.lineTo(tx + 9, y + 1); }
   ctx.closePath();
   ctx.fillStyle = "rgba(22,18,14,0.95)";
@@ -1494,7 +1522,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     e = forecastField(game, a, b);
     sd = fieldSides(a, b);
     sea = !!e.sea;
-    title = fill(T.fieldQ, civName(b.owner, ui.lang));
+    title = b.bandit ? T.banditsQ : fill(T.fieldQ, ownerName(b, T, ui.lang));
     sub = fill(sea ? T.atSea : T.inField, placeName(nearestPlace(b), ui.lang));
     theirs = b; theirOwner = b.owner; theirGen = b.general; theirXp = b.xp ?? 0;
   } else {
@@ -1546,7 +1574,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     if (power !== null) text(ctx, fill(T.powerN, Math.round(power)), bx + cw - 10, by + 26, { bold: true, size: 13, align: "right", color: INK.soft });
   };
   side(x, me, a, T.yours, a.general, a.xp ?? 0, pow?.attPow ?? null, false);
-  side(x + cw + 16, theirOwner, theirs, b ? T.theirs : T.defenders, theirGen, theirXp, pow?.defPow ?? null, true);
+  side(x + cw + 16, theirOwner, theirs, b ? (b.bandit ? T.bandits : T.theirs) : T.defenders, theirGen, theirXp, pow?.defPow ?? null, true);
 
   // Güç çubuğu ve tahmin.
   let y = r.y + 206;
@@ -1554,6 +1582,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   text(ctx, `${T.odds}: `, r.x + r.w / 2 - measure(ctx, label, { bold: true, size: 16 }) / 2, y, { size: 15, align: "right" });
   text(ctx, label, r.x + r.w / 2 - measure(ctx, label, { bold: true, size: 16 }) / 2, y, { bold: true, size: 16, color });
   y += 10;
+  boxes.push({ x, y: y - 26, w, h: 44, act: null, coach: "power", beside: r.x + r.w });
   if (pow) {
     const f = pow.attPow / Math.max(1e-6, pow.attPow + pow.defPow);
     ctx.fillStyle = colorOf(theirOwner);
@@ -1662,6 +1691,7 @@ export function eventLines(game, lang) {
     else if (e.type === "broke") out.push([fill(T.evBroke, name(e.by), name(e.with)), mine ? "bad" : null]);
     else if (e.type === "famine" && e.civ === me) out.push([fill(T.evFamine, e.lost), "bad"]);
     else if (e.type === "built" && e.civ === me) out.push([fill(T.evBuilt, placeName(e.place, lang), T[e.what], e.level), "good"]);
+    else if (e.type === "battle" && mine && e.field && e.bandits && e.won) out.push([fill(T.evBandits, name(e.attacker), placeName(e.place, lang)), "good"]);
     else if (e.type === "battle" && mine && e.field) {
       const [w, l] = e.won ? [e.attacker, e.defender] : [e.defender, e.attacker];
       out.push([fill(T.evField, name(w), name(l), placeName(e.place, lang)), w === me ? "good" : "bad"]);

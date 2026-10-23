@@ -488,6 +488,17 @@ oyundan çıkar.
 - **Klavye:** Enter turu bitirir, Tab sıradaki ordu, Esc kapatır.
 - **İpucu balonları:** oyunun başında yazı penceresi yok; o an ne yapılacaksa onu gösteren tek
   bir balon (kapatılabilir, menüden yeniden açılır). Nasıl oynanır menüde, sayfa sayfa.
+- **Öğretici haydutlar** (kullanıcı 23.10: "şehir yakınlarında küçük bir düşman olsun, ordu
+  oluşturup garnizondan çıkarmayı göstersin, savaştırsın"): ipuçları açıkken yeni oyunda
+  başkentin 1.1-1.9 birim yakınında, kendi toprağında (tercihen kuzeyinde ya da yanında, alttaki
+  kartların arkasında kalmasın) bir haydut kampı: 10 piyade, 10 okçu (`src/rules/bandits.js`).
+  Sahibi yok: herkes saldırabilir, kimseye saldırmaz, kıpırdamaz, kimseyi öfkelendirmez. Başkentin
+  garnizonu ve bir bölük piyade aynı tur yanlarına yürüyüp kolayca yener (her medeniyet için
+  testte). Dağıtan **40 para** ganimet alır. Balonlar sırayla: haydutlar -> başkente tıkla -> asker
+  bas -> Garnizon sekmesi -> kartları seç (Hepsi) -> Dışarı çık -> haydutlara sağ tıkla (yürür) ->
+  saldır -> savaş penceresi (balon pencerenin yanında: güç çubuğu, artılar/eksiler) -> sonuç
+  şeridi -> ganimet. Haydutlar dururken şehir yükseltme, yiyecek ve tur bitirme balonları bekler.
+  Bot ve denge oyunlarında haydut yok.
 - **Sağ alt:** *Turu bitir* butonu.
 - **Diplomasi paneli:** Her medeniyetin durumu ve butonları.
 - **Savaş:** önce savaş penceresi (iki taraf, güç çubuğu, artılar ve eksiler); sonra sahne

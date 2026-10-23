@@ -626,6 +626,42 @@ section("Tecrübe: rütbeler ve savaşın dökümü");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Öğretici haydutlar");
+
+{
+  const B = await import("../src/rules/bandits.js");
+  check("bot ve denge oyununda haydut yok", !B.banditsOf(S.newGame("rome", 7)) && !S.newGame("rome", 7).tutorial);
+  for (const c of CIVS) {
+    const s = S.newGame(c.id, 7);
+    const b = B.spawnBandits(s);
+    const cap = PLACES.find((p) => p.capital && p.owner === c.id).id;
+    const d = b && MAP.dist(b, POS[cap]);
+    check(`${c.id}: haydutlar başkentin yakınında, kendi toprağında`, b && b.owner === null && b.bandit && s.tutorial && MAP.regionOf(MAP.cellOf(b.x, b.y)) === cap && d >= N.bandits.near && d <= N.bandits.far, b && d);
+    // Başkentin bütün garnizonu ve bir bölük piyade: aynı tur yanlarına yürüyüp kolayca yener.
+    s.places[cap].inf += 10;
+    const a = S.muster(s, cap, { inf: s.places[cap].inf, arch: s.places[cap].arch, cav: s.places[cap].cav });
+    M.order(s, a.id, { army: b.id });
+    check(`${c.id}: başkentten çıkan ordu aynı tur haydutlara saldırabilir, tahmin kolay`, M.canStrike(s, a, b) && M.forecastField(s, a, b).odds === "easy", `${M.canStrike(s, a, b)} ${MAP.dist(a, b).toFixed(2)} mp ${a.mp.toFixed(2)}`);
+    const money = s.civs[c.id].money;
+    const ev = M.strike(s, a.id, b.id, [1, 1]);
+    check(`${c.id}: haydutları dağıtan ganimet alır`, ev?.won && ev.bandits && ev.loot === N.bandits.loot && s.civs[c.id].money === money + N.bandits.loot && !B.banditsOf(s));
+  }
+  const s = S.newGame("rome", 7);
+  const b = B.spawnBandits(s);
+  check("haydutlar herkese düşman, kimseyle savaş ilan etmeden", M.isFoe(s, "rome", null) && M.isFoe(s, "egypt", null) && !M.isFoe(s, "rome", "egypt"));
+  const at = { x: b.x, y: b.y };
+  for (let i = 0; i < 12; i++) T.endTurn(s);
+  const still = B.banditsOf(s);
+  check("haydutlar yerinden kıpırdamaz, turlar sorunsuz döner", still && still.x === at.x && still.y === at.y);
+  check("haydutlar kimseyi öfkelendirmez", !Object.keys(s.anger ?? {}).some((k) => k.includes("null")));
+  // Öğretici balonlarının hepsinin iki dilde yazısı var.
+  const { TEXT } = await import("../src/text.js");
+  const ui = readFileSync(new URL("../src/view/ui.js", import.meta.url), "utf8");
+  const steps = [...ui.slice(ui.indexOf("const COACH = ["), ui.indexOf("function drawCoach")).matchAll(/\{ id: "(\w+)"/g)].map((x) => x[1]);
+  for (const lang of ["en", "tr"]) check(`${lang}: her öğretici balonunun yazısı var`, steps.length >= 15 && steps.every((k) => TEXT[lang].coach[k]), steps.filter((k) => !TEXT[lang].coach[k]).join());
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Sadakat ve isyan (bölüm 12)");
 
 const LY = await import("../src/rules/loyalty.js");

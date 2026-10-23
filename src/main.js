@@ -8,7 +8,7 @@ import { CIVS, PLACES } from "./data/world.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace } from "./rules/diplomacy.js";
 import { roadBetween } from "./rules/graph.js";
 import {
-  access, attack, canAttack, canStrike, forecast, forecastField, hostile, menace, mpMax, nearestPlace, needsShips, order, routeTo, strike, turnsFor,
+  access, attack, canAttack, canStrike, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, strike, turnsFor,
 } from "./rules/moves.js";
 import { POS, cellOf, centre, dist, isLand, pathCost, regionOf, smooth, stepCost } from "./rules/map.js";
 import {
@@ -19,6 +19,7 @@ import { appoint } from "./rules/generals.js";
 import { accept as acceptMission, check as checkMissions, decline as declineMission } from "./rules/missions.js";
 import { blockaded } from "./rules/state.js";
 import { veteranRank } from "./rules/combat.js";
+import { banditsOf, spawnBandits } from "./rules/bandits.js";
 import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
@@ -283,7 +284,7 @@ function mapView() {
     // Yerleşimin dışındaki ordu bulunduğu yerde: denizdeyse filo, kuşatıyorsa kampında.
     float: a.at ? null : { x: a.x, y: a.y },
     sea: !a.at && !isLand(cellOf(a.x, a.y)),
-    camp: !!a.besieging,
+    camp: !!a.besieging || !!a.bandit,
   }));
   view.sieges = Object.fromEntries(game.armies.filter((a) => a.besieging).map((a) => [a.besieging, a.owner]));
   const a = ownArmy();
@@ -444,6 +445,8 @@ function dispatch(act) {
       if (!ui.pick) break;
       // ?seed=123 aynı oyunu tekrar kurar (araçlar ve hata ayıklama için).
       game = newGame(ui.pick, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level);
+      // Öğretici açıksa (ve bitirilmediyse) başkentin yanında haydutlar: ilk ordu, ilk savaş.
+      if (!ui.coach.off && !ui.coach.done.has("loot")) spawnBandits(game);
       ui.screen = "game";
       cam.pad = null;
       ui.sel = null;
@@ -507,6 +510,7 @@ function dispatch(act) {
       break;
     case "cardTab":
       ui.cardTab = act.tab;
+      if (act.tab === "garrison") coachDone("garrison");
       break;
     case "missionAccept":
       sound.scroll();
@@ -678,6 +682,7 @@ function dispatch(act) {
       if (!u) break;
       const picks = new Set(picksOf(ui, act.of, u));
       if (picks.has(act.i)) picks.delete(act.i); else picks.add(act.i);
+      coachDone("pick");
       ui.cards = { of: act.of, sig: sigOf(u), picks, page: ui.cards?.of === act.of ? ui.cards.page : 0 };
       break;
     }
@@ -685,6 +690,7 @@ function dispatch(act) {
       const u = unitOf(act.of);
       if (!u) break;
       ui.cards = { of: act.of, sig: sigOf(u), picks: new Set(act.all ? [...Array(act.n).keys()] : []), page: ui.cards?.of === act.of ? ui.cards.page : 0 };
+      if (act.all) coachDone("pick");
       break;
     }
     case "cardPage": {
@@ -708,6 +714,9 @@ function dispatch(act) {
       ui.sel = { kind: "army", id: a.id };
       ui.army = a.id;
       anim.pulse(a.at, colorOf(a.owner));
+      // Öğretici: sıradaki iş haydutlara yürümek; kamp ordu kartının arkasında kalmasın.
+      const bandits = banditsOf(game);
+      if (bandits && !ui.coach.off) keepVisible(bandits);
       save();
       break;
     }
@@ -806,6 +815,8 @@ function dispatch(act) {
       if (m?.kind !== "attack") break;
       // Ordu kapıya kadar yürür, kılıçlar çarpışır, sonra sonuç penceresi.
       coachDone("attack");
+      coachDone("preview");
+      if (m.target) coachDone("strike");
       const [ev, trace] = traced(() => (m.target ? strike(game, m.army, m.target) : attack(game, m.army, m.id)));
       record(game, [ev]);
       ui.modal = null;
@@ -950,7 +961,7 @@ function goTo(a, target) {
     const b = armyById(game, target.army);
     if (!b) return null;
     // Savaşmadığın birinin ordusu: yanına yürünür.
-    if (relation(game, a.owner, b.owner) !== "war") return goTo(a, { x: b.x, y: b.y });
+    if (!isFoe(game, a.owner, b.owner)) return goTo(a, { x: b.x, y: b.y });
     if (dist(a, b) <= N.reach.strike) {
       if (a.mp <= 0) return { kind: "spent" };
       if (canStrike(game, a, b)) return { kind: "strike", odds: forecastField(game, a, b).odds };
@@ -994,6 +1005,7 @@ function command(target) {
   }
   sound.click();
   coachDone("move");
+  if (target.army && armyById(game, target.army)?.bandit) coachDone("hunt");
   const [, trace] = traced(() => order(game, a.id, target));
   // Kışın denizde fırtına: oyuncuya hemen söyle (raporda da çıkar).
   const caught = (game.storms ?? []).filter((s) => s.army === a.id && s.turn === game.turn && !s.told);

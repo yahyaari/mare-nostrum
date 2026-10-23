@@ -24,6 +24,10 @@ her biri ayrı push:
    Denge (70 oyun): ilk düşüş 49, en erken 21 (önce 53 / 25 - gürültü payı içinde); ayakta Roma 52,
    Kartaca 51, Mısır 49, Makedonya 43, Partlar 50, Galya 50, Sakalar 33 (önce 54/59/48/37/53/44/36:
    daha dengeli).
+   **Öğretici haydutlar** (kullanıcı 23.10, araya girdi): kurallar.md bölüm 12. İpuçları açıkken
+   başkentin yanında haydut kampı; balonlar ordu kurmayı, garnizondan çıkarmayı, yürümeyi,
+   savaş penceresini ve savaşı sırayla gösterir; 40 para ganimet. 7 medeniyetin hepsinde
+   tarayıcıda gerçek basışlarla baştan sona denendi (`node Tools/tutorial.mjs tr rome`).
 3. **Araştırma ağacı** (sırada): Civilization gibi; skora katkı; bazı kilitler (kışla/tersane
    seviyeleri) araştırmaya taşınabilir.
 
