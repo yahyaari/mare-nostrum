@@ -20,6 +20,7 @@ import { accept as acceptMission, check as checkMissions, decline as declineMiss
 import { blockaded } from "./rules/state.js";
 import { veteranRank } from "./rules/combat.js";
 import { banditsOf, spawnBandits } from "./rules/bandits.js";
+import { available, choose, turnsLeft as techTurns } from "./rules/research.js";
 import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
@@ -167,6 +168,11 @@ function next() {
   if (!game) return null;
   if (game.over) return { kind: "over" };
   if (game.inbox?.length) return { kind: "decide" };
+  // Araştırma bitti: sıradakini seçmek için ağaç açılır (Civilization gibi).
+  if (ui.pickTech) {
+    ui.pickTech = false;
+    if (!game.civs[game.player].research && available(game, game.player).length) return { kind: "research" };
+  }
   const fresh = game.missions?.find((x) => !x.seen);
   if (fresh) return { kind: "mission", id: fresh.id };
   return null;
@@ -495,6 +501,15 @@ function dispatch(act) {
     case "coach":
       coachDone(act.id);
       break;
+    case "research": {
+      if (!choose(game, game.player, act.tech)) break;
+      sound.click();
+      coachDone("research");
+      toast(fill(T().techChosen, T().techs[act.tech][0], techTurns(game, game.player, act.tech)));
+      ui.modal = next();
+      save();
+      break;
+    }
     case "coachOff":
       ui.coach.off = true;
       saveCoach();
@@ -608,6 +623,7 @@ function dispatch(act) {
       blocking = true;
       hurried = false;
       // Rapor pencere açmaz: haberler sağ üstte belirir. Kararlar ve görevler yine pencere.
+      if (game.events.some((e) => e.type === "tech" && e.civ === me)) ui.pickTech = true;
       pending = next();
       pendingNews = eventLines(game, ui.lang);
       if (!pendingNews.length) pendingNews = null;

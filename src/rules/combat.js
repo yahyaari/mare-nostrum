@@ -15,8 +15,9 @@ import { has, might } from "./generals.js";
 import { N, SHIPS, UNITS, trait } from "./numbers.js";
 
 /**
- * `att`, `def`: { civ, inf, arch, cav, siege, gen?, vet?, terrain? } (bağımsızın civ'i null; gen:
- * o tarafın generali; vet: tecrübe çarpanı; olmayan tür 0 sayılır). `walls`: null | "city" | "castle".
+ * `att`, `def`: { civ, inf, arch, cav, siege, gen?, vet?, terrain?, mods? } (bağımsızın civ'i null; gen:
+ * o tarafın generali; vet: tecrübe çarpanı; mods: araştırmanın savaş çarpanları, research.js
+ * modsOf; olmayan tür 0 sayılır). `walls`: null | "city" | "castle".
  * `luck`: [saldıran, savunan] çarpanları.
  */
 export function fight(att, def, walls, luck = [1, 1]) {
@@ -30,20 +31,21 @@ export function fight(att, def, walls, luck = [1, 1]) {
 
   // 1. Ok yağmuru ve süvari hücumu, aynı anda: herkes savaştan önceki sayısıyla vurur.
   // Hücum sadece okçuları biçer; sura dalan süvari yarı etkili.
-  const byAtt = Math.round((a.arch / N.company) * N.volley * archMul(att.civ) * siege * volleyOf(att.gen));
-  const byDef = Math.round((d.arch / N.company) * N.volley * archMul(def.civ) * breach(walls === "castle" ? N.castleVolley : 1) * volleyOf(def.gen));
-  const chargeA = Math.round((a.cav / N.company) * N.charge * cavMul(att.civ) * (walls ? N.cavWall : 1));
-  const chargeD = Math.round((d.cav / N.company) * N.charge * cavMul(def.civ));
+  const byAtt = Math.round((a.arch / N.company) * N.volley * archMul(att) * siege * volleyOf(att.gen));
+  const byDef = Math.round((d.arch / N.company) * N.volley * archMul(def) * breach(walls === "castle" ? N.castleVolley : 1) * volleyOf(def.gen));
+  const chargeA = Math.round((a.cav / N.company) * N.charge * cavMul(att) * (walls ? N.cavWall : 1));
+  const chargeD = Math.round((d.cav / N.company) * N.charge * cavMul(def));
   d.arch = Math.max(0, d.arch - chargeA);
   a.arch = Math.max(0, a.arch - chargeD);
   lose(d, byAtt);
   lose(a, byDef);
 
   // 2. Göğüs göğüse
-  const wall = breach(walls === "castle" ? N.castleWall : walls === "city" ? N.cityWall : 1);
+  // Surculuk (araştırma) savunanın surunu güçlendirir; makineler ve kuşatma ustası onu da söker.
+  const wall = breach(walls ? (walls === "castle" ? N.castleWall : N.cityWall) * tech(def, "walls") : 1);
   // Arazi (ground.js): nehir geçen saldıran, dağ geçidini tutan savunan (çarpan dışarıdan gelir).
-  const attPow = power(a, att.civ, false, !!walls) * siege * might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * luck[0];
-  const defPow = power(d, def.civ, true, false) * wall * might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * luck[1];
+  const attPow = power(a, att, false, !!walls) * siege * might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * luck[0];
+  const defPow = power(d, def, true, false) * wall * might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * luck[1];
 
   // 3. Sonuç. Savunan kimse kalmadıysa saldıran kayıpsız girer; eşitlikte savunan kazanır.
   // Kuşatma makinesinin mürettebatı tek başına bir yeri alamaz ve savunamaz.
@@ -64,8 +66,8 @@ export function fight(att, def, walls, luck = [1, 1]) {
  * `att`, `def`: { civ, ships, trireme, quinq, fort? }. Dönen: iki tarafın kalan gemileri.
  */
 export function naval(att, def, luck = [1, 1]) {
-  const a = fleetMight(att) * trait(att.civ, "navy") * luck[0];
-  const d = fleetMight(def) * trait(def.civ, "navy") * (def.fort ?? 1) * luck[1];
+  const a = fleetMight(att) * trait(att.civ, "navy") * tech(att, "navy") * luck[0];
+  const d = fleetMight(def) * trait(def.civ, "navy") * tech(def, "navy") * (def.fort ?? 1) * luck[1];
   const attWins = fleetCount(def) === 0 ? fleetCount(att) > 0 : a > d;
   const [win, losePow, winPow] = attWins ? [att, d, a] : [def, a, d];
   const left = pickShips(win);
@@ -117,17 +119,19 @@ export function estimate(att, def, walls) {
 
 const pick = (u) => Object.fromEntries(UNITS.map((k) => [k, u[k] ?? 0]));
 const men = (u) => UNITS.reduce((n, k) => n + (u[k] ?? 0), 0);
-const all = (civ) => trait(civ, "all");
-const archMul = (civ) => trait(civ, "arch") * all(civ);
-const cavMul = (civ) => trait(civ, "cav") * all(civ);
-const infMul = (civ, defending) => trait(civ, "inf") * all(civ) * (defending ? trait(civ, "defInf") : 1);
+// Bir tarafın çarpanları: milletinin özelliği x araştırması (side.mods).
+const tech = (s, k) => s.mods?.[k] ?? 1;
+const all = (s) => trait(s.civ, "all") * tech(s, "all");
+const archMul = (s) => trait(s.civ, "arch") * tech(s, "arch") * all(s);
+const cavMul = (s) => trait(s.civ, "cav") * tech(s, "cav") * all(s);
+const infMul = (s, defending) => trait(s.civ, "inf") * tech(s, "inf") * all(s) * (defending ? trait(s.civ, "defInf") : 1);
 
-function power(u, civ, defending, assault) {
+function power(u, s, defending, assault) {
   const screen = u.inf + u.cav;
   const covered = Math.min(u.arch, screen), bare = u.arch - covered;
-  return u.inf * infMul(civ, defending)
-    + u.cav * N.cavMelee * cavMul(civ) * (assault ? N.cavWall : 1)
-    + (covered * N.archMelee + bare * N.archBare) * archMul(civ);
+  return u.inf * infMul(s, defending)
+    + u.cav * N.cavMelee * cavMul(s) * (assault ? N.cavWall : 1)
+    + (covered * N.archMelee + bare * N.archBare) * archMul(s);
 }
 
 /** Kayıpları türlere oranla dağıtır (yuvarlamadan artan, en kalabalık türden düşer). */
@@ -175,6 +179,11 @@ export function explain(att, def, walls) {
     if ((u.inf ?? 0) > 0) put(list, "inf", trait(u.civ, "inf") * (defending ? trait(u.civ, "defInf") : 1));
     if ((u.arch ?? 0) > 0) put(list, "arch", trait(u.civ, "arch"));
     if ((u.cav ?? 0) > 0) put(list, "cav", trait(u.civ, "cav"));
+    // Araştırma: ayrı satırlar (hangi teknolojinin yaradığı görünsün).
+    put(list, "techAll", tech(u, "all"));
+    if ((u.inf ?? 0) > 0) put(list, "techInf", tech(u, "inf"));
+    if ((u.arch ?? 0) > 0) put(list, "techArch", tech(u, "arch"));
+    if ((u.cav ?? 0) > 0) put(list, "techCav", tech(u, "cav"));
   };
   put(A, "general", might(att.gen));
   put(A, "veteran", att.vet ?? 1);
@@ -187,7 +196,8 @@ export function explain(att, def, walls) {
     if (engines > 0) A.push(["engines", engines]);
     if (has(att.gen, "siege")) A.push(["siegeGeneral", 0.5]);
     const breach = (m) => 1 + (m - 1) * (has(att.gen, "siege") ? 0.5 : 1) * (1 - engines);
-    put(D, walls === "castle" ? "castleWalls" : "cityWalls", breach(walls === "castle" ? N.castleWall : N.cityWall));
+    const fort = tech(def, "walls") > 1 ? "Tech" : "";
+    put(D, (walls === "castle" ? "castleWalls" : "cityWalls") + fort, breach((walls === "castle" ? N.castleWall : N.cityWall) * tech(def, "walls")));
   }
   put(D, "general", might(def.gen));
   put(D, "veteran", def.vet ?? 1);

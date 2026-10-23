@@ -21,6 +21,7 @@ import { isWinter } from "./season.js";
 import { CELL, H, PLACE_CELL, POS, W, around, cellOf, centre, dist, field, isLand, isRoad, pathNear, pathTo, placeAtCell, regionIndex, rings, stepCost } from "./map.js";
 import { project } from "../geo.js";
 import { countWin } from "./victory.js";
+import { modsOf } from "./research.js";
 
 /**
  * `civ` buraya girebilir mi, girerse ne olur:
@@ -303,8 +304,8 @@ export function sides(state, unit, civ, id) {
   const from = spot(unit);
   const ter = terrainOf(from, id);
   return {
-    att: { civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att },
-    def: { ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), terrain: ter.def },
+    att: { civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
+    def: { ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
     walls: wallsOf(state, id), ter, sea: !!from && bySea(from, POS[id]),
   };
 }
@@ -319,10 +320,13 @@ function insideVet(state, id) {
 }
 
 /** Meydan muharebesinin iki tarafı: { att, def }. */
-export const fieldSides = (army, b) => ({
-  att: { civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp) },
-  def: { civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp) },
+export const fieldSides = (state, army, b) => ({
+  att: { civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp), mods: modsOf(state, army.owner) },
+  def: { civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp), mods: modsOf(state, b.owner) },
 });
+
+/** Deniz savaşının bir tarafı: gemileri ve araştırması. */
+const fleetSide = (state, civ, u, extra = {}) => ({ civ, ...shipsOnly(u), mods: modsOf(state, civ), ...extra });
 
 /**
  * Bir saldırının tahmini, generaller ve tecrübe dahil: `unit` bir ordu ya da { inf, arch, at, general? }.
@@ -331,7 +335,7 @@ export const fieldSides = (army, b) => ({
 export function forecast(state, unit, civ, id) {
   const pl = state.places[id];
   const sd = sides(state, unit, civ, id);
-  const sea = sd.sea ? navalOdds({ civ, ...shipsOnly(unit) }, { civ: pl.owner, ...fleetAt(state, id), fort: fortOf(state, id) }) : "easy";
+  const sea = sd.sea ? navalOdds(fleetSide(state, civ, unit), fleetSide(state, pl.owner, fleetAt(state, id), { fort: fortOf(state, id) })) : "easy";
   const land = estimate(sd.att, sd.def, sd.walls);
   // Denizde batılırsa karaya çıkılmaz: tahmin ikisinin kötüsü.
   const rank = { easy: 0, risky: 1, hopeless: 2 };
@@ -386,7 +390,7 @@ export function attack(state, armyId, id, luck = null) {
   let navalEv = null;
   if (sea && shipsAt(state, id) > 0) {
     const theirs = fleetAt(state, id);
-    const nr = naval({ civ: army.owner, ...shipsOnly(army) }, { civ: pl.owner, ...theirs, fort: fortOf(state, id) }, luck ?? rollLuck(state));
+    const nr = naval(fleetSide(state, army.owner, army), fleetSide(state, pl.owner, theirs, { fort: fortOf(state, id) }), luck ?? rollLuck(state));
     navalEv = { won: nr.attWins, sunk: fleetOf(theirs) - fleetOf(nr.def), lost: fleetOf(army) - fleetOf(nr.att) };
     sinkAt(state, id, nr.def);
     for (const k of SHIPS) army[k] = nr.att[k];
@@ -466,8 +470,8 @@ export function canStrike(state, army, b) {
 
 /** Meydan muharebesinin tahmini (karada; denizdeyse deniz savaşının). */
 export function forecastField(state, army, b) {
-  if (!isLand(cellOf(b.x, b.y))) return { odds: navalOdds({ civ: army.owner, ...shipsOnly(army) }, { civ: b.owner, ...shipsOnly(b) }), lost: 0, killed: 0, sea: true };
-  const sd = fieldSides(army, b);
+  if (!isLand(cellOf(b.x, b.y))) return { odds: navalOdds(fleetSide(state, army.owner, army), fleetSide(state, b.owner, b)), lost: 0, killed: 0, sea: true };
+  const sd = fieldSides(state, army, b);
   return estimate(sd.att, sd.def, null);
 }
 
@@ -485,7 +489,7 @@ export function strike(state, armyId, targetId, luck = null) {
   let won;
   if (!isLand(cellOf(b.x, b.y))) {
     // Denizde: filo filoya; yenilen filo askerleriyle batar.
-    const nr = naval({ civ: army.owner, ...shipsOnly(army) }, { civ: b.owner, ...shipsOnly(b) }, luck ?? rollLuck(state));
+    const nr = naval(fleetSide(state, army.owner, army), fleetSide(state, b.owner, b), luck ?? rollLuck(state));
     won = nr.attWins;
     ev.naval = { won, sunk: fleetOf(b) - fleetOf(nr.def), lost: fleetOf(army) - fleetOf(nr.att), att: fleetOf(army), def: fleetOf(b) };
     const winner = won ? army : b;
@@ -493,7 +497,7 @@ export function strike(state, armyId, targetId, luck = null) {
     ev.drowned = !won;
     ev.after = { att: won ? pickUnits(army) : pickUnits({}), def: won ? pickUnits({}) : pickUnits(b) };
   } else {
-    const sd = fieldSides(army, b);
+    const sd = fieldSides(state, army, b);
     const r = fight(sd.att, sd.def, null, luck ?? rollLuck(state));
     won = r.attWins;
     for (const k of UNITS) (won ? army : b)[k] = (won ? r.att : r.def)[k];

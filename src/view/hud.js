@@ -15,6 +15,7 @@ import { INK, SERIF, TAU, civName, colorOf, delta, fmt, icon, over } from "./kit
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, TITLE, emblem, roundRect, shade } from "./pieces.js";
 import { rankOf, scoreOf } from "../rules/victory.js";
 import { CIVS } from "../data/world.js";
+import { costFor, scienceOf, turnsLeft as techTurns } from "../rules/research.js";
 
 export const TOP = 50;
 export const RIGHT_W = 244;
@@ -140,7 +141,7 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
     const p = sc.parts;
     boxes.push({
       x: x - 4, y: 4, w: 150, h: TOP - 8, act: { do: "open", modal: "victory" },
-      tip: [T.scoreChip, fill(T.scoreParts, p.lands, p.people, p.wonders, p.army, p.wins), T.tipScore,
+      tip: [T.scoreChip, fill(T.scoreParts, p.lands, p.people, p.wonders, p.army, p.wins, p.techs), T.tipScore,
         ...racers.map((c) => [fill(T.vRace, civName(c.id, ui.lang), N.victory.hold - game.wonderHold[c.id]), "bad"])],
     });
   }
@@ -225,6 +226,11 @@ export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
     ["compass", T.hudMap, { do: "overview" }, 0, null, T.tipMap],
     ["scroll", T.hudMissions, { do: "open", modal: "missions" }, game.missions?.length ?? 0, GOLD, T.tipMissions],
   ];
+  // Araştırma: kandil; çevresinde araştırılanın ilerlemesi, seçilmemişse kırmızı ünlem.
+  const R = game.civs[me], sci = Math.round(scienceOf(game, me) * 10) / 10;
+  const doing = R.research ? fill(T.researching, T.techs[R.research][0], techTurns(game, me, R.research)) : [T.noResearch, "bad"];
+  items.splice(4, 0, ["lamp", T.hudResearch, { do: "open", modal: "research" }, R.research ? 0 : "!", INK.bad, [T.tipResearch, doing, fill(T.sciencePer, sci)],
+    R.research ? (R.progress[R.research] ?? 0) / costFor(game, me, R.research) : null]);
   const bw = 96, H = BOTTOM_H;
   const W = items.length * bw + 48;
   const x = Math.round(cam.w / 2 - W / 2), y = cam.h - H;
@@ -265,17 +271,24 @@ export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
   ctx.stroke();
   boxes.push({ x, y, w: W, h: H, act: null });
 
-  items.forEach(([kind, label, act, badge, badgeColor, tip], i) => {
+  items.forEach(([kind, label, act, badge, badgeColor, tip, progress], i) => {
     const cx = x + 24 + i * bw + bw / 2, cy = y + 32;
     if (i) vline(ctx, x + 24 + i * bw, y + 14, cam.h - 10, "rgba(201,164,90,0.25)");
     const hot = over(cx - bw / 2, y, bw, H);
     medal(ctx, null, cx, cy, 22, kind, null, hot);
+    if (progress != null) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 25, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, progress));
+      ctx.strokeStyle = GOLD_LIGHT;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
     ctx.font = `600 12px ${TITLE}`;
     ctx.fillStyle = hot ? GOLD_LIGHT : CREAM;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, cx, y + H - 13);
-    if (badge > 0) {
+    if (badge) {
       const bx = cx + 17, by = cy - 17;
       ctx.beginPath();
       ctx.arc(bx, by, 9, 0, TAU);
@@ -288,7 +301,7 @@ export function drawBottomBar(ctx, cam, game, ui, boxes, T) {
       ctx.fillStyle = badgeColor === GOLD ? DARK : CREAM;
       ctx.fillText(String(badge), bx, by + 0.5);
     }
-    boxes.push({ x: cx - bw / 2, y, w: bw, h: H, act, tip: [label, tip] });
+    boxes.push({ x: cx - bw / 2, y, w: bw, h: H, act, tip: [label, ...[].concat(tip)] });
   });
 }
 
@@ -477,6 +490,26 @@ function glyph(ctx, kind, cx, cy, s) {
     ctx.beginPath();
     for (const y of [-0.3, -0.05, 0.2]) { ctx.moveTo(-0.35, y); ctx.lineTo(0.35, y); }
     ctx.stroke();
+  } else if (kind === "lamp") {
+    // Kandil: yassı gövde, sağda ağzı ve alevi, solda kulpu.
+    ctx.ellipse(-0.18, 0.38, 0.6, 0.3, 0, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0.25, 0.22);
+    ctx.quadraticCurveTo(0.6, 0.18, 0.72, 0.08);
+    ctx.lineTo(0.74, 0.34);
+    ctx.quadraticCurveTo(0.55, 0.5, 0.25, 0.56);
+    ctx.closePath();
+    ctx.fill();
+    ctx.lineWidth = 0.14;
+    ctx.beginPath();
+    ctx.arc(-0.82, 0.32, 0.2, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0.72, 0.02);
+    ctx.quadraticCurveTo(0.42, -0.42, 0.68, -0.92);
+    ctx.quadraticCurveTo(1, -0.42, 0.72, 0.02);
+    ctx.fill();
   } else if (kind === "menu") {
     ctx.lineWidth = 0.16;
     for (const y of [-0.45, 0, 0.45]) { ctx.moveTo(-0.6, y); ctx.lineTo(0.6, y); }

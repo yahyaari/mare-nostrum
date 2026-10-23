@@ -20,6 +20,7 @@ import { holds } from "./wonders.js";
 import { tickSieges } from "./siege.js";
 import { record, snapshot } from "./chronicle.js";
 import { isWinter } from "./season.js";
+import { techMul, tickResearch } from "./research.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -51,7 +52,7 @@ export function economy(state, events) {
       const pl = state.places[id];
       const cap = popCap(pl, info(id).kind);
       const gardens = holds(state, c.id, "gardens") ? N.wonders.gardensGrowth : 1;
-      const grow = starving ? 0 : cap * N.growth * trait(c.id, "growth") * gardens;
+      const grow = starving ? 0 : cap * N.growth * trait(c.id, "growth") * techMul(state, c.id, "growth") * gardens;
       pl.pop = Math.min(cap, Math.round(pl.pop + grow));
     }
     tick(state, c.id, starving, events);
@@ -88,6 +89,8 @@ export function endTurn(state) {
   // İnşaatlar bir tur ilerler (üretimden önce: biten tarla bu tur üretir).
   progressBuilds(state, events);
   economy(state, events);
+  // Bilim araştırmaya akar (üretimden sonra: bu turun nüfusuyla).
+  tickResearch(state, events);
   state.turn += 1;
   for (const id in state.places) {
     state.places[id].upgraded = false;

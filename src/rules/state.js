@@ -9,8 +9,9 @@ import { byId } from "./graph.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { holds } from "./wonders.js";
 import { POS, cellOf, dist, isLand } from "./map.js";
+import { TECHS, grant, techMul, unlocked, unlockerOf } from "./research.js";
 
-export const VERSION = 12;
+export const VERSION = 13;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -84,6 +85,23 @@ export function migrate(s) {
     s.wonderHold ??= {};
     s.version = 12;
   }
+  if (s.version === 12) {
+    // Araştırma: herkes sıfırdan; ama kullandığı birimi açan teknoloji (ve istedikleri) verilir,
+    // yoksa eski kayıtta süvarisi olan süvari basamaz olurdu.
+    for (const [civ, c] of Object.entries(s.civs)) {
+      c.techs ??= [];
+      c.progress ??= {};
+      c.research ??= null;
+      c.bank ??= 0;
+      const units = [...Object.values(s.places).filter((p) => p.owner === civ), ...s.armies.filter((a) => a.owner === civ)];
+      const uses = (k) => units.some((u) => (u[k] ?? 0) > 0);
+      const own = Object.values(s.places).filter((p) => p.owner === civ);
+      if (uses("cav") || own.some((p) => p.barracks >= 3)) grant(s, civ, unlockerOf("cav"));
+      if (uses("siege") || own.some((p) => p.industry >= 3)) grant(s, civ, unlockerOf("siege"));
+      if (uses("quinq") || own.some((p) => (p.shipyard ?? 0) >= 3)) grant(s, civ, unlockerOf("quinq"));
+    }
+    s.version = 13;
+  }
   return s;
 }
 
@@ -91,7 +109,7 @@ export function migrate(s) {
 
 export function newGame(player, seed = 1, level = "normal") {
   const civs = {};
-  for (const c of CIVS) civs[c.id] = { ...N.start.stock, alive: true };
+  for (const c of CIVS) civs[c.id] = { ...N.start.stock, alive: true, techs: [], progress: {}, research: null, bank: 0 };
   for (const [c, e] of Object.entries(N.start.extra ?? {})) civs[c].food += e.food ?? 0;
   const places = {};
   for (const p of PLACES) {
@@ -226,15 +244,15 @@ export function output(state, id) {
   const ai = c && c !== state.player ? (LEVELS[state.level] ?? LEVELS.normal).aiOutput : 1;
   const shut = blockaded(state, id);
   // Liman: kendi 1 balığı + balıkçılık, ve ticaret parası. Ablukada balık yok, para yarı.
-  const fish = p.port && !shut ? (N.fish + pl.fishery * N.port.fishPerLevel) * castle * trait(c, "fish") : 0;
+  const fish = p.port && !shut ? (N.fish + pl.fishery * N.port.fishPerLevel) * castle * trait(c, "fish") * techMul(state, c, "fish") : 0;
   // Harikalar: Rodos Heykeli ticareti, Artemis Tapınağı bütün parayı artırır.
   const W = N.wonders;
-  const trade = p.port ? pl.trade * N.port.tradePerLevel * castle * (holds(state, c, "colossus") ? W.colossusTrade : 1) : 0;
+  const trade = p.port ? pl.trade * N.port.tradePerLevel * castle * (holds(state, c, "colossus") ? W.colossusTrade : 1) * techMul(state, c, "trade") : 0;
   const pilgrims = holds(state, c, "artemis") ? W.artemisMoney : 1;
   return {
-    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * ai * pilgrims * (shut ? N.navy.blockadeMoney : 1),
-    weapons: pl.industry * castle * trait(c, "weapons") * ai,
-    food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") + fish) * ai,
+    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * techMul(state, c, "money") * ai * pilgrims * (shut ? N.navy.blockadeMoney : 1),
+    weapons: pl.industry * castle * trait(c, "weapons") * techMul(state, c, "weapons") * ai,
+    food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") * techMul(state, c, "wheat") + fish) * ai,
   };
 }
 
@@ -304,7 +322,7 @@ export function upgradeInfo(state, id, what) {
   const pl = state.places[id], p = byId[id];
   const now = pl[what];
   const max = what === "level" ? (p.kind === "castle" ? N.maxCastle : N.maxCity) : pl.level;
-  const cost = (now + 1) * N.upgradeCost * (what === "level" ? N.levelCostMul : 1);
+  const cost = Math.round((now + 1) * N.upgradeCost * (what === "level" ? N.levelCostMul : 1) * techMul(state, pl.owner, "build"));
   const building = pl.builds?.find((b) => b.what === what) ?? null;
   let why = null;
   if (PORT_UPGRADES.includes(what) && !p.port) why = "notPort";
@@ -385,6 +403,7 @@ export function shipInfo(state, id, type = "ships") {
   const cost = { money: Math.max(1, t.money - Math.max(0, (pl.shipyard ?? 0) - 1) * N.port.shipDiscount), weapons: t.weapons };
   let why = null;
   if (!byId[id].port) why = "notPort";
+  else if (!unlocked(state, pl.owner, type)) why = "tech_" + unlockerOf(type);
   else if ((pl.shipyard ?? 0) < t.yard) why = t.yard > 1 ? "needShipyard" + t.yard : "needShipyard";
   else if ((pl.built ?? 0) >= pl.shipyard) why = "done";
   else if (pl.pop < t.pop + 10) why = "pop";
@@ -418,7 +437,8 @@ export function recruitInfo(state, id, type) {
   const civ = state.civs[pl.owner];
   const cost = recruitCost(pl.owner, type);
   let why = null;
-  if (type === "arch" && pl.barracks < 2) why = "needBarracks";
+  if (!unlocked(state, pl.owner, type)) why = "tech_" + unlockerOf(type);
+  else if (type === "arch" && pl.barracks < 2) why = "needBarracks";
   else if (type === "cav" && pl.barracks < 3) why = "needBarracks3";
   else if (type === "siege" && pl.industry < 3) why = "needIndustry3";
   else if (pl.recruited >= pl.barracks) why = "done";

@@ -17,14 +17,15 @@ import { wondersOf } from "./wonders.js";
 /** Bir medeniyetin skoru ve parçaları. Yıkılmış medeniyetin skoru 0. */
 export function scoreOf(state, civ) {
   const S = N.score;
-  if (!state.civs[civ]?.alive) return { total: 0, parts: { lands: 0, people: 0, wonders: 0, army: 0, wins: 0 } };
+  if (!state.civs[civ]?.alive) return { total: 0, parts: { lands: 0, people: 0, wonders: 0, army: 0, wins: 0, techs: 0 } };
   const ids = placesOf(state, civ);
   const lands = ids.reduce((n, id) => n + S.place + state.places[id].level * S.level + (info(id).capital ? S.capital : 0), 0);
   const people = Math.floor(ids.reduce((n, id) => n + state.places[id].pop, 0) / S.popPer);
   const wonders = wondersOf(state, civ).length * S.wonder;
   const army = Math.floor(strength(state, civ) / S.armyPer);
   const wins = (state.wins?.[civ] ?? 0) * S.win;
-  return { total: lands + people + wonders + army + wins, parts: { lands, people, wonders, army, wins } };
+  const techs = (state.civs[civ].techs?.length ?? 0) * S.tech;
+  return { total: lands + people + wonders + army + wins + techs, parts: { lands, people, wonders, army, wins, techs } };
 }
 
 /** Bütün medeniyetler, skora göre büyükten küçüğe: [{ civ, total }]. */

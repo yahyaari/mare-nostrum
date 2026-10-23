@@ -695,3 +695,51 @@ bir yıl; oyun MÖ 270 ilkbaharında başlar. Üst bantta "Kış · MÖ 268".
 > Denge (70 oyun, önceki sürümle aynı anda): ilk düşüş 51 → 50, en erken 24 → 23; Partlar
 > 150 turda ayakta 33 → 37/70, Sakalar 36 → 27/70 (dışarı açılan yolları Tuna ve Dinyeper'i
 > geçiyor; önceki ölçümlerde Sakalar 30-38 arası oynadı - gürültünün alt ucu, izlenecek).
+
+---
+
+## 23. Araştırma ağacı
+
+Kullanıcı 23.10: "hâlâ bir oyun gibi hissettirmiyor", örnek Civilization; araştırma ağacı "evet,
+eklensin" (`src/rules/research.js`).
+
+- **Bilim:** her şehrin nüfusu üretir: her **80** nüfus turda 1, başkent +2. Makedonya x1.25
+  (Aristoteles'in okulu). Bilgisayarda zorluğun üretim çarpanı bilime de uygulanır.
+- **Araştırma:** bir seferde bir teknoloji. Bilim her tur ona akar; bedeline varınca biter, etkisi
+  o medeniyetin her yerinde hemen başlar, artan bilim birikir. Hiçbir şey seçilmemişken bilim boşa
+  gitmez, birikir ve seçilince akar. Araştırmayı değiştirmek ilerlemeyi silmez.
+- **Bedel** çağına göre: I. çağ 40, II. 120, III. 260, IV. 450 bilim (hepsi 3480).
+  Civilization V gibi geniş ülke daha pahalı araştırır: 6 yerleşimden sonra her yerleşim bedeli
+  %5 artırır (20 yerleşimli bir medeniyet için x1.7).
+- **Denge (70 oyun):** ekonomi etkileri ilk denemede iki katıydı (tarla/silah +%25, balık/ticaret
+  +%50, para +%15, bilim +%25, nüfus +%30): ilk düşüş 49'dan 43'e indi, Partlar oyunların 36'sında
+  en büyüğe çıktı (araştırmasız 23), Mısır 49'dan 37'ye düştü. Deneylerle (`Tools/experiment.mjs`
+  artık `"R.tactics.mods": {}` gibi bir teknolojinin etkisini kapatabiliyor): sadece kilitler
+  zararsız, kartopunu ekonomi ve savaş etkileri birlikte yuvarlıyor; geniş ülke cezasını iki katına
+  çıkarmak fark etmedi. Ekonomi etkileri yarıya indi: ilk düşüş 48, Partlar 30, ayakta kalan toplam
+  339 (araştırmasız 328).
+- **Ağaç**, dört kol x dört çağ; her teknoloji kendi kolunda bir öncekini ister:
+
+| Kol | I. çağ | II. çağ | III. çağ | IV. çağ |
+|---|---|---|---|---|
+| Toprak ve at | Sulama: tarla +%15 yiyecek | Atçılık: süvariyi açar | Taktik (+Demir İşleme): okçu ve süvari savaşta +%15 | Strateji: bütün askerler +%10 |
+| Maden ve yapı | Bronz İşleme: silah +%15 | Demir İşleme: piyade savaşta +%10 | Mühendislik: kuşatma makinesini açar, yükseltmeler %20 ucuz | Surculuk: surlar %20 güçlü |
+| Deniz | Yelkencilik: balık +%30 | Limancılık: ticaret +%30 | Gemi İnşası: kinkeremi açar | Seyir: filolar %25 güçlü |
+| Bilgi ve para | Yazı: bilim +%20 | Sikke (+Yelkencilik): para +%10 | Matematik: bilim +%20 | Tıp: nüfus %20 hızlı artar |
+
+- Açılan birimler yine yapısını ister: süvari kışla 3, kuşatma makinesi sanayi 3, kinkerem
+  tersane 3. Kilitli düğme neden kilitli olduğunu söyler ("Önce Atçılık araştırılmalı").
+- Savaş çarpanları savaş penceresinde ayrı satır: "Araştırma: piyade +%10", "Şehir surları +
+  Surculuk".
+- **Skor:** her teknoloji 3.
+- **Bilgisayar** sırayla araştırır: önce Bronz, Sulama, Yazı, Demir, Atçılık...; filosu güçlü
+  medeniyet (Kartaca) deniz kolunu öne alır.
+- **Ekran:** alt menüde **Araştırma** (kandil): çevresinde araştırılanın ilerlemesi, hiçbir şey
+  seçilmemişse kırmızı ünlem. Pencerede ağaç: bilinen altın, araştırılan parlak çerçeveli ve
+  ilerleme çubuklu, açık olan basılabilir, kilitli soluk; çizgiler neyin neyi istediğini gösterir.
+  Bir araştırma bitince ağaç kendiliğinden açılır. İpucu balonu ilk araştırmayı seçtirir.
+- **Eski kayıt** (sürüm 12): herkes sıfırdan; ama kullandığı birimi açan teknoloji (ve istedikleri)
+  verilir - süvarisi ya da kışla 3'ü olana Atçılık, kuşatma makinesi ya da sanayi 3'ü olana
+  Mühendislik, kinkeremi ya da tersane 3'ü olana Gemi İnşası.
+- Hız (bot oyunları): en büyük medeniyet ağacı 67-70. turda bitirir, ortalar 86-144 arası,
+  küçükler bitiremez.

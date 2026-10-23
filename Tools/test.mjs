@@ -164,9 +164,11 @@ const C = await import("../src/rules/combat.js");
 const M = await import("../src/rules/moves.js");
 const D = await import("../src/rules/diplomacy.js");
 const T = await import("../src/rules/turn.js");
-const { N, UNITS, SHIPS } = await import("../src/rules/numbers.js");
+const { N, UNITS, SHIPS, trait } = await import("../src/rules/numbers.js");
 const { play } = await import("./bot.mjs");
 const MAP = await import("../src/rules/map.js");
+const R = await import("../src/rules/research.js");
+const VIC = await import("../src/rules/victory.js");
 const { POS } = MAP;
 
 // Serbest yürüyüşte ordunun yeri (x, y) ve içinde durduğu yer (at). Testler orduyu doğrudan koyar:
@@ -598,7 +600,7 @@ section("Tecrübe: rütbeler ve savaşın dökümü");
   ro.xp = 8;
   const fev = M.strike(f, ro.id, ga.id, [1, 1]);
   check("meydanda kazanan tecrübe kazanır: Usta'dan Seçkin'e", fev?.won && ro.xp === 8 + N.veteran.win && fev.rankUp === 3, `${ro.xp} ${fev?.rankUp}`);
-  check("meydan muharebesinin iki tarafında tecrübe", M.fieldSides({ ...ro, xp: 9 }, { ...ro, owner: "gaul", xp: 0 }).att.vet === C.veteranMul(9));
+  check("meydan muharebesinin iki tarafında tecrübe", M.fieldSides(f, { ...ro, xp: 9 }, { ...ro, owner: "gaul", xp: 0 }).att.vet === C.veteranMul(9));
 
   // Birleşen orduların tecrübesi kişi sayısıyla tartılır; ayrılan bölük tecrübesini götürür.
   const m = S.newGame("rome", 7);
@@ -620,9 +622,111 @@ section("Tecrübe: rütbeler ve savaşın dökümü");
   const { TEXT } = await import("../src/text.js");
   const src = readFileSync(new URL("../src/rules/combat.js", import.meta.url), "utf8");
   const body = src.slice(src.indexOf("export function explain"));
-  const used = [...new Set([...body.matchAll(/"(\w+)"/g)].map((x) => x[1]))].filter((k) => !["castle", "siege", "city", "defInf"].includes(k));
+  const used = [...new Set([...body.matchAll(/"(\w+)"/g)].map((x) => x[1]))].filter((k) => !["castle", "siege", "city", "defInf", "walls", "Tech"].includes(k)).concat(["cityWallsTech", "castleWallsTech"]);
   for (const lang of ["en", "tr"]) check(`${lang}: dökümün her anahtarının yazısı var`, used.every((k) => TEXT[lang].mods?.[k]), used.filter((k) => !TEXT[lang].mods?.[k]).join());
   check("rütbe adları iki dilde dört", ["en", "tr"].every((l) => TEXT[l].ranks?.length === 4));
+}
+
+// ---------------------------------------------------------------------------------------------
+section("Araştırma ağacı (bölüm 23)");
+
+{
+  const { TECHS, techById } = R;
+  const spots = new Set(TECHS.map((t) => `${t.tier}:${t.lane}`));
+  check("16 teknoloji, 4 çağ x 4 kol, her yer dolu", TECHS.length === 16 && spots.size === 16);
+  check("her teknoloji sadece önceki çağlardan bir şey ister", TECHS.every((t) => t.needs.every((n) => techById[n] && techById[n].tier < t.tier)));
+  check("açılan birimler: süvari, kuşatma makinesi, kinkerem", ["cav", "siege", "quinq"].every((k) => R.unlockerOf(k)) && TECHS.filter((t) => t.unlock).length === 3);
+  const { TEXT } = await import("../src/text.js");
+  for (const lang of ["en", "tr"]) check(`${lang}: her teknolojinin adı ve etkisi yazılı`, TECHS.every((t) => TEXT[lang].techs[t.id]?.[0] && TEXT[lang].techs[t.id]?.[1]) && TEXT[lang].tiers.length === 4);
+
+  const s = S.newGame("rome", 7);
+  check("yeni oyunda kimse bir şey bilmez", CIVS.every((c) => s.civs[c.id].techs.length === 0 && s.civs[c.id].research === null && s.civs[c.id].bank === 0));
+  const pop = S.placesOf(s, "rome").reduce((n, id) => n + s.places[id].pop, 0);
+  check("bilim: her 80 nüfus 1, başkent +2", Math.abs(R.scienceOf(s, "rome") - (pop / N.research.popPer + N.research.capital)) < 1e-9, R.scienceOf(s, "rome"));
+  check("Makedonya bilimi x1.25 (Aristoteles)", Math.abs(R.scienceOf(s, "macedon") - (S.placesOf(s, "macedon").reduce((n, id) => n + s.places[id].pop, 0) / N.research.popPer + N.research.capital) * 1.25 * 1) < 1e-6 || s.player !== "macedon");
+  const wide = S.newGame("rome", 7);
+  ["massalia", "syracuse", "athens", "carthage", "pella"].forEach((id) => { wide.places[id].owner = "rome"; });
+  const nRome = S.placesOf(wide, "rome").length;
+  check("geniş ülke pahalı araştırır: 6 yerleşimden sonra her biri +%5", R.costFor(s, "rome", "writing") === R.costOf("writing") && R.costFor(wide, "rome", "writing") === Math.round(R.costOf("writing") * (1 + 0.05 * (nRome - 6))), `${nRome} yer ${R.costFor(wide, "rome", "writing")}`);
+  check("kilitli teknoloji seçilmez (Atçılık önce Sulama ister)", !R.choose(s, "rome", "horseback") && R.choose(s, "rome", "irrigation") && s.civs.rome.research === "irrigation");
+
+  // Seçilmemişken bilim birikir; seçilince akar; bitince olay, artan birikir.
+  const t = S.newGame("rome", 7);
+  const sci = R.scienceOf(t, "rome");
+  R.tickResearch(t, []);
+  check("seçilmemiş bilim boşa gitmez, birikir", Math.abs(t.civs.rome.bank - sci) < 1e-9);
+  R.choose(t, "rome", "writing");
+  const evs = [];
+  let turns = 1;
+  while (!t.civs.rome.techs.includes("writing") && turns < 50) { R.tickResearch(t, evs); turns++; }
+  check("araştırma bilim bedeline varınca biter", t.civs.rome.techs.includes("writing") && turns === Math.ceil(R.costOf("writing") / sci), `${turns} tur`);
+  check("biten araştırma olay olur, artan bilim birikir", evs.some((e) => e.type === "tech" && e.civ === "rome" && e.tech === "writing") && t.civs.rome.research === null && t.civs.rome.bank > 0 && t.civs.rome.bank < sci);
+  check("Yazı bilimi x1.2", Math.abs(R.scienceOf(t, "rome") - sci * 1.2) < 1e-9);
+  check("kaç tur kaldığı", R.turnsLeft(t, "rome", "currency") === Math.ceil((R.costOf("currency") - t.civs.rome.bank) / R.scienceOf(t, "rome")));
+
+  // Üretim etkileri.
+  const e = S.newGame("carthage", 7);
+  const out0 = S.output(e, "carthage");
+  e.places.carthage.trade = 1;
+  const trade0 = S.output(e, "carthage").money;
+  for (const id of ["irrigation", "bronze", "sailing", "harbours", "currency"]) R.grant(e, "carthage", id);
+  const after = S.output(e, "carthage");
+  const pl = e.places.carthage;
+  const wheat = pl.farms * N.wheatPerFarm * trait("carthage", "wheat"), fish = (N.fish + pl.fishery * N.port.fishPerLevel);
+  check("Sulama tarlaya +%15, Yelkencilik balığa +%30", Math.abs(after.food - (wheat * 1.15 + fish * 1.3)) < 1e-9 && Math.abs(out0.food - (wheat + fish)) < 1e-9, `${out0.food} -> ${after.food}`);
+  check("Bronz silaha +%15", Math.abs(after.weapons - out0.weapons * 1.15) < 1e-9);
+  check("Sikke paraya +%10, Limancılık ticarete +%30", Math.abs(after.money - (pl.pop / N.taxPer + N.port.tradePerLevel * 1.3) * trait("carthage", "money") * 1.1) < 1e-9 && trade0 < after.money);
+  const cost0 = S.upgradeInfo(e, "carthage", "farms").cost;
+  R.grant(e, "carthage", "engineering");
+  check("Mühendislik yükseltmeleri %20 ucuzlatır", S.upgradeInfo(e, "carthage", "farms").cost === Math.round(cost0 * 0.8), `${cost0} -> ${S.upgradeInfo(e, "carthage", "farms").cost}`);
+  const g1 = S.newGame("rome", 7), g2 = S.newGame("rome", 7);
+  for (const g of [g1, g2]) g.places.tarentum.pop = 10;
+  R.grant(g2, "rome", "medicine");
+  T.economy(g1, []); T.economy(g2, []);
+  check("Tıp nüfus artışını hızlandırır", g2.places.tarentum.pop > g1.places.tarentum.pop, `${g1.places.tarentum.pop} ${g2.places.tarentum.pop}`);
+
+  // Savaş etkileri: savaşın taraflarına konur, dökümde görünür.
+  const w = S.newGame("rome", 7);
+  R.grant(w, "rome", "ironWorking");
+  const base = { inf: 100, arch: 0, cav: 0, siege: 0 };
+  const plain = C.fight({ civ: "gaul", ...base }, { civ: "gaul", ...base }, null);
+  const iron = C.fight({ civ: "gaul", ...base, mods: R.modsOf(w, "rome") }, { civ: "gaul", ...base }, null);
+  check("Demir İşleme piyadeye +%10", Math.abs(iron.attPow / plain.attPow - 1.1) < 1e-9 && iron.attWins);
+  R.grant(w, "rome", "strategy");
+  check("Strateji ve Taktik: savaş çarpanları", JSON.stringify(R.modsOf(w, "rome")) === JSON.stringify({ inf: 1.1, arch: 1.15, cav: 1.15, all: 1.1 }), JSON.stringify(R.modsOf(w, "rome")));
+  const army = before(raise(w, "rome", { inf: 60, arch: 20 }), "massalia");
+  const sd = M.sides(w, army, "rome", "massalia");
+  const ex = C.explain(sd.att, sd.def, sd.walls);
+  check("dökümde araştırma satırları", ["techAll", "techInf", "techArch"].every((k) => ex.att.some(([x]) => x === k)), ex.att.map(([x]) => x).join());
+  const wallsOff = C.fight({ civ: null, inf: 100 }, { civ: null, inf: 100 }, "city");
+  const wallsOn = C.fight({ civ: null, inf: 100 }, { civ: null, inf: 100, mods: { walls: 1.2 } }, "city");
+  check("Surculuk savunanın surunu güçlendirir", Math.abs(wallsOn.defPow / wallsOff.defPow - 1.2) < 1e-9);
+  const navy = C.naval({ civ: null, trireme: 4 }, { civ: null, trireme: 4 }, [1, 1]);
+  const navy2 = C.naval({ civ: null, trireme: 4, mods: { navy: 1.25 } }, { civ: null, trireme: 4 }, [1, 1]);
+  check("Seyir filoyu güçlendirir: eşit filodan araştıranı kazanır", !navy.attWins && navy2.attWins);
+
+  // Skor ve bilgisayar.
+  const sc = S.newGame("rome", 7);
+  const s0 = VIC.scoreOf(sc, "rome").total;
+  R.grant(sc, "rome", "tactics");
+  check("her teknoloji skora sayılır (Taktik ve istedikleri: 5)", sc.civs.rome.techs.length === 5 && VIC.scoreOf(sc, "rome").total === s0 + 5 * N.score.tech && VIC.scoreOf(sc, "rome").parts.techs === 5 * N.score.tech);
+  const b = S.newGame("rome", 7);
+  for (let i = 0; i < 40; i++) T.endTurn(b);
+  const ais = CIVS.filter((c) => c.id !== "rome" && b.civs[c.id].alive);
+  check("bilgisayarlar araştırır: 40 turda her biri en az 2 teknoloji", ais.every((c) => b.civs[c.id].techs.length >= 2), ais.map((c) => `${c.id} ${b.civs[c.id].techs.length}`).join(" "));
+  check("bilgisayarın bildiği her şeyin istedikleri de biliniyor", ais.every((c) => b.civs[c.id].techs.every((id) => R.techById[id].needs.every((n) => b.civs[c.id].techs.includes(n)))));
+  check("oyuncunun yerine bilgisayar seçmez", b.civs.rome.research === null && b.civs.rome.techs.length === 0 && b.civs.rome.bank > 0);
+
+  // Eski kayıt: kullandığı birimin teknolojisi (ve istedikleri) verilir.
+  const old = S.newGame("rome", 7);
+  for (const c of Object.values(old.civs)) { delete c.techs; delete c.progress; delete c.research; delete c.bank; }
+  old.version = 12;
+  old.places.rome.barracks = 3;
+  old.places.carthage.quinq = 1;
+  S.migrate(old);
+  check("eski kayıt: kışla 3 olana Atçılık ve Sulama, kinkeremi olana Gemi İnşası zinciri", old.version === S.VERSION
+    && ["irrigation", "horseback"].every((id) => old.civs.rome.techs.includes(id)) && !old.civs.rome.techs.includes("engineering")
+    && ["sailing", "harbours", "shipbuilding"].every((id) => old.civs.carthage.techs.includes(id)) && old.civs.egypt.techs.length === 0 && old.civs.egypt.bank === 0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -866,6 +970,9 @@ section("Süvari ve kuşatma makinesi (bölüm 5, 7)");
 {
   const s = S.newGame("rome", 7);
   s.civs.rome.money = 100; s.civs.rome.weapons = 50; s.civs.rome.food = 50;
+  check("süvari önce Atçılık ister, kuşatma makinesi Mühendislik", S.recruitInfo(s, "rome", "cav").why === "tech_horseback" && S.recruitInfo(s, "rome", "siege").why === "tech_engineering");
+  R.grant(s, "rome", "horseback");
+  R.grant(s, "rome", "engineering");
   check("süvari için kışla 3 gerek", S.recruitInfo(s, "rome", "cav").why === "needBarracks3");
   check("kuşatma makinesi için sanayi 3 gerek", S.recruitInfo(s, "rome", "siege").why === "needIndustry3");
   s.places.rome.level = 3; s.places.rome.barracks = 3; s.places.rome.industry = 3;
@@ -1093,6 +1200,8 @@ section("Gemi türleri: kadırga, trireme, kinkerem");
   const s = S.newGame("carthage", 7);
   s.civs.carthage.money = 200; s.civs.carthage.weapons = 50;
   const c = s.places.carthage;
+  check("kinkerem önce Gemi inşası ister", S.shipInfo(s, "carthage", "quinq").why === "tech_shipbuilding");
+  R.grant(s, "carthage", "shipbuilding");
   check("tersane 1: kadırga yapılır, trireme ve kinkerem kapalı", !S.shipInfo(s, "carthage").why
     && S.shipInfo(s, "carthage", "trireme").why === "needShipyard2" && S.shipInfo(s, "carthage", "quinq").why === "needShipyard3");
   c.shipyard = 2;

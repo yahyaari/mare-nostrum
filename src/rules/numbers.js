@@ -121,11 +121,17 @@ export const N = {
   // kazandıkça tecrübe toplar (`win`; yerleşimini savunan içerideki ordu `held`). Rütbeler:
   // Acemi, Kıdemli (`xp[0]`), Usta (`xp[1]`), Seçkin (`xp[2]`); her rütbe güce +`per`.
   veteran: { xp: [2, 5, 9], per: 0.05, win: 2, held: 1 },
+  // Araştırma (bölüm 23, research.js): her `popPer` nüfus turda 1 bilim, başkent +`capital`;
+  // teknolojinin bedeli çağına göre. 16 teknolojinin hepsi 1920 bilim: orta bir medeniyet
+  // (turda ~20) 100. tur civarında bitirir, büyükler daha erken.
+  // Civilization V gibi: `free` yerleşimden sonra her yerleşim bedeli `perPlace` artırır (70 oyunda
+  // bunsuz Partlar oyunların 40ında en büyüğe çıkıyordu: geniş toprak -> çok bilim -> güçlü ordu).
+  research: { popPer: 80, capital: 2, cost: [40, 120, 260, 450], free: 6, perPlace: 0.05 },
   // Öğretici haydutlar (bandits.js): başkentten near-far uzakta (dist'e en yakın), dağıtana ganimet.
   bandits: { inf: 10, arch: 10, loot: 40, dist: 1.4, near: 1.1, far: 1.9 },
   // Skor: her yerleşim, seviyesinin her basamağı, başkent; her `popPer` nüfus; her harika; her
   // `armyPer` asker; kazanılan her savaş.
-  score: { place: 10, level: 4, capital: 10, popPer: 20, wonder: 30, armyPer: 25, win: 3 },
+  score: { place: 10, level: 4, capital: 10, popPer: 20, wonder: 30, armyPer: 25, win: 3, tech: 3 },
 
   // Bilgisayar
   // Bilgisayarlar arası: bu turdan önce kimse kimseye savaş açmaz (önce bağımsızlar), ve ancak
@@ -212,7 +218,7 @@ export const TRAITS = {
   rome: { inf: 1.25, recruitMoney: 1.5 },
   carthage: { money: 1.5, all: 0.85, navy: 1.5 },
   egypt: { wheat: 1.15, weapons: 0.75 },
-  macedon: { defInf: 1.5, popCap: 0.9 },
+  macedon: { defInf: 1.5, popCap: 0.9, science: 1.25 },
   parthia: { arch: 1.5, inf: 0.75 },
   gaul: { recruitMoney: 0, growth: 1.5, arch: 0.7 },
   saka: { moves: 2, siege: 0.6, cav: 1.3 },

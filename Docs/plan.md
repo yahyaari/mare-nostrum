@@ -3,7 +3,7 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **23.10.2026** (zafer yolları, canlı savaşlar; sırada araştırma ağacı).
+> Son güncelleme: **23.10.2026** (zafer yolları, canlı savaşlar, öğretici haydutlar, araştırma ağacı).
 
 ## SON EKLENENLER (23.10) - önce bunu oku
 
@@ -28,8 +28,15 @@ her biri ayrı push:
    başkentin yanında haydut kampı; balonlar ordu kurmayı, garnizondan çıkarmayı, yürümeyi,
    savaş penceresini ve savaşı sırayla gösterir; 40 para ganimet. 7 medeniyetin hepsinde
    tarayıcıda gerçek basışlarla baştan sona denendi (`node Tools/tutorial.mjs tr rome`).
-3. **Araştırma ağacı** (sırada): Civilization gibi; skora katkı; bazı kilitler (kışla/tersane
-   seviyeleri) araştırmaya taşınabilir.
+3. **Araştırma ağacı** (bu adım): kurallar.md bölüm 23, `src/rules/research.js`. Bilim nüfustan (her 80
+   nüfus 1, başkent +2), 16 teknoloji (4 kol x 4 çağ), seçilmemiş bilim birikir; süvari, kuşatma
+   makinesi, kinkerem araştırmayla açılır; savaş çarpanları savaş penceresinde ayrı satır; her
+   teknoloji 3 skor; bilgisayar sırayla araştırır. Alt menüde Araştırma (kandil), Civilization
+   gibi ağaç penceresi, bitince kendiliğinden açılır. Kayıt 13 (eski kayda kullandığı birimin
+   teknolojisi verilir). Hız: en büyük medeniyet ağacı ~70-85. turda bitirir, küçükler bitiremez.
+   Denge (70 oyun): ilk sürümde ekonomi etkileri iki katıydı, Partlar kartopu oldu (en büyük 36/70,
+   ilk düşüş 43); deneylerle ekonomi etkileri yarıya indi: ilk düşüş 48, Partlar 30, ayakta kalan
+   toplam 339 (araştırmasız 328). `Tools/experiment.mjs` artık `"R.tactics.mods": {}` alıyor.
 
 ## ÖNCEKİLER (22.10 akşam)
 

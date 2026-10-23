@@ -18,6 +18,7 @@ import { wonderAt } from "./wonders.js";
 import { besiege, canBesiege } from "./siege.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { random } from "./rng.js";
+import { aiResearch, unlocked } from "./research.js";
 import {
   armiesAt, armiesOf, armyById, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men,
   freeBuilders, muster, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, station, strength, together, upgrade, upgradeInfo,
@@ -42,6 +43,7 @@ export function aiTurn(state, civ, events) {
   diplomacy(state, civ, events);
   offers(state, civ);
   calm(state, civ);
+  aiResearch(state, civ);
   build(state, civ);
   shipyard(state, civ);
   recruitAll(state, civ);
@@ -216,7 +218,7 @@ function shipyard(state, civ) {
     const overseas = across.some((n) => hostile(access(state, civ, n)));
     const want = overseas ? Math.min(6, Math.max(1, Math.ceil(spare / N.navy.types.ships.carry))) : 1;
     for (let guard = 0; guard < 3 && fleetOf(pl) < want; guard++) {
-      const type = overseas && carryOf(pl) < spare ? "ships" : warship(pl);
+      const type = overseas && carryOf(pl) < spare ? "ships" : warship(state, pl);
       // Gemi de yer: yiyecek darsa tersane durur (yoksa bilgisayar kıtlığa giriyordu).
       if (shipInfo(state, id, type).why || state.civs[civ].money < N.navy.types[type].money + 10 || budget(state, civ).food < 2) break;
       buildShip(state, id, type);
@@ -224,8 +226,8 @@ function shipyard(state, civ) {
   }
 }
 
-/** Bu limanın tersanesinin yapabildiği en güçlü gemi. */
-const warship = (pl) => ["quinq", "trireme", "ships"].find((k) => (pl.shipyard ?? 0) >= N.navy.types[k].yard);
+/** Bu limanın tersanesinin yapabildiği (ve araştırmanın açtığı) en güçlü gemi. */
+const warship = (state, pl) => ["quinq", "trireme", "ships"].find((k) => (pl.shipyard ?? 0) >= N.navy.types[k].yard && unlocked(state, pl.owner, k));
 
 /** Limandan çıkan kuvvete gemi: taşıyabileceği kadar. (Limana savunma için bir gemi
  * bırakınca başlangıçtaki tek gemiyle kimse denize açılamıyordu; dünya donuyordu.) */

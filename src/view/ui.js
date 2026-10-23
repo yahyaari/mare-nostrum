@@ -21,6 +21,7 @@ import {
 import { POS, cellOf, centre, dist, isLand, placeAtCell } from "../rules/map.js";
 import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
 import { banditsOf } from "../rules/bandits.js";
+import { TECHS, canResearch, costFor, knows, scienceOf, techById, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
   PORT_UPGRADES, UPGRADES, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
@@ -360,6 +361,8 @@ function troops(T, u) {
 }
 
 function whyText(why, T) {
+  // Araştırmanın açtığı birim: "tech_horseback" -> "Önce Atçılık araştırılmalı".
+  if (why.startsWith("tech_")) return fill(T.whyTech, T.techs[why.slice(5)][0]);
   return T["why" + why[0].toUpperCase() + why.slice(1)] ?? why;
 }
 
@@ -1392,6 +1395,7 @@ const COACH = [
   { id: "loot", when: (g, ui) => !!g.tutorial && !banditsOf(g) && !ui.fight, at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.money)) },
   { id: "city", when: (g, ui) => !ui.sel, at: (g, ui, boxes, cam) => placeSpot(cam, capitalOf(g)) },
   // Haydutlar dururken yiyecek uyarısı öğreticiyi bölmesin (Sakaların fazladan askeri başta yiyeceği eksiye düşürür, 10 tur yeter).
+  { id: "research", when: (g, ui) => !ui.sel && !g.civs[g.player].research && !banditsOf(g), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "open" && a.modal === "research")) },
   { id: "food", when: (g) => budget(g, g.player).food < 0 && !banditsOf(g), at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.food)) },
   { id: "upgrade", when: (g, ui) => ownPlace(g, ui) && !banditsOf(g), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "upgrade")) },
   { id: "recruit", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "recruit")) },
@@ -1490,7 +1494,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, victory: victoryModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -1520,7 +1524,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   let sd, e, walls = null, title, sub, theirs, theirOwner, theirGen = null, theirXp = 0, sea = false, sg = false;
   if (b) {
     e = forecastField(game, a, b);
-    sd = fieldSides(a, b);
+    sd = fieldSides(game, a, b);
     sea = !!e.sea;
     title = b.bandit ? T.banditsQ : fill(T.fieldQ, ownerName(b, T, ui.lang));
     sub = fill(sea ? T.atSea : T.inField, placeName(nearestPlace(b), ui.lang));
@@ -1700,6 +1704,7 @@ export function eventLines(game, lang) {
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
+    if (e.type === "tech" && e.civ === me) out.push([fill(T.evTech, T.techs[e.tech][0]), "good"]);
     if (e.type === "wonderRace") out.push([fill(e.civ === me ? T.evWonderRaceMe : T.evWonderRace, name(e.civ), N.victory.wonders, e.left), e.civ === me ? "good" : "bad"]);
     if (e.type === "wonderLost") out.push([fill(T.evWonderLost, name(e.civ)), e.civ === me ? "bad" : "good"]);
     if (e.type === "spyArrived" && e.civ === me) out.push([fill(T.evSpyArrived, placeName(e.place, lang)), "good"]);
@@ -1740,6 +1745,68 @@ function reportModal(ctx, cam, game, ui, boxes, T) {
     text(ctx, l, r.x + 40, y, { size: 14, color });
   });
   oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+}
+
+/**
+ * Araştırma ağacı (Civilization gibi; rules/research.js): dört çağ yan yana, her çağda dört kol
+ * (toprak ve at, maden ve yapı, deniz, bilgi ve para). Bilinen altın, araştırılan parlak
+ * çerçeveli ve ilerleme çubuklu, açık olan basılabilir, kilitli soluk; çizgiler neyin neyi
+ * istediğini gösterir. Basınca araştırma o olur.
+ */
+const LANE_GLYPH = ["helmet", "temple", "compass", "scroll"];
+function researchModal(ctx, cam, game, ui, boxes, T) {
+  const me = game.player, c = game.civs[me];
+  const NW = 196, NH = 84, GX = 42, GY = 12;
+  const r = modalFrame(ctx, cam, boxes, 112 + 4 * NH + 3 * GY + 108, 4 * NW + 3 * GX + 48);
+  const x0 = r.x + 24, y0 = r.y + 110;
+  text(ctx, T.research, r.x + r.w / 2, r.y + 38, { title: true, bold: true, size: 20, align: "center" });
+  const sci = Math.round(scienceOf(game, me) * 10) / 10;
+  const status = c.research ? fill(T.researching, T.techs[c.research][0], techTurns(game, me, c.research)) : T.noResearch;
+  const head = [fill(T.sciencePer, sci), c.bank >= 1 ? fill(T.banked, Math.floor(c.bank)) : null, status].filter(Boolean).join(" · ");
+  fit(ctx, head, r.x + r.w / 2, r.y + 64, r.w - 48, { size: 14, align: "center", bold: true, color: c.research ? INK.ink : INK.bad });
+  T.tiers.forEach((t, i) => text(ctx, t.toLocaleUpperCase(ui.lang), x0 + i * (NW + GX) + NW / 2, y0 - 12, { title: true, bold: true, size: 12, align: "center", color: INK.soft }));
+  const pos = (t) => ({ x: x0 + (t.tier - 1) * (NW + GX), y: y0 + t.lane * (NH + GY) });
+  // Önce çizgiler (düğümlerin altında): biliniyorsa altın, değilse soluk.
+  for (const t of TECHS) for (const n of t.needs) {
+    const a = pos(techById[n]), b = pos(t), known = knows(game, me, n);
+    ctx.beginPath();
+    ctx.moveTo(a.x + NW, a.y + NH / 2);
+    ctx.bezierCurveTo(a.x + NW + GX * 0.6, a.y + NH / 2, b.x - GX * 0.6, b.y + NH / 2, b.x, b.y + NH / 2);
+    ctx.strokeStyle = known ? GOLD_DARK : "rgba(90,70,45,0.3)";
+    ctx.lineWidth = known ? 2.4 : 1.5;
+    ctx.stroke();
+  }
+  for (const t of TECHS) {
+    const p = pos(t), id = t.id, [name, effect] = T.techs[id];
+    const known = knows(game, me, id), now = c.research === id, open = canResearch(game, me, id);
+    const hot = open && over(p.x, p.y, NW, NH);
+    ctx.save();
+    if (!known && !open) ctx.globalAlpha = 0.5;
+    roundRect(ctx, p.x, p.y, NW, NH, 6);
+    ctx.fillStyle = known ? "rgba(222,190,112,0.5)" : now ? "rgba(255,244,214,0.95)" : hot ? "rgba(255,250,236,0.9)" : "rgba(255,255,255,0.42)";
+    ctx.fill();
+    ctx.strokeStyle = now ? GOLD : known ? GOLD_DARK : hot ? GOLD : INK.border;
+    ctx.lineWidth = now ? 2.6 : hot ? 1.8 : 1.2;
+    ctx.stroke();
+    medal(ctx, null, p.x + 19, p.y + 20, 12, LANE_GLYPH[t.lane]);
+    fit(ctx, name, p.x + 38, p.y + 25, NW - 46, { bold: true, size: 14 });
+    lines(ctx, effect, p.x + 10, p.y + 45, NW - 20, { size: 11.5, color: INK.soft }, 2, 13);
+    if (known) text(ctx, "✓ " + T.techKnown, p.x + NW - 10, p.y + NH - 8, { size: 11.5, bold: true, color: INK.good, align: "right" });
+    else if (now) {
+      const f = Math.min(1, (c.progress[id] ?? 0) / costFor(game, me, id));
+      ctx.fillStyle = "rgba(60,45,25,0.18)";
+      ctx.fillRect(p.x + 10, p.y + NH - 13, NW - 64, 6);
+      ctx.fillStyle = GOLD;
+      ctx.fillRect(p.x + 10, p.y + NH - 13, (NW - 64) * f, 6);
+      text(ctx, fill(T.turnsN, techTurns(game, me, id)), p.x + NW - 10, p.y + NH - 7, { size: 11.5, bold: true, align: "right" });
+    } else text(ctx, fill(T.techCost, costFor(game, me, id), techTurns(game, me, id)), p.x + NW - 10, p.y + NH - 8, { size: 11, color: INK.soft, align: "right" });
+    ctx.restore();
+    const needs = t.needs.filter((n) => !knows(game, me, n)).map((n) => T.techs[n][0]).join(", ");
+    if (open) boxes.push({ x: p.x, y: p.y, w: NW, h: NH, act: { do: "research", tech: id }, tip: [name, effect, fill(T.techCost, costFor(game, me, id), techTurns(game, me, id))] });
+    else if (!known) boxes.push({ x: p.x, y: p.y, w: NW, h: NH, act: null, tip: [name, effect, [fill(T.techNeeds, needs), "bad"]] });
+  }
+  lines(ctx, T.techPick, r.x + 24, y0 + 4 * NH + 3 * GY + 26, r.w - 48, { size: 12, italic: true, color: INK.soft, align: "center" }, 2, 15);
+  oneButton(ctx, boxes, r, { label: T.close ?? T.ok, act: { do: "close" } });
 }
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
@@ -2142,7 +2209,7 @@ function victoryModal(ctx, cam, game, ui, boxes, T) {
     text(ctx, String(row.total), x + w, ry + 12, { size: 13, bold: true, align: "right", color: dead ? INK.faint : INK.ink });
     if (row.civ === me) {
       const p = scoreOf(game, me).parts;
-      boxes.push({ x: x - 6, y: ry - 4, w: w + 12, h: 22, act: null, tip: [T.scoreChip, fill(T.scoreParts, p.lands, p.people, p.wonders, p.army, p.wins)] });
+      boxes.push({ x: x - 6, y: ry - 4, w: w + 12, h: 22, act: null, tip: [T.scoreChip, fill(T.scoreParts, p.lands, p.people, p.wonders, p.army, p.wins, p.techs)] });
     }
   });
   oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
