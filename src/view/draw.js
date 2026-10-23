@@ -13,7 +13,7 @@ import { BOUNDS, LON_SCALE } from "../data/bounds.js";
 import { neighbours, roadBetween, roadLine } from "../rules/graph.js";
 import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
-import { CREAM, DARK, GOLD, GOLD_LIGHT, TITLE, banner, castleModel, cityModel, fleet, goalMark, plaque, roundRect, shield, ship, soldier, wonderMark } from "./pieces.js";
+import { CREAM, DARK, GOLD, GOLD_LIGHT, TITLE, banner, castleModel, chevrons, cityModel, fleet, goalMark, plaque, roundRect, shield, ship, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { clear, drawClouds, drawSnow, paintCompass, paintFog, paintGround, paintLabels } from "./atlas.js";
 import { regions } from "./regions.js";
@@ -877,7 +877,7 @@ function tent(ctx, x, y, s, owner) {
   ctx.stroke();
 }
 
-/** Ordunun sayı etiketi: koyu, sahibinin renginde çerçeveli; generalliyse altın yıldız. */
+/** Ordunun sayı etiketi: koyu, sahibinin renginde çerçeveli; generalliyse altın yıldız, tecrübeliyse rütbe şeritleri. */
 function tag(ctx, army, label, tx, ty, tw, base) {
   const th = 16;
   ctx.globalAlpha = base;
@@ -901,6 +901,8 @@ function tag(ctx, army, label, tx, ty, tw, base) {
     ctx.fillStyle = "#e3b23c";
     ctx.fillText("★", tx + tw, ty - 1);
   }
+  // Tecrübeli ordu: etiketin sol üstünde rütbesi kadar altın V.
+  if (army.rank > 0) chevrons(ctx, army.rank, tx - 4, ty - 5, 8);
 }
 
 // Bir limanın denize bakan yönü: çevresinde 24 yönde, birkaç uzaklıkta karaya mı denize mi

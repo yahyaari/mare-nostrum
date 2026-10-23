@@ -15,8 +15,8 @@ import { has, might } from "./generals.js";
 import { N, SHIPS, UNITS, trait } from "./numbers.js";
 
 /**
- * `att`, `def`: { civ, inf, arch, cav, siege, gen? } (bağımsızın civ'i null; gen: o tarafın
- * generali; olmayan tür 0 sayılır). `walls`: null | "city" | "castle".
+ * `att`, `def`: { civ, inf, arch, cav, siege, gen?, vet?, terrain? } (bağımsızın civ'i null; gen:
+ * o tarafın generali; vet: tecrübe çarpanı; olmayan tür 0 sayılır). `walls`: null | "city" | "castle".
  * `luck`: [saldıran, savunan] çarpanları.
  */
 export function fight(att, def, walls, luck = [1, 1]) {
@@ -42,8 +42,8 @@ export function fight(att, def, walls, luck = [1, 1]) {
   // 2. Göğüs göğüse
   const wall = breach(walls === "castle" ? N.castleWall : walls === "city" ? N.cityWall : 1);
   // Arazi (ground.js): nehir geçen saldıran, dağ geçidini tutan savunan (çarpan dışarıdan gelir).
-  const attPow = power(a, att.civ, false, !!walls) * siege * might(att.gen) * (att.terrain ?? 1) * luck[0];
-  const defPow = power(d, def.civ, true, false) * wall * might(def.gen) * (def.terrain ?? 1) * luck[1];
+  const attPow = power(a, att.civ, false, !!walls) * siege * might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * luck[0];
+  const defPow = power(d, def.civ, true, false) * wall * might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * luck[1];
 
   // 3. Sonuç. Savunan kimse kalmadıysa saldıran kayıpsız girer; eşitlikte savunan kazanır.
   // Kuşatma makinesinin mürettebatı tek başına bir yeri alamaz ve savunamaz.
@@ -147,4 +147,51 @@ function lose(u, n) {
     u[k] -= 1;
     left -= 1;
   }
+}
+
+// ---- tecrübe ----
+
+/** Tecrübeden rütbe: 0 Acemi, 1 Kıdemli, 2 Usta, 3 Seçkin. */
+export const veteranRank = (xp = 0) => N.veteran.xp.filter((t) => xp >= t).length;
+
+/** Rütbenin savaştaki çarpanı. */
+export const veteranMul = (xp = 0) => 1 + veteranRank(xp) * N.veteran.per;
+
+/** Bir sonraki rütbe için gereken tecrübe (en üstteyse null). */
+export const nextRankXp = (xp = 0) => N.veteran.xp.find((t) => xp < t) ?? null;
+
+// ---- savaşın dökümü (ekran için) ----
+
+/**
+ * Bir savaşı ne çeviriyor: her taraf için [anahtar, değer] listesi (Civilization'ın savaş
+ * önizlemesi gibi). Değer bir çarpan (1.25 = +%25); "engines" ise surun bonusunun ne kadarının
+ * söküldüğü (0.4 = %40). Sadece etkisi olanlar. Anahtarların yazısı text.js `mods`.
+ */
+export function explain(att, def, walls) {
+  const A = [], D = [];
+  const put = (list, key, v) => { if (Math.abs(v - 1) > 1e-6) list.push([key, v]); };
+  const units = (u, list, defending) => {
+    put(list, "all", trait(u.civ, "all"));
+    if ((u.inf ?? 0) > 0) put(list, "inf", trait(u.civ, "inf") * (defending ? trait(u.civ, "defInf") : 1));
+    if ((u.arch ?? 0) > 0) put(list, "arch", trait(u.civ, "arch"));
+    if ((u.cav ?? 0) > 0) put(list, "cav", trait(u.civ, "cav"));
+  };
+  put(A, "general", might(att.gen));
+  put(A, "veteran", att.vet ?? 1);
+  put(A, "river", att.terrain ?? 1);
+  units(att, A, false);
+  if (walls) {
+    put(A, "steppeWalls", trait(att.civ, "siege"));
+    if ((att.cav ?? 0) > 0) put(A, "cavWalls", N.cavWall);
+    const engines = Math.min(1, ((att.siege ?? 0) / N.company) * N.siegeBreach);
+    if (engines > 0) A.push(["engines", engines]);
+    if (has(att.gen, "siege")) A.push(["siegeGeneral", 0.5]);
+    const breach = (m) => 1 + (m - 1) * (has(att.gen, "siege") ? 0.5 : 1) * (1 - engines);
+    put(D, walls === "castle" ? "castleWalls" : "cityWalls", breach(walls === "castle" ? N.castleWall : N.cityWall));
+  }
+  put(D, "general", might(def.gen));
+  put(D, "veteran", def.vet ?? 1);
+  put(D, "pass", def.terrain ?? 1);
+  units(def, D, true);
+  return { att: A, def: D };
 }

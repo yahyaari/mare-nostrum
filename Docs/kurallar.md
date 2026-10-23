@@ -232,6 +232,26 @@ filoya saldıramaz. Kaybeden ordu her zaman yok olur, generali ölür.
 | Başkent, ve seviye 3 ve üstü şehir | Herkes × 1.25 |
 | Diğerleri | Yok |
 
+**Tecrübe ve rütbe** (kullanıcı 23.10: "savaşlar cansız"). Ordular savaştıkça usta olur:
+
+- Savaş kazanan ordu **+2** tecrübe (yerleşim alarak da meydanda da). Yerleşimini tutan, içerideki
+  ordular **+1**.
+- Rütbe: 2'de **Kıdemli**, 5'te **Usta**, 9'da **Seçkin**. Her rütbe savaşta **+%5** güç (en çok +%15).
+- Savunmada içerideki orduların tecrübesi kişi sayısıyla tartılır; garnizon acemi sayılır.
+- Birleşen orduların tecrübesi kişi sayısıyla tartılır; ayrılan bölük tecrübesini götürür.
+- Rütbe haritada ordunun etiketinde altın V'ler, ordu kartında adıyla ve artısıyla görünür.
+
+**Savaş penceresi** (Civilization'ın savaş önizlemesi gibi): iki taraf yan yana (askerleri figür
+figür, sayıları, generali, rütbesi, gücü), ortada iki gücü karşılaştıran çubuk ve tahmin, altında
+savaşı çeviren her şey tarafına göre yeşil artı / kırmızı eksi: komutan, tecrübe, nehir geçişi,
+dağ geçidi, milletin askerlik ustalığı, sur, makinelerin söktüğü sur, kuşatma ustası
+(`combat.js explain`). Pencere de savaş da aynı sayıları kullanır (`moves.js sides`).
+
+**Savaş haritada oynar:** sonuç penceresi yok. Saldırı onaylanınca ordu kapıya yürür, savaş
+sahnesi savaşın yerinin üstünde bir panoda oynar, bitince üstte bir sonuç şeridi belirir
+("Zafer! Massalia artık senin", kayıplar, rütbe atladıysa, general seviye atladıysa ya da düştüyse)
+ve birkaç saniyede kendiliğinden kaybolur (basınca hemen).
+
 ---
 
 ## 8. Diplomasi
@@ -470,7 +490,8 @@ oyundan çıkar.
   bir balon (kapatılabilir, menüden yeniden açılır). Nasıl oynanır menüde, sayfa sayfa.
 - **Sağ alt:** *Turu bitir* butonu.
 - **Diplomasi paneli:** Her medeniyetin durumu ve butonları.
-- **Savaş sonucu kartı:** Kim kazandı, kim kaç asker kaybetti.
+- **Savaş:** önce savaş penceresi (iki taraf, güç çubuğu, artılar ve eksiler); sonra sahne
+  haritada savaşın yerinde, sonucu üstte bir şerit (bölüm 7).
 
 ---
 

@@ -3,9 +3,31 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **22.10.2026 akşam** (birlik kartları, gemi türleri, serbest yürüyüş).
+> Son güncelleme: **23.10.2026** (zafer yolları, canlı savaşlar; sırada araştırma ağacı).
 
-## SON EKLENENLER (22.10 akşam) - önce bunu oku
+## SON EKLENENLER (23.10) - önce bunu oku
+
+Kullanıcı (23.10): "şu ana kadar güzel şeyler yaptık ama hâlâ bir oyun gibi hissettirmiyor".
+Sordum: eksik olan "ne için oynadığım belli değil" ve "savaşlar cansız"; örnek **Civilization**;
+zafer yolları Fetih, Skor (süre sonunda), Harikalar; araştırma ağacı "evet, eklensin". Üç adım,
+her biri ayrı push:
+
+1. **Zafer yolları ve skor** (d13500f): kurallar.md 12c. Fetih / 5 harika 20 tur / 200. turda
+   skor; üst bantta sıra ve skor, Zafer yolları penceresi; bilgisayar harika yarışında öndekinin
+   üstüne gider. Kayıt 12.
+2. **Canlı savaşlar** (bu adım): kurallar.md bölüm 7 sonu. Savaş penceresi Civilization'ın
+   önizlemesi gibi (iki taraf, güç çubuğu, artı/eksi dökümü `combat.js explain`); savaş
+   haritada oynar (sahne yerin üstünde, sonuç şeridi - eski savaş sonucu penceresi kalktı);
+   tecrübe ve rütbe (Kıdemli / Usta / Seçkin, +%5'er; `N.veteran`), haritada altın V'ler.
+   Ayrıca: üst üste binen jetonlardan ortası basılana en yakını seçilir (denizde yan yana iki
+   filo seçilemiyordu); oyuncu-testi kamera kayarken basmıyor.
+   Denge (70 oyun): ilk düşüş 49, en erken 21 (önce 53 / 25 - gürültü payı içinde); ayakta Roma 52,
+   Kartaca 51, Mısır 49, Makedonya 43, Partlar 50, Galya 50, Sakalar 33 (önce 54/59/48/37/53/44/36:
+   daha dengeli).
+3. **Araştırma ağacı** (sırada): Civilization gibi; skora katkı; bazı kilitler (kışla/tersane
+   seviyeleri) araştırmaya taşınabilir.
+
+## ÖNCEKİLER (22.10 akşam)
 
 Kullanıcı (22.10): "şehirde garnizon sekmesi olsun, askerler kart şeklinde... seçip komutan atayıp
 dışarı çıkarayım... gemiler için de kadırgalar, savaş gemileri... ordu veya gemiye tıklayalım yürü

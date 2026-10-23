@@ -117,6 +117,10 @@ export const N = {
   // bitiyordu (Mısır iki harikayla başlıyor, yanındaki Rodos ve Efes bağımsız). 5 / 20: beşte bir,
   // en erken 55. tur; çoğu oyun 200. turda skorla biter.
   victory: { wonders: 5, hold: 20, turns: 200 },
+  // Tecrübe (kullanıcı 23.10: "savaşlar cansız"; Civilization'ın terfileri gibi): ordu savaş
+  // kazandıkça tecrübe toplar (`win`; yerleşimini savunan içerideki ordu `held`). Rütbeler:
+  // Acemi, Kıdemli (`xp[0]`), Usta (`xp[1]`), Seçkin (`xp[2]`); her rütbe güce +`per`.
+  veteran: { xp: [2, 5, 9], per: 0.05, win: 2, held: 1 },
   // Skor: her yerleşim, seviyesinin her basamağı, başkent; her `popPer` nüfus; her harika; her
   // `armyPer` asker; kazanılan her savaş.
   score: { place: 10, level: 4, capital: 10, popPer: 20, wonder: 30, armyPer: 25, win: 3 },

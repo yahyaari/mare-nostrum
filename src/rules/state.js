@@ -484,6 +484,9 @@ export const together = (a, b) => (a.at || b.at ? a.at === b.at : dist(a, b) <= 
 export function merge(state, intoId, fromId) {
   const a = armyById(state, intoId), b = armyById(state, fromId);
   if (!a || !b || a === b || !together(a, b) || a.owner !== b.owner || a.besieging || b.besieging) return false;
+  // Tecrübe askerlere göre karışır: 100 seçkin ile 100 acemi orta bir ordu olur.
+  const ma = men(a), mb = men(b);
+  if (ma + mb > 0) a.xp = Math.round((((a.xp ?? 0) * ma + (b.xp ?? 0) * mb) / (ma + mb)) * 10) / 10;
   for (const k of KEYS) a[k] = (a[k] ?? 0) + (b[k] ?? 0);
   a.mp = Math.min(a.mp, b.mp);
   // İki general varsa daha tecrübelisi komutayı alır, öteki emekli olur (adı yine kullanılabilir).
@@ -506,7 +509,7 @@ export function detach(state, armyId, want) {
   const rest = Object.fromEntries(keys.map((k) => [k, (a[k] ?? 0) - part[k]]));
   if (empty(part) || empty(rest)) return null;
   for (const k of keys) a[k] = rest[k];
-  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, x: a.x, y: a.y, ...part, mp: a.mp, route: [], general: null };
+  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, x: a.x, y: a.y, ...part, mp: a.mp, route: [], general: null, xp: a.xp ?? 0 };
   state.armies.push(b);
   return b;
 }

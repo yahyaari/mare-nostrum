@@ -557,6 +557,75 @@ section("Meydan muharebesi ve tarafsızın toprağı");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Tecrübe: rütbeler ve savaşın dökümü");
+
+{
+  check("rütbeler: 2 Kıdemli, 5 Usta, 9 Seçkin", [0, 1, 2, 4, 5, 8, 9, 30].map((x) => C.veteranRank(x)).join() === "0,0,1,1,2,2,3,3");
+  check("rütbe başına savaşta +%5", Math.abs(C.veteranMul(9) - 1.15) < 1e-9 && C.veteranMul(undefined) === 1);
+  check("sonraki rütbe", C.nextRankXp(0) === 2 && C.nextRankXp(5) === 9 && C.nextRankXp(9) === null);
+  const base = { civ: null, inf: 100, arch: 0, cav: 0, siege: 0 };
+  const plain = C.fight({ ...base }, { ...base }, null);
+  const vet = C.fight({ ...base, vet: 1.1 }, { ...base }, null);
+  check("tecrübe gücü çarpar: eşit iki ordudan tecrübelisi kazanır", Math.abs(vet.attPow / plain.attPow - 1.1) < 1e-9 && vet.attWins && !plain.attWins);
+
+  // Kazanan tecrübe kazanır; rütbe atlarsa olay söyler (sonuç şeridi gösterir).
+  const s = S.newGame("rome", 7);
+  const a = before(raise(s, "rome", { inf: 200 }), "massalia");
+  a.xp = 1;
+  const ev = M.attack(s, a.id, "massalia", [1, 1]);
+  check("yerleşimi alan ordu tecrübe kazanır, rütbe atladığını olay söyler", ev?.won && a.xp === 1 + N.veteran.win && ev.rankUp === 1, `${a.xp} ${ev?.rankUp}`);
+
+  // Şehri tutan içerideki ordu tecrübe kazanır; savunmada içeridekilerin tecrübesi kişi sayısıyla tartılır.
+  const g = S.newGame("rome", 7);
+  g.relations[S.key("rome", "gaul")] = "war";
+  const inside = raise(g, "bibracte", { inf: 40 });
+  const weak = before(S.formArmy(g, "rome", 10, 0), "bibracte");
+  const ev2 = M.attack(g, weak.id, "bibracte", [1, 1]);
+  check("şehri tutan içerideki ordu tecrübe kazanır", ev2 && !ev2.won && inside.xp === N.veteran.held, `${ev2?.won} ${inside.xp}`);
+  inside.xp = 9;
+  const probe = before(S.formArmy(g, "rome", 10, 0), "bibracte");
+  const sd = M.sides(g, probe, "rome", "bibracte");
+  const pl = g.places.bibracte;
+  const want = (S.men(pl) + S.men(inside) * C.veteranMul(9)) / (S.men(pl) + S.men(inside));
+  check("savunmada içerideki orduların tecrübesi sayılır (garnizon acemi)", Math.abs(sd.def.vet - want) < 1e-9 && sd.def.vet > 1 && sd.def.vet < C.veteranMul(9), `${sd.def.vet} ${want}`);
+
+  // Meydanda: kazanan tecrübe kazanır.
+  const f = S.newGame("rome", 7);
+  f.relations[S.key("rome", "gaul")] = "war";
+  const ro = before(raise(f, "rome", { inf: 120 }), "mediolanum");
+  const ga = raise(f, "bibracte", { inf: 40 });
+  ga.at = null; ga.x = ro.x + 0.25; ga.y = ro.y; ga.xp = 4;
+  ro.xp = 8;
+  const fev = M.strike(f, ro.id, ga.id, [1, 1]);
+  check("meydanda kazanan tecrübe kazanır: Usta'dan Seçkin'e", fev?.won && ro.xp === 8 + N.veteran.win && fev.rankUp === 3, `${ro.xp} ${fev?.rankUp}`);
+  check("meydan muharebesinin iki tarafında tecrübe", M.fieldSides({ ...ro, xp: 9 }, { ...ro, owner: "gaul", xp: 0 }).att.vet === C.veteranMul(9));
+
+  // Birleşen orduların tecrübesi kişi sayısıyla tartılır; ayrılan bölük tecrübesini götürür.
+  const m = S.newGame("rome", 7);
+  const x1 = raise(m, "rome", { inf: 30 });
+  const x2 = raise(m, "rome", { inf: 10 });
+  x1.xp = 8; x2.xp = 0;
+  check("birleşen orduların tecrübesi tartılı", S.merge(m, x1.id, x2.id) && x1.xp === 6, x1.xp);
+  const part = S.detach(m, x1.id, { inf: 10 });
+  check("ayrılan bölük tecrübesini götürür", part && part.xp === 6);
+
+  // Döküm: savaşı çeviren her şey doğru tarafta; her birinin iki dilde yazısı var.
+  const ex = C.explain(
+    { civ: "rome", inf: 100, arch: 0, cav: 20, siege: 20, gen: { level: 2, traits: ["siege"] }, vet: 1.1, terrain: 0.85 },
+    { civ: "gaul", inf: 50, arch: 20, cav: 0, siege: 0, gen: null, vet: 1.05, terrain: 1.25 }, "city");
+  const keys = (l) => l.map(([k]) => k);
+  check("döküm: komutan, tecrübe, nehir, makine, kuşatma ustası, sura süvari saldıranda", ["general", "veteran", "river", "engines", "siegeGeneral", "cavWalls"].every((k) => keys(ex.att).includes(k)), keys(ex.att).join());
+  check("döküm: sur, geçit ve tecrübe savunanda", ["cityWalls", "pass", "veteran"].every((k) => keys(ex.def).includes(k)), keys(ex.def).join());
+  check("döküm: etkisi olmayan yok", C.explain({ civ: null, inf: 10 }, { civ: null, inf: 10 }, null).att.length === 0);
+  const { TEXT } = await import("../src/text.js");
+  const src = readFileSync(new URL("../src/rules/combat.js", import.meta.url), "utf8");
+  const body = src.slice(src.indexOf("export function explain"));
+  const used = [...new Set([...body.matchAll(/"(\w+)"/g)].map((x) => x[1]))].filter((k) => !["castle", "siege", "city", "defInf"].includes(k));
+  for (const lang of ["en", "tr"]) check(`${lang}: dökümün her anahtarının yazısı var`, used.every((k) => TEXT[lang].mods?.[k]), used.filter((k) => !TEXT[lang].mods?.[k]).join());
+  check("rütbe adları iki dilde dört", ["en", "tr"].every((l) => TEXT[l].ranks?.length === 4));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Sadakat ve isyan (bölüm 12)");
 
 const LY = await import("../src/rules/loyalty.js");

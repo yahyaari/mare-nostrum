@@ -3,19 +3,20 @@
 //
 // `ui` görünüm durumu: { screen, lang, pick, saved, sel, modal, toast }.
 //   sel:   { kind: "place" | "army", id }
-//   modal: { kind: "attack" | "diplo" | "report" | "battle" | "menu" | "help" |
+//   modal: { kind: "attack" | "diplo" | "report" | "menu" | "help" |
 //            "confirm" | "over", ... }
 //   army:  oyuncu bir yabancı yere bakarken son seçtiği kendi ordusu (kartta saldırı tahmini için)
 //   news:  { lines, since } tur sonunda sağ üstte beliren haberler (pencere açmadan)
 //   tip:   { lines, since } farenin altındaki şeyin açıklaması
 //   cards: { of, sig, picks, page } seçili birlik kartları (kart çizimi: cardGrid)
 //   aim:   Yürü'ye basılmış ordu: haritada basılan yer onun gideceği yer
+//   fight: { ev, t0 } oyuncunun az önceki savaşı: haritada sahne, sonra sonuç şeridi (drawFight)
 
 import { CIVS, PLACES } from "../data/world.js";
 import { angerOf, canDeclare, canPropose } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import {
-  access, bySea, canAttack, canStrike, defenders, forecast, forecastField, fortOf, hostile, menace, mpMax, nearestPlace, shipsAt, terrainOf, wallsOf,
+  access, canAttack, canStrike, defenders, fieldSides, forecast, forecastField, fortOf, hostile, menace, mpMax, nearestPlace, shipsAt, sides, wallsOf,
 } from "../rules/moves.js";
 import { POS, cellOf, centre, dist, isLand, placeAtCell } from "../rules/map.js";
 import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
@@ -33,13 +34,14 @@ import {
   INK, SERIF, TAU, amount, button, civName, colorOf, costLine, delta, fmt, icon, measure, over, panel, pointer, text, wrap,
 } from "./kit.js";
 import { BOTTOM_H, RIGHT_W, TOP, drawBottomBar, drawRightColumn, drawTopBar, hanging, medal } from "./hud.js";
-import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, galley, roundRect, shade, shield, soldier, wonderMark } from "./pieces.js";
+import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, chevrons, galley, roundRect, shade, shield, soldier, wonderMark } from "./pieces.js";
 import { WONDERS, wonderAt } from "../rules/wonders.js";
 import { rankOf, ranking, scoreOf, wonderTurnsLeft } from "../rules/victory.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { sight } from "../rules/sight.js";
 import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
-import { drawBattle, trooper } from "./battle.js";
+import { SCENE_MS, drawBattle, trooper } from "./battle.js";
+import { explain, fight, nextRankXp, veteranMul, veteranRank } from "../rules/combat.js";
 import { drawVignette, placeOnScreen } from "./draw.js";
 import { toScreen } from "./camera.js";
 import { SIZE } from "../geo.js";
@@ -69,6 +71,7 @@ export function drawUI(ctx, cam, game, ui, boxes, view) {
     if (!game.over && !card) drawBottomBar(ctx, cam, game, ui, boxes, T);
     if (ui.news && !ui.modal) drawNews(ctx, cam, ui, boxes, T);
     drawCoach(ctx, cam, game, ui, boxes, T);
+    if (ui.fight) drawFight(ctx, cam, game, ui, boxes, T);
   }
   if (ui.toast && ui.toast.until > performance.now()) drawToast(ctx, cam, ui.toast.text, card ? card.y - 56 : cam.h - BOTTOM_H - 58);
   if (ui.modal) {
@@ -842,6 +845,19 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
     amount(ctx, "money", ai.cost, sx + lw + 6, b.y + 20, { size: 13, bold: true, color: c });
     ly += 30;
   }
+  // Tecrübe: rütbe şeritleri, adı ve savaştaki artısı; üstüne gelince ne zaman yükseleceği.
+  const rk = veteranRank(a.xp), xp = a.xp ?? 0;
+  if (rk || mine) {
+    if (rk) chevrons(ctx, rk, x, ly - 13, 10);
+    const rx = x + (rk ? 16 : 0);
+    const rw = text(ctx, T.ranks[rk], rx, ly, { size: 13, bold: true, color: rk ? INK.warn : INK.soft });
+    const bonus = Math.round((veteranMul(xp) - 1) * 100);
+    if (rk) text(ctx, ` · +${fill(T.pct, bonus)}`, rx + rw, ly, { size: 13, color: INK.soft });
+    const next = nextRankXp(xp);
+    const line = next === null ? fill(T.rankTipTop, T.ranks[rk], bonus, xp) : fill(T.rankTip, T.ranks[rk], bonus, xp, next);
+    boxes.push({ x, y: ly - 14, w: A, h: 18, act: null, tip: [T.mods.veteran, line, T.rankHow] });
+    ly += 20;
+  }
   ly += (lines(ctx, troops(T, a), x, ly, A, { size: 13 }, 2, 16) - 1) * 16 + 20;
   if (fleetOf(a)) {
     text(ctx, `⛵ ${fleetOf(a)} ${T.ships} · ${fill(T.carry, carryOf(a))}`, x, ly, { size: 13, color: canSail(a) ? INK.ink : INK.bad });
@@ -1140,6 +1156,93 @@ function drawNews(ctx, cam, ui, boxes, T) {
   boxes.push({ x, y, w: W, h, act: { do: "open", modal: "report" } });
 }
 
+// ---- haritada savaş ----
+//
+// Kullanıcı 23.10 "savaşlar cansız": sonuç penceresi yerine savaş haritada oynar. Sahne
+// (battle.js) savaşın yerinin üstünde, ucu oraya bakan bir pano; bitince üstte sonuç şeridi
+// belirir ve kendiliğinden kaybolur (basınca hemen). Pencere değil: harita görünür kalır.
+
+/** Sonuç şeridi bu kadar milisaniye kalır (sahneden sonra). */
+export const RIBBON_MS = 5200;
+export const FIGHT_MS = SCENE_MS + RIBBON_MS;
+
+function drawFight(ctx, cam, game, ui, boxes, T) {
+  const e = ui.fight.ev;
+  const t = performance.now() - ui.fight.t0;
+  if (t < SCENE_MS + 400) fightScene(ctx, cam, game, e, t);
+  if (t > SCENE_MS - 250) fightRibbon(ctx, cam, ui, boxes, T, e, t - SCENE_MS + 250);
+}
+
+/** Sahne: savaşın yerinin üstünde (sığmazsa altında) bir pano; açılırken belirir, biterken söner. */
+function fightScene(ctx, cam, game, e, t) {
+  const pt = e.at ?? POS[e.place];
+  const s = toScreen(cam, pt.x, pt.y);
+  const W = 340, H = 168;
+  const x = Math.round(Math.max(12, Math.min(cam.w - W - 12, s.x - W / 2)));
+  const above = s.y - H - 30 > TOP + 8;
+  const y = Math.round(Math.max(TOP + 8, Math.min(cam.h - H - 12, above ? s.y - H - 30 : s.y + 30)));
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, t / 220) * (t > SCENE_MS ? Math.max(0, 1 - (t - SCENE_MS) / 400) : 1);
+  // Uç: panodan savaşın yerine.
+  const tipX = Math.max(x + 24, Math.min(x + W - 24, s.x));
+  ctx.beginPath();
+  ctx.moveTo(tipX - 12, above ? y + H - 2 : y + 2);
+  ctx.lineTo(s.x, above ? s.y - 8 : s.y + 8);
+  ctx.lineTo(tipX + 12, above ? y + H - 2 : y + 2);
+  ctx.closePath();
+  ctx.fillStyle = "#2a2016";
+  ctx.fill();
+  panel(ctx, x, y, W, H);
+  drawBattle(ctx, { x: x + 8, y: y + 8, w: W - 16, h: H - 16 }, e, t, e.field ? null : wallsOf(game, e.place));
+  ctx.restore();
+}
+
+/** Sonuç şeridi: üstte ortada, uçları çentikli koyu bir kurdele; zafer altın, yenilgi kızıl. */
+function fightRibbon(ctx, cam, ui, boxes, T, e, t) {
+  if (t > RIBBON_MS) return;
+  const where = placeName(e.place, ui.lang);
+  const lost = men(e.before.att) - men(e.after.att), killed = men(e.before.def) - men(e.after.def);
+  const head = e.field ? (e.won ? T.fieldWon : T.fieldLost) : e.won ? T.won : T.lost;
+  const lines = [[e.drowned ? T.drowned : fill(T.fightLine, lost, killed), e.drowned ? "bad" : null]];
+  if (!e.drowned && e.naval?.won && e.naval.sunk) lines.push([fill(T.navalWin, e.naval.sunk), "good"]);
+  if (e.rankUp) lines.push([fill(T.rankUp, T.ranks[e.rankUp], Math.round(e.rankUp * N.veteran.per * 100)), "warn"]);
+  if (e.fallen) lines.push([fill(T.evFallen, civName(e.fallen, ui.lang)), "good"]);
+  if (e.gen?.up) lines.push([fill(T.genUp, e.gen.name, e.gen.up), "warn"]);
+  if (e.gen?.trait) lines.push([fill(T.genSkill, T.skills[e.gen.trait][0], T.skills[e.gen.trait][1]), "warn"]);
+  if (e.genFell) lines.push([fill(T.genFell, e.genFell), "bad"]);
+  const W = Math.min(cam.w - 80, 560), H = 52 + lines.length * 20;
+  const x = Math.round((cam.w - W) / 2), y = TOP + 16;
+  // Belirir (yukarıdan iner), sonunda söner.
+  const a = Math.min(1, t / 260) * Math.min(1, (RIBBON_MS - t) / 600);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.translate(0, (1 - Math.min(1, t / 260)) * -12);
+  const n = 16;
+  ctx.beginPath();
+  ctx.moveTo(x - n, y);
+  ctx.lineTo(x + W + n, y);
+  ctx.lineTo(x + W, y + H / 2);
+  ctx.lineTo(x + W + n, y + H);
+  ctx.lineTo(x - n, y + H);
+  ctx.lineTo(x, y + H / 2);
+  ctx.closePath();
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = "rgba(22,18,14,0.94)";
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = e.won ? GOLD : "#a2412f";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Kazananın renginde ince şerit.
+  ctx.fillStyle = colorOf(e.won ? e.attacker : e.defender);
+  ctx.fillRect(x + 8, y + 5, W - 16, 3);
+  text(ctx, fill(head, where).toLocaleUpperCase(ui.lang), cam.w / 2, y + 32, { title: true, bold: true, size: 18, align: "center", color: e.won ? GOLD_LIGHT : TONE.bad });
+  lines.forEach(([s, tone], i) => text(ctx, s, cam.w / 2, y + 54 + i * 20, { size: 14, align: "center", color: TONE[tone] ?? CREAM, bold: !!tone }));
+  ctx.restore();
+  boxes.push({ x: x - n, y, w: W + 2 * n, h: H, act: { do: "fightOff" } });
+}
+
 /** Farenin altındaki şeyin açıklaması. `lines`: dize ya da [dize, ton]; ilki başlık. */
 function drawTip(ctx, cam, lines) {
   const items = lines.filter(Boolean).map((l, i) => (typeof l === "string" ? [l, i === 0 ? "title" : null] : l));
@@ -1229,6 +1332,8 @@ export function armyTip(game, a, lang) {
   const T = TEXT[lang];
   const out = [`${T.army} · ${civName(a.owner, lang)}`, troops(T, a)];
   if (a.general) out.push(`★ ${fill(T.general, a.general.name)} · ${fill(T.rank, a.general.level)}`);
+  const rk = veteranRank(a.xp);
+  if (rk) out.push([`${T.ranks[rk]} · +${fill(T.pct, Math.round((veteranMul(a.xp) - 1) * 100))}`, "warn"]);
   if (fleetOf(a)) out.push(`⛵ ${fleetOf(a)} ${T.ships}`);
   if (a.besieging) out.push([fill(T.evSiege, civName(a.owner, lang), placeName(a.besieging, lang)), "warn"]);
   if (a.owner === game.player) out.push([a.mp > 0.05 ? fill(T.movesLeft, Math.round((a.mp / mpMax(a)) * 100)) : T.spentShort, a.mp > 0.05 ? "good" : null]);
@@ -1355,7 +1460,7 @@ function modalFrame(ctx, cam, boxes, h, wMax = 440) {
 function drawModal(ctx, cam, game, ui, boxes, T) {
   const m = ui.modal;
   const f = {
-    attack: attackModal, diplo: diploModal, report: reportModal, battle: battleModal,
+    attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
     armies: armiesModal, cities: citiesModal, victory: victoryModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
@@ -1372,73 +1477,132 @@ function oneButton(ctx, boxes, r, b) {
   button(ctx, boxes, { x: r.x + 20, y: r.y + r.h - 62, w: r.w - 40, h: 44, size: 15, main: true, ...b });
 }
 
+/**
+ * Savaş penceresi (kullanıcı 23.10: "savaşlar cansız"; Civilization'ın savaş önizlemesi gibi): iki
+ * taraf yan yana - askerleri, sayıları, generali, rütbesi, gücü; ortada iki tarafın gücünü
+ * karşılaştıran çubuk ve tahmin; altında savaşı çeviren artılar ve eksiler (rules/combat.js
+ * explain), beklenen kayıplar. Yerleşime saldırı (m.id) ya da meydan muharebesi (m.target).
+ */
 function attackModal(ctx, cam, game, ui, boxes, T, m) {
   const a = armyById(game, m.army);
   if (!a) return;
-  if (m.target) return fieldModal(ctx, cam, game, ui, boxes, T, a, armyById(game, m.target));
-  const d = defenders(game, m.id), walls = wallsOf(game, m.id);
-  const e = forecast(game, a, a.owner, m.id);
-  const sea = bySea(a, POS[m.id]) && shipsAt(game, m.id) > 0;
-  // Surlu yer: hemen saldırmak yerine kuşatılabilir.
-  const sg = canBesiege(game, a, m.id);
-  const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id)), 396, { size: 12, italic: true }) : [];
-  const ter = terrainOf(a, m.id);
-  const tl = (ter.river ? 1 : 0) + (ter.pass ? 1 : 0);
-  const r = modalFrame(ctx, cam, boxes, 290 + (sea ? 22 : 0) + tl * 18 + hint.length * 17 + (sg ? 8 : 0));
-  const x = r.x + 22;
-  text(ctx, fill(T.attackQ, placeName(m.id, ui.lang)), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
-  text(ctx, T.yours, x, r.y + 76, { bold: true, size: 13 });
-  text(ctx, troops(T, a), x, r.y + 96, { size: 13 });
-  text(ctx, T.defenders, x, r.y + 124, { bold: true, size: 13 });
-  text(ctx, men(d) ? troops(T, d) : T.undefended, x, r.y + 144, { size: 13 });
-  text(ctx, `${T.walls}: ${wallsText(walls, T)}`, x, r.y + 166, { size: 13, color: INK.soft });
-  let oy = r.y + 196;
-  // Arazi: nehir geçişi ve dağ geçidi.
-  [[ter.river, T.riverLine], [ter.pass, T.passLine]].filter(([on]) => on).forEach(([, l], i) => {
-    text(ctx, l, x, r.y + 186 + i * 18, { size: 13, italic: true, color: INK.warn });
-  });
-  oy += tl * 18;
-  if (sea) {
-    // Önce deniz savaşı: kaybedilirse ordu batar.
-    const [sl, sc] = oddsLabel(e.sea, T);
-    const sw = text(ctx, fill(T.navalOdds, fleetOf(a), shipsAt(game, m.id)) + " · ", x, r.y + 190 + tl * 18, { size: 13 });
-    text(ctx, sl, x + sw, r.y + 190 + tl * 18, { size: 13, bold: true, color: sc });
-    oy += 18;
+  const me = game.player;
+  const b = m.target ? armyById(game, m.target) : null;
+  if (m.target && !b) return;
+  let sd, e, walls = null, title, sub, theirs, theirOwner, theirGen = null, theirXp = 0, sea = false, sg = false;
+  if (b) {
+    e = forecastField(game, a, b);
+    sd = fieldSides(a, b);
+    sea = !!e.sea;
+    title = fill(T.fieldQ, civName(b.owner, ui.lang));
+    sub = fill(sea ? T.atSea : T.inField, placeName(nearestPlace(b), ui.lang));
+    theirs = b; theirOwner = b.owner; theirGen = b.general; theirXp = b.xp ?? 0;
+  } else {
+    const pl = game.places[m.id];
+    sd = sides(game, a, me, m.id);
+    e = forecast(game, a, me, m.id);
+    walls = sd.walls;
+    sea = sd.sea && shipsAt(game, m.id) > 0;
+    sg = canBesiege(game, a, m.id);
+    title = fill(T.attackQ, placeName(m.id, ui.lang));
+    sub = `${civName(pl.owner, ui.lang, T.free)} · ${T.walls}: ${wallsText(walls, T)}`;
+    theirs = sd.def; theirOwner = pl.owner; theirGen = sd.def.gen;
   }
+  const pow = sea && b ? null : fight(sd.att, sd.def, walls);
+  const ex = sea && b ? { att: [], def: [] } : explain(sd.att, sd.def, walls);
+  const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id)), 552, { size: 12, italic: true }) : [];
+  const modRows = Math.max(ex.att.length, ex.def.length);
+  const r = modalFrame(ctx, cam, boxes, 360 + modRows * 18 + (sea ? 20 : 0) + hint.length * 17, 600);
+  const x = r.x + 22, w = r.w - 44, cw = (w - 16) / 2;
+  text(ctx, title, r.x + r.w / 2, r.y + 38, { title: true, bold: true, size: 20, align: "center" });
+  fit(ctx, sub, r.x + r.w / 2, r.y + 60, w, { italic: true, size: 12, color: INK.soft, align: "center" });
+
+  // İki taraf: sol sen, sağ onlar.
+  const side = (bx, owner, u, label, gen, xp, power, flip) => {
+    const by = r.y + 74;
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillRect(bx, by, cw, 112);
+    ctx.fillStyle = colorOf(owner);
+    ctx.fillRect(bx, by, cw, 4);
+    ctx.strokeStyle = INK.border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, cw - 1, 111);
+    shield(ctx, owner, bx + 10, by + 12, 14);
+    fit(ctx, label, bx + 30, by + 26, cw - 40, { bold: true, size: 14 });
+    const rk = veteranRank(xp);
+    const tag = [gen ? `★ ${gen.name}` : null, rk ? T.ranks[rk] : null].filter(Boolean).join(" · ");
+    if (tag) fit(ctx, tag, bx + 30, by + 43, cw - 40, { italic: true, size: 12, color: INK.warn });
+    // Askerler: türlerine göre küçük figürler (en çok 9).
+    const total = men(u);
+    if (sea && b) {
+      for (let i = 0; i < Math.min(4, fleetOf(u)); i++) galley(ctx, owner, bx + 34 + i * 40, by + 82, 0.62, { flip: flip, troops: men(u) > 0 });
+    } else if (total) {
+      const n = Math.max(1, Math.min(9, Math.round(total / 25)));
+      const figs = [];
+      for (const k of UNITS) for (let i = 0; i < Math.max(u[k] > 0 ? 1 : 0, Math.round(((u[k] ?? 0) / total) * n)); i++) figs.push(k);
+      figs.slice(0, 9).forEach((k, i) => trooper(ctx, k, owner, flip ? bx + cw - 20 - i * 21 : bx + 20 + i * 21, by + 84 - (i % 2) * 4, flip ? 1 : -1, 1.05));
+    } else text(ctx, T.undefended, bx + 12, by + 80, { italic: true, size: 12, color: INK.soft });
+    fit(ctx, sea && b ? `⛵ ${fleetOf(u)} ${T.ships}` : total ? troops(T, u) : "", bx + 10, by + 104, cw - 20, { size: 12 });
+    if (power !== null) text(ctx, fill(T.powerN, Math.round(power)), bx + cw - 10, by + 26, { bold: true, size: 13, align: "right", color: INK.soft });
+  };
+  side(x, me, a, T.yours, a.general, a.xp ?? 0, pow?.attPow ?? null, false);
+  side(x + cw + 16, theirOwner, theirs, b ? T.theirs : T.defenders, theirGen, theirXp, pow?.defPow ?? null, true);
+
+  // Güç çubuğu ve tahmin.
+  let y = r.y + 206;
   const [label, color] = oddsLabel(e.odds, T);
-  const ow = text(ctx, `${T.odds}: `, x, oy, { size: 15 });
-  text(ctx, label, x + ow, oy, { size: 15, bold: true, color });
-  text(ctx, fill(T.expect, e.lost, e.killed), x, oy + 20, { size: 12, italic: true, color: INK.soft });
+  text(ctx, `${T.odds}: `, r.x + r.w / 2 - measure(ctx, label, { bold: true, size: 16 }) / 2, y, { size: 15, align: "right" });
+  text(ctx, label, r.x + r.w / 2 - measure(ctx, label, { bold: true, size: 16 }) / 2, y, { bold: true, size: 16, color });
+  y += 10;
+  if (pow) {
+    const f = pow.attPow / Math.max(1e-6, pow.attPow + pow.defPow);
+    ctx.fillStyle = colorOf(theirOwner);
+    ctx.fillRect(x, y, w, 14);
+    ctx.fillStyle = colorOf(me);
+    ctx.fillRect(x, y, w * f, 14);
+    ctx.strokeStyle = DARK;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 13);
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y - 3);
+    ctx.lineTo(x + w / 2, y + 17);
+    ctx.strokeStyle = GOLD_LIGHT;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    y += 24;
+  } else y += 6;
+
+  // Artılar ve eksiler: her sütun kendi tarafının; yeşil o tarafa yarar, kırmızı zarar.
+  const fmt1 = (key, v) => (key === "engines" ? fill(T.pct, Math.round(v * 100))
+    : key === "siegeGeneral" ? "−" + fill(T.pct, 50) : (v > 1 ? "+" : "−") + fill(T.pct, Math.round(Math.abs(v - 1) * 100)));
+  const good = (key, v) => key === "engines" || key === "siegeGeneral" || v > 1;
+  const list = (bx, mods) => mods.forEach(([key, v], i) => {
+    const ly = y + 12 + i * 18;
+    const s = fmt1(key, v);
+    const sw = text(ctx, s, bx, ly, { bold: true, size: 13, color: good(key, v) ? INK.good : INK.bad });
+    fit(ctx, T.mods[key] ?? key, bx + Math.max(sw + 6, 46), ly, cw - Math.max(sw + 6, 46), { size: 13 });
+  });
+  if (!modRows) text(ctx, T.noMods, r.x + r.w / 2, y + 12, { italic: true, size: 12, color: INK.soft, align: "center" });
+  list(x, ex.att);
+  list(x + cw + 16, ex.def);
+  y += 12 + Math.max(1, modRows) * 18 + 6;
+  if (sea && !b) {
+    const [sl, sc] = oddsLabel(e.sea, T);
+    const sw = text(ctx, fill(T.navalOdds, fleetOf(a), shipsAt(game, m.id)) + " · ", x, y, { size: 13 });
+    text(ctx, sl, x + sw, y, { size: 13, bold: true, color: sc });
+    y += 20;
+  }
+  text(ctx, b && sea ? T.seaFieldHint : fill(T.expect, e.lost, e.killed), r.x + r.w / 2, y, { size: 13, italic: true, color: b && sea ? INK.warn : INK.soft, align: "center" });
+  hint.forEach((l, i) => text(ctx, l, x, y + 22 + i * 17, { size: 12, italic: true, color: INK.warn }));
   if (!sg) {
     twoButtons(ctx, boxes, r, { label: T.attack, act: { do: "attack" } }, { label: T.cancel, act: { do: "close" } });
     return;
   }
-  hint.forEach((l, i) => text(ctx, l, x, oy + 44 + i * 17, { size: 12, italic: true, color: INK.warn }));
   // Üç düğme: saldır, kuşat, vazgeç.
   const bw = (r.w - 56) / 3, by = r.y + r.h - 62;
   button(ctx, boxes, { x: r.x + 20, y: by, w: bw, h: 44, size: 15, main: true, label: T.attack, act: { do: "attack" } });
   button(ctx, boxes, { x: r.x + 28 + bw, y: by, w: bw, h: 44, size: 15, label: T.besiege, act: { do: "besiege" } });
   button(ctx, boxes, { x: r.x + 36 + 2 * bw, y: by, w: bw, h: 44, size: 15, label: T.cancel, act: { do: "close" } });
-}
-
-/** Meydan muharebesi: yerleşimin dışındaki bir düşman ordusuna saldırı. */
-function fieldModal(ctx, cam, game, ui, boxes, T, a, b) {
-  if (!b) return;
-  const e = forecastField(game, a, b);
-  const r = modalFrame(ctx, cam, boxes, 290);
-  const x = r.x + 22;
-  text(ctx, fill(T.fieldQ, civName(b.owner, ui.lang)), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
-  fit(ctx, fill(e.sea ? T.atSea : T.inField, placeName(nearestPlace(b), ui.lang)), x, r.y + 62, r.w - 44, { italic: true, size: 12, color: INK.soft });
-  text(ctx, T.yours, x, r.y + 88, { bold: true, size: 13 });
-  text(ctx, e.sea ? `⛵ ${fleetOf(a)} ${T.ships}` : troops(T, a), x, r.y + 108, { size: 13 });
-  text(ctx, T.theirs, x, r.y + 136, { bold: true, size: 13 });
-  text(ctx, e.sea ? `⛵ ${fleetOf(b)} ${T.ships}` : troops(T, b), x, r.y + 156, { size: 13 });
-  if (b.general) text(ctx, `★ ${fill(T.general, b.general.name)} · ${fill(T.rank, b.general.level)}`, x, r.y + 176, { size: 13, color: INK.warn });
-  const [label, color] = oddsLabel(e.odds, T);
-  const ow = text(ctx, `${T.odds}: `, x, r.y + 204, { size: 15 });
-  text(ctx, label, x + ow, r.y + 204, { size: 15, bold: true, color });
-  text(ctx, e.sea ? T.seaFieldHint : fill(T.expect, e.lost, e.killed), x, r.y + 224, { size: 12, italic: true, color: e.sea ? INK.warn : INK.soft });
-  twoButtons(ctx, boxes, r, { label: T.attack, act: { do: "attack" } }, { label: T.cancel, act: { do: "close" } });
 }
 
 function diploModal(ctx, cam, game, ui, boxes, T) {
@@ -1545,32 +1709,6 @@ function reportModal(ctx, cam, game, ui, boxes, T) {
     if (first) { ctx.fillStyle = color; ctx.fillRect(r.x + 24, y - 9, 6, 6); }
     text(ctx, l, r.x + 40, y, { size: 14, color });
   });
-  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
-}
-
-function battleModal(ctx, cam, game, ui, boxes, T, m) {
-  const e = m.ev;
-  const where = placeName(e.place, ui.lang);
-  const lost = men(e.before.att) - men(e.after.att);
-  // Ek satırlar: medeniyet yıkıldı, general seviye atladı / yetenek kazandı / düştü.
-  const extra = [];
-  if (e.fallen) extra.push([fill(T.evFallen, civName(e.fallen, ui.lang)), INK.ink]);
-  if (e.gen?.up) extra.push([fill(T.genUp, e.gen.name, e.gen.up), INK.warn]);
-  if (e.gen?.trait) extra.push([fill(T.genSkill, T.skills[e.gen.trait][0], T.skills[e.gen.trait][1]), INK.warn]);
-  if (e.genFell) extra.push([fill(T.genFell, e.genFell), INK.bad]);
-  if (e.drowned) extra.unshift([T.drowned, INK.bad]);
-  else if (e.naval?.won && e.naval.sunk) extra.unshift([fill(T.navalWin, e.naval.sunk), INK.good]);
-  // Üstte savaş sahnesi (battle.js): pencere açıldığından beri geçen süreyle oynar.
-  const SH = 180;
-  const r = modalFrame(ctx, cam, boxes, 190 + SH + 16 + extra.length * 22);
-  drawBattle(ctx, { x: r.x + 16, y: r.y + 16, w: r.w - 32, h: SH }, e, performance.now() - (m.t0 ?? 0), e.field ? null : wallsOf(game, e.place));
-  const y0 = r.y + SH + 16;
-  const head = e.field ? (e.won ? T.fieldWon : T.fieldLost) : e.won ? T.won : T.lost;
-  text(ctx, fill(head, where), r.x + r.w / 2, y0 + 44, {
-    title: true, bold: true, size: 19, align: "center", color: e.won ? INK.good : INK.bad,
-  });
-  text(ctx, fill(T.losses, lost), r.x + r.w / 2, y0 + 78, { size: 14, align: "center" });
-  extra.forEach(([s, color], i) => text(ctx, s, r.x + r.w / 2, y0 + 102 + i * 22, { size: 14, bold: true, align: "center", color }));
   oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
 }
 

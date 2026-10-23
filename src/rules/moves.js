@@ -9,7 +9,7 @@
 // emirdir ve ancak menzilden (N.reach.strike) yapılır.
 
 import { CIVS, PLACES, ROADS } from "../data/world.js";
-import { estimate, fight, naval, navalOdds, sinkShips } from "./combat.js";
+import { estimate, fight, naval, navalOdds, sinkShips, veteranMul, veteranRank } from "./combat.js";
 import { byId, roadLine } from "./graph.js";
 import { bestAt, bury, has, learn } from "./generals.js";
 import { N, SHIPS, UNITS, trait } from "./numbers.js";
@@ -294,19 +294,45 @@ function segDist(p, a, b) {
 }
 
 /**
- * Bir saldırının tahmini, generaller dahil: `unit` bir ordu ya da { inf, arch, at, general? }.
+ * Bir yerleşime saldırının iki tarafı, savaşın kendisinin kullandığı gibi: { att, def, walls, ter,
+ * sea }. `unit` bir ordu ya da { inf, arch, at | x, y, general?, xp? }. Tahmin, savaş penceresi
+ * ve savaş bunu kullanır - hepsi aynı sayılar.
+ */
+export function sides(state, unit, civ, id) {
+  const pl = state.places[id];
+  const from = spot(unit);
+  const ter = terrainOf(from, id);
+  return {
+    att: { civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att },
+    def: { ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), terrain: ter.def },
+    walls: wallsOf(state, id), ter, sea: !!from && bySea(from, POS[id]),
+  };
+}
+
+/** İçeridekilerin tecrübe çarpanı: orduların rütbesi, kişi sayısıyla tartılı (garnizon acemi). */
+function insideVet(state, id) {
+  const pl = state.places[id];
+  const own = armiesAt(state, id).filter((a) => a.owner === pl.owner);
+  const total = men(pl) + own.reduce((n, a) => n + men(a), 0);
+  if (!total) return 1;
+  return (men(pl) + own.reduce((n, a) => n + men(a) * veteranMul(a.xp), 0)) / total;
+}
+
+/** Meydan muharebesinin iki tarafı: { att, def }. */
+export const fieldSides = (army, b) => ({
+  att: { civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp) },
+  def: { civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp) },
+});
+
+/**
+ * Bir saldırının tahmini, generaller ve tecrübe dahil: `unit` bir ordu ya da { inf, arch, at, general? }.
  * Arayüz ve bilgisayar bunu kullanır - savaşın kendisiyle aynı sayılar.
  */
 export function forecast(state, unit, civ, id) {
   const pl = state.places[id];
-  const from = spot(unit);
-  const sea = from && bySea(from, POS[id]) ? navalOdds({ civ, ...shipsOnly(unit) }, { civ: pl.owner, ...fleetAt(state, id), fort: fortOf(state, id) }) : "easy";
-  const ter = terrainOf(from, id);
-  const land = estimate(
-    { civ, inf: unit.inf, arch: unit.arch, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null, terrain: ter.att },
-    { ...defenders(state, id), gen: bestAt(state, id, pl.owner), terrain: ter.def },
-    wallsOf(state, id),
-  );
+  const sd = sides(state, unit, civ, id);
+  const sea = sd.sea ? navalOdds({ civ, ...shipsOnly(unit) }, { civ: pl.owner, ...fleetAt(state, id), fort: fortOf(state, id) }) : "easy";
+  const land = estimate(sd.att, sd.def, sd.walls);
   // Denizde batılırsa karaya çıkılmaz: tahmin ikisinin kötüsü.
   const rank = { easy: 0, risky: 1, hopeless: 2 };
   if (rank[sea] > rank[land.odds]) return { ...land, odds: sea, sea };
@@ -376,11 +402,9 @@ export function attack(state, armyId, id, luck = null) {
       };
     }
   }
-  const def = defenders(state, id);
-  const walls = wallsOf(state, id);
-  const defGen = bestAt(state, id, pl.owner);
-  const ter = terrainOf(from, id);
-  const r = fight({ civ: army.owner, ...pickUnits(army), gen: army.general, terrain: ter.att }, { ...def, gen: defGen, terrain: ter.def }, walls, luck ?? rollLuck(state));
+  const sd = sides(state, army, army.owner, id);
+  const def = sd.def, walls = sd.walls, defGen = def.gen;
+  const r = fight(sd.att, def, walls, luck ?? rollLuck(state));
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
     won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },
@@ -393,6 +417,7 @@ export function attack(state, armyId, id, luck = null) {
 
   if (r.attWins) {
     for (const k of UNITS) army[k] = r.att[k];
+    ev.rankUp = gainXp(army, N.veteran.win);
     const loser = pl.owner;
     capture(state, id, army.owner);
     army.at = id;
@@ -412,6 +437,8 @@ export function attack(state, armyId, id, luck = null) {
     bury(state, army.owner, army.general);
     if (army.general) ev.genFell = army.general.name;
     if (defGen) learn(state, defGen, true, pl.owner);
+    // Yerleşimini tutan içerideki ordular tecrübe kazanır.
+    for (const a of armiesAt(state, id)) if (a.owner === pl.owner) a.xp = (a.xp ?? 0) + N.veteran.held;
     for (const a of state.armies) if (a.at === id && a.owner === pl.owner && empty(a)) bury(state, a.owner, a.general);
     state.armies = state.armies.filter((a) => a !== army && !(a.at === id && a.owner === pl.owner && empty(a)));
   }
@@ -437,11 +464,8 @@ export function canStrike(state, army, b) {
 /** Meydan muharebesinin tahmini (karada; denizdeyse deniz savaşının). */
 export function forecastField(state, army, b) {
   if (!isLand(cellOf(b.x, b.y))) return { odds: navalOdds({ civ: army.owner, ...shipsOnly(army) }, { civ: b.owner, ...shipsOnly(b) }), lost: 0, killed: 0, sea: true };
-  return estimate(
-    { civ: army.owner, ...pickUnits(army), gen: army.general ?? null },
-    { civ: b.owner, ...pickUnits(b), gen: b.general ?? null },
-    null,
-  );
+  const sd = fieldSides(army, b);
+  return estimate(sd.att, sd.def, null);
 }
 
 /** Meydan muharebesi. Dönen olay: { type: "battle", field: true, place: en yakın yer, at: { x, y }, ... }. */
@@ -466,7 +490,8 @@ export function strike(state, armyId, targetId, luck = null) {
     ev.drowned = !won;
     ev.after = { att: won ? pickUnits(army) : pickUnits({}), def: won ? pickUnits({}) : pickUnits(b) };
   } else {
-    const r = fight({ civ: army.owner, ...pickUnits(army), gen: army.general }, { civ: b.owner, ...pickUnits(b), gen: b.general }, null, luck ?? rollLuck(state));
+    const sd = fieldSides(army, b);
+    const r = fight(sd.att, sd.def, null, luck ?? rollLuck(state));
     won = r.attWins;
     for (const k of UNITS) (won ? army : b)[k] = (won ? r.att : r.def)[k];
     ev.after = { att: r.att, def: r.def };
@@ -477,6 +502,8 @@ export function strike(state, armyId, targetId, luck = null) {
   army.route = [];
   const [winner, loser] = won ? [army, b] : [b, army];
   countWin(state, winner.owner);
+  const up = gainXp(winner, N.veteran.win);
+  if (won) ev.rankUp = up;
   bury(state, loser.owner, loser.general);
   if (loser.general) ev.genFell = loser.general.name;
   if (winner.general) {
@@ -488,6 +515,14 @@ export function strike(state, armyId, targetId, luck = null) {
 }
 
 const pickUnits = (u) => Object.fromEntries(UNITS.map((k) => [k, u[k] ?? 0]));
+
+/** Tecrübe ekler; rütbe atladıysa yeni rütbeyi, atlamadıysa 0 döndürür (olay ekranda gösterir). */
+function gainXp(army, n) {
+  const before = veteranRank(army.xp);
+  army.xp = (army.xp ?? 0) + n;
+  const after = veteranRank(army.xp);
+  return after > before ? after : 0;
+}
 
 /** Bir yerin gemilerini her türden `left`te kalan kadara indirir: önce limandakiler, sonra ordularınkiler batar. */
 function sinkAt(state, id, left) {

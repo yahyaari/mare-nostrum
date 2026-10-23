@@ -72,10 +72,17 @@ window.PT = (() => {
     M.lookAt(a.x, a.y, 2.4);
     // Yürüyen ordunun sancağına basılmaz: yürüyüşü bitsin (sancağı yeniden basılabilir olsun).
     for (let i = 0; i < 900 && !M.tokens().some((x) => x.army === armyId); i++) await frame();
+    // Kamera kayarken basılan yer kayar (bir gün alttaki Şehirler düğmesine denk geldi, açılan
+    // pencere turu bitirmeyi engelledi): durmasını bekle, sancağın yerini sonra oku.
+    for (let i = 0; i < 120 && M.gliding; i++) await frame();
+    M.lookAt(a.x, a.y, 2.4);
+    await frame();
     const t = M.tokens().find((x) => x.army === armyId);
     if (!t) return false;
+    const was = M.ui.modal;
     M.tap(t.x + t.w / 2, t.y + t.h / 2);
     await frame();
+    if (M.ui.modal && M.ui.modal !== was) { stats.missed.push("ordu yerine pencere açıldı: " + M.ui.modal.kind); await closeAll(); }
     return M.ui.sel?.kind === "army" && M.ui.sel.id === armyId;
   }
 
@@ -177,7 +184,7 @@ window.PT = (() => {
         if (await press((x) => x.do === "attack", "saldır düğmesi")) {
           stats.attacks++;
           await skip();
-          if (M.ui.modal?.kind === "battle" && M.ui.modal.ev.won) stats.won++;
+          if (M.ui.fight?.ev.won) stats.won++;
           await closeAll();
         }
         continue;
@@ -213,7 +220,7 @@ window.PT = (() => {
       await closeAll();
     }
 
-    await skip();
+    await closeAll();
     await deselect();
     const t0 = performance.now();
     await press((a) => a.do === "endTurn", "turu bitir düğmesi");

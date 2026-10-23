@@ -18,6 +18,7 @@ import { resolve as answer } from "./rules/events.js";
 import { appoint } from "./rules/generals.js";
 import { accept as acceptMission, check as checkMissions, decline as declineMission } from "./rules/missions.js";
 import { blockaded } from "./rules/state.js";
+import { veteranRank } from "./rules/combat.js";
 import { N } from "./rules/numbers.js";
 import { checkOver, endTurn } from "./rules/turn.js";
 import { TEXT, fill } from "./text.js";
@@ -33,7 +34,7 @@ import { SCENE_MS } from "./view/battle.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { CARD_H, MODAL_MS, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
+import { CARD_H, FIGHT_MS, MODAL_MS, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
 import { TOP, chipRise } from "./view/hud.js";
 import { SIZE, project } from "./geo.js";
 import { trait } from "./rules/numbers.js";
@@ -147,7 +148,10 @@ function redraw() {
     drawOverlay(ctx, cam, view.fx);
     // Savaş sahnesi sürerken ve pencere açılırken her kare çizilir.
     const now = performance.now();
-    const scene = ui.modal?.kind === "battle" && now - (ui.modal.t0 ?? 0) < SCENE_MS;
+    // Haritadaki savaş: sahne bitince sıradaki pencere (oyun bittiyse son) açılır, şerit kendiliğinden kaybolur.
+    if (ui.fight && !ui.fight.done && now - ui.fight.t0 > SCENE_MS) { ui.fight.done = true; ui.modal ??= next(); }
+    if (ui.fight && now - ui.fight.t0 > FIGHT_MS) ui.fight = null;
+    const scene = !!ui.fight;
     const opening = ui.modal && now - ui.modalAt < MODAL_MS;
     const sliding = ui.screen === "start" && now - (ui.pickAt ?? 0) < 320;
     if (anim.busy() || gliding || scene || opening || sliding) redraw();
@@ -207,14 +211,17 @@ function settle() {
   }
   if (pending) {
     if (pending.kind === "battle") {
-      // Savaş sahnesi: sesler sahneyle aynı anda (oklar, çarpışma, sonuç).
-      pending.t0 = performance.now();
+      // Savaş haritada oynar (pencere değil); sesler sahneyle aynı anda (oklar, çarpışma, sonuç).
       const ev = pending.ev;
+      ui.fight = { ev, t0: performance.now() };
       if (!ev.drowned && ((ev.before.att.arch ?? 0) + (ev.before.def.arch ?? 0)) > 0) setTimeout(sound.volley, 250);
       setTimeout(sound.clash, ev.drowned ? 1500 : 1450);
       setTimeout(ev.won ? sound.victory : sound.defeat, SCENE_MS - 300);
+      pending = null;
+      redraw();
+      return;
     }
-    else if (pending.kind === "over") (game?.over?.result === "won" ? sound.victory : sound.defeat)();
+    if (pending.kind === "over") (game?.over?.result === "won" ? sound.victory : sound.defeat)();
     else if (pending.kind === "decide" || pending.kind === "mission") sound.scroll();
     ui.modal = pending;
     pending = null;
@@ -270,7 +277,7 @@ function mapView() {
     .filter((id) => game.places[id].loyalty < N.loyalty.unrest).map((id) => [id, game.places[id].loyalty]));
   view.threats = Object.fromEntries(placesOf(game, game.player).map((id) => [id, menace(game, id)]).filter(([, n]) => n > 0));
   view.armies = game.armies.map((a) => ({
-    id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0, ships: fleetOf(a),
+    id: a.id, owner: a.owner, at: a.at, men: men(a), gen: a.general?.level ?? 0, rank: veteranRank(a.xp), ships: fleetOf(a),
     selected: ui.sel?.kind === "army" && ui.sel.id === a.id,
     spent: a.owner === game.player && a.mp <= 0.05,
     // Yerleşimin dışındaki ordu bulunduğu yerde: denizdeyse filo, kuşatıyorsa kampında.
@@ -494,6 +501,9 @@ function dispatch(act) {
       break;
     case "close":
       ui.modal = next();
+      break;
+    case "fightOff":
+      ui.fight = null;
       break;
     case "cardTab":
       ui.cardTab = act.tab;
@@ -1007,7 +1017,11 @@ function command(target) {
  * (saldırmaya gitti): onun sancağı şehrin maketinin üstüne biner, o yüzden ordu önce gelir.
  */
 function tokenAt(x, y) {
-  const t = [...tokens].reverse().find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
+  // Üst üste binen jetonlardan (denizde yan yana iki filo) ortası basılan yere en yakın olanı;
+  // eşitse üstteki. (Hep üstteki seçilince alttakinin ortasına basmak öbürünü seçiyordu.)
+  const off = (b) => Math.hypot(b.x + b.w / 2 - x, b.y + b.h / 2 - y);
+  const t = [...tokens].reverse().filter((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)
+    .sort((a, b) => off(a) - off(b))[0];
   if (!t) return t;
   const pl = nearest(x, y);
   // Sahadaki ordu (bir şehrin kapısında duruyor olabilir) önce gelir: şehir ancak tam üstüne basılınca.

@@ -868,3 +868,31 @@ export function ship(ctx, x, y, z = 1) {
   ctx.stroke();
   ctx.restore();
 }
+
+/**
+ * Rütbe şeritleri: tecrübeli ordunun üst üste altın V'leri (1 Kıdemli, 2 Usta, 3 Seçkin).
+ * (x, y) en üstteki V'nin sol üstü, `s` genişliği.
+ */
+export function chevrons(ctx, n, x, y, s = 8) {
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (let i = 0; i < n; i++) {
+    const cy = y + i * s * 0.42;
+    const v = () => {
+      ctx.beginPath();
+      ctx.moveTo(x, cy);
+      ctx.lineTo(x + s / 2, cy + s * 0.42);
+      ctx.lineTo(x + s, cy);
+    };
+    v();
+    ctx.strokeStyle = DARK;
+    ctx.lineWidth = s * 0.42;
+    ctx.stroke();
+    v();
+    ctx.strokeStyle = "#e3b23c";
+    ctx.lineWidth = s * 0.2;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
