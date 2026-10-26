@@ -22,6 +22,7 @@ import { POS, cellOf, centre, dist, isLand, isMountain, placeAtCell } from "../r
 import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
 import { banditsOf } from "../rules/bandits.js";
 import { campsOf } from "../rules/barbarians.js";
+import { restPlace } from "../rules/refill.js";
 import { dealLeft, dealOf, moodLevel, moodOf, persona } from "../rules/leaders.js";
 import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turnsLeft as techTurns } from "../rules/research.js";
@@ -214,7 +215,8 @@ function civPanel(ctx, ui, boxes, T, civ, area) {
   const st = startTroops(civ.id);
   const army = fill(T.startArmy, troops(T, { ...st, cav: 0, siege: 0 }));
   // Alttaki sabit kısım (gezinme, zorluk, oyuncular, başla, devam) ve metin; görsel kalan yeri alır.
-  const bottomH = 40 + 14 + 36 + 14 + 36 + 14 + 48 + (ui.saved ? 54 : 0) + 18;
+  const anySlot = Object.keys(ui.slots ?? {}).length > 0;
+  const bottomH = 40 + 14 + 36 + 14 + 36 + 14 + 48 + (ui.saved || anySlot ? 54 : 0) + 18;
   const textH = 44 + 20 + 18 + desc.length * 19 + 14 + 44 + 26 + landRows.length * 16 + 16 + 10;
   const illH = Math.round(Math.max(110, Math.min(300, area.h * 0.32, area.h - 20 - bottomH - textH)));
   const h = 20 + illH + textH + bottomH;
@@ -289,10 +291,12 @@ function civPanel(ctx, ui, boxes, T, civ, area) {
     label: last ? `${T.start} · ${civ.name[ui.lang]}` : fill(T.pickPlayer, picks.length + 1, civ.name[ui.lang]),
     act: { do: last ? "start" : "pickPlayer" },
   });
+  const loadW = anySlot ? 110 : 0;
   if (ui.saved) {
     const c = CIVS.find((cc) => cc.id === ui.saved.player);
-    button(ctx, boxes, { x, y: by + 56, w, h: 44, size: 14, label: `${T.cont} · ${fill(T.contInfo, c.name[ui.lang], ui.saved.turn)}`, act: { do: "continue" } });
+    button(ctx, boxes, { x, y: by + 56, w: w - (loadW ? loadW + 8 : 0), h: 44, size: 14, label: `${T.cont} · ${fill(T.contInfo, c.name[ui.lang], ui.saved.turn)}`, act: { do: "continue" } });
   }
+  if (anySlot) button(ctx, boxes, { x: ui.saved ? x + w - loadW : x, y: by + 56, w: ui.saved ? loadW : w, h: 44, size: 14, label: T.loadBtn, act: { do: "slots", mode: "load" } });
 }
 
 /**
@@ -421,7 +425,7 @@ const cardSig = (u) => [...UNITS, ...SHIPS].map((k) => u[k] ?? 0).join(",");
 export const picksOf = (ui, of, u) => (ui.cards?.of === of && ui.cards.sig === cardSig(u) ? ui.cards.picks : new Set());
 
 /** Kartın yüzü. `act` yoksa (yabancı ordu) seçilemez ama ipucu yine çıkar. */
-function unitCard(ctx, boxes, T, c, owner, x, y, w, h, on, act) {
+function unitCard(ctx, boxes, T, c, owner, x, y, w, h, on, act, rest = false) {
   const hot = !!act && over(x, y, w, h);
   const lift = on ? 4 : hot ? 2 : 0;
   const k = w / 52;
@@ -443,7 +447,9 @@ function unitCard(ctx, boxes, T, c, owner, x, y, w, h, on, act) {
   if (boat) text(ctx, T.shipNames[c.type], x + w / 2, sy + strip / 2 + 1, { bold: true, size: Math.max(9, 10 * k), color: CREAM, align: "center", base: "middle" });
   else {
     const full = c.men >= N.company;
-    text(ctx, String(c.men), x + 5, sy + strip / 2 + 1, { bold: true, size: Math.max(10, 12 * k), color: full ? CREAM : GOLD_LIGHT, base: "middle" });
+    const nw = text(ctx, String(c.men), x + 5, sy + strip / 2 + 1, { bold: true, size: Math.max(10, 12 * k), color: full ? CREAM : GOLD_LIGHT, base: "middle" });
+    // Dinleniyor: her tur toparlanır (refill.js).
+    if (!full && rest) text(ctx, "▲", x + 6 + nw, sy + strip / 2 + 1, { bold: true, size: Math.max(7, 8 * k), color: "#8fd88f", base: "middle" });
     const bx = x + w * 0.45, bw = w * 0.55 - 5, by = sy + strip / 2 - 2;
     ctx.fillStyle = "rgba(243,231,201,0.18)";
     ctx.fillRect(bx, by, bw, 4);
@@ -477,7 +483,7 @@ function unitCard(ctx, boxes, T, c, owner, x, y, w, h, on, act) {
   const name = boat ? T.shipNames[c.type] : unitTitle(T, c.type, owner);
   const tip = boat
     ? [name, shipLine(c.type, T), T.shipTips[c.type], act ? T.cardPick : null]
-    : [name, fill(T.cardMen, c.men, N.company), unitTip(T, c.type, owner), act ? T.cardPick : null];
+    : [name, fill(T.cardMen, c.men, N.company), unitTip(T, c.type, owner), rest && c.men < N.company ? [fill(T.cardRest, N.refill.men), "good"] : null, act ? T.cardPick : null];
   boxes.push({ x, y: top, w, h: h + lift, act, tip, want: act });
 }
 
@@ -502,7 +508,7 @@ function cardGrid(ctx, boxes, T, ui, u, owner, of, r, mine) {
   if (!cards.length) text(ctx, T.noTroops, r.x, r.y + 24, { italic: true, size: 13, color: INK.soft });
   cards.slice(page * per, page * per + per).forEach((c, j) => {
     const i = page * per + j;
-    unitCard(ctx, boxes, T, c, owner, r.x + (j % cols) * (cw + gap), r.y + 4 + Math.floor(j / cols) * (ch + gap), cw, ch, picks.has(i), mine ? { do: "pickCard", of, i } : null);
+    unitCard(ctx, boxes, T, c, owner, r.x + (j % cols) * (cw + gap), r.y + 4 + Math.floor(j / cols) * (ch + gap), cw, ch, picks.has(i), mine ? { do: "pickCard", of, i } : null, !!r.rest);
   });
   return { pages, page, count: cards.length, picked: picks.size };
 }
@@ -621,7 +627,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
     lines(ctx, T.buildingsHint, xc, ly + 26, C, { size: 11, italic: true, color: INK.soft }, 4, 14);
   }
   else if (tab === "garrison") {
-    const g = cardGrid(ctx, boxes, T, ui, pl, pl.owner, of, { x, y: top + 26, w: BC, h: y + H - 12 - (top + 26) }, true);
+    const g = cardGrid(ctx, boxes, T, ui, pl, pl.owner, of, { x, y: top + 26, w: BC, h: y + H - 12 - (top + 26), rest: !!restPlace(game, pl, id) }, true);
     gridHead(ctx, boxes, T, pl, of, T.garrison, x, top, BC, g, true);
   } else if (tab === "troops") recruitBlock(ctx, game, boxes, T, id, x, top, BC, y + H - 12 - (top + 26));
   else if (tab === "port") {
@@ -1150,7 +1156,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
   const gy = y + 18;
   const bottom = mine ? y + H - 56 : y + H - 12;
-  const grid = cardGrid(ctx, boxes, T, ui, a, a.owner, of, { x, y: gy + 26, w: BC, h: bottom - gy - 26 }, mine);
+  const grid = cardGrid(ctx, boxes, T, ui, a, a.owner, of, { x, y: gy + 26, w: BC, h: bottom - gy - 26, rest: mine && !!restPlace(game, a) }, mine);
   gridHead(ctx, boxes, T, a, of, T.units, x, gy, BC, grid, mine);
   if (mine) {
     const n = grid.picked;
@@ -1779,7 +1785,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const m = ui.modal;
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
-    menu: menuModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
+    menu: menuModal, slots: slotsModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
     armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
@@ -2112,6 +2118,7 @@ export function eventLines(game, lang) {
     }
     if (e.type === "storm" && e.civ === me) out.push([fill(T.evStorm, e.lost, e.sunk), "bad"]);
     if (e.type === "winter" && e.civ === me) out.push([fill(T.evWinter, e.lost), "bad"]);
+    if (e.type === "refill" && e.civ === me) out.push([fill(T.evRefill, e.men), "good"]);
     if (e.type === "missionNew") out.push([fill(T.evMissionNew, missionText(game, e.mission, lang).title), null]);
     if (e.type === "mission") out.push([fill(e.ok ? T.evMissionOk : T.evMissionFail, missionText(game, e.mission, lang).title), e.ok ? "good" : "bad"]);
     if (e.type === "siege" && (e.by === me || e.defender === me)) out.push([fill(T.evSiege, name(e.by), placeName(e.place, lang)), e.defender === me ? "bad" : null]);
@@ -2278,26 +2285,66 @@ function wondersTab(ctx, game, ui, boxes, T, id, x, top, w, h) {
 }
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
-  const r = modalFrame(ctx, cam, boxes, 544, 360);
+  const r = modalFrame(ctx, cam, boxes, 596, 360);
   text(ctx, T.menu, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   const x = r.x + 20, w = r.w - 40;
   button(ctx, boxes, { x, y: r.y + 62, w, h: 42, label: T.resume, main: true, size: 15, act: { do: "close" } });
   button(ctx, boxes, { x, y: r.y + 114, w, h: 42, label: T.help, size: 15, act: { do: "open", modal: "help" } });
   button(ctx, boxes, { x, y: r.y + 166, w, h: 42, label: T.chronicle, size: 15, act: { do: "open", modal: "chronicle" } });
-  button(ctx, boxes, { x, y: r.y + 218, w, h: 42, label: T.newGame, size: 15, act: { do: "askNew" } });
-  text(ctx, T.language, x, r.y + 300, { bold: true, size: 14 });
+  const hw = (w - 8) / 2;
+  button(ctx, boxes, { x, y: r.y + 218, w: hw, h: 42, label: T.saveBtn, size: 15, act: { do: "slots", mode: "save" } });
+  button(ctx, boxes, { x: x + hw + 8, y: r.y + 218, w: hw, h: 42, label: T.loadBtn, size: 15, act: { do: "slots", mode: "load" } });
+  button(ctx, boxes, { x, y: r.y + 270, w, h: 42, label: T.newGame, size: 15, act: { do: "askNew" } });
+  text(ctx, T.language, x, r.y + 352, { bold: true, size: 14 });
   ["en", "tr"].forEach((l, i) => {
-    button(ctx, boxes, { x: x + w - 2 * 56 + i * 56, y: r.y + 278, w: 50, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
+    button(ctx, boxes, { x: x + w - 2 * 56 + i * 56, y: r.y + 330, w: 50, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
   });
   // Ses ve müzik: ayrı ayrı aç-kapa.
   [["sound", T.soundLabel, soundEnabled()], ["music", T.musicLabel, musicEnabled()], ["fog", T.fogLabel, ui.fog], ["coachSet", T.tipsLabel, !ui.coach?.off]].forEach(([k, label, on], j) => {
-    const yy = r.y + 322 + j * 44;
+    const yy = r.y + 374 + j * 44;
     text(ctx, label, x, yy + 22, { bold: true, size: 14 });
     [[true, T.sndOn], [false, T.sndOff]].forEach(([v, l], i) => {
       button(ctx, boxes, { x: x + w - 2 * 74 + i * 74, y: yy, w: 68, h: 34, label: l, main: on === v, size: 13, act: { do: k, on: v } });
     });
   });
   text(ctx, "Natural Earth · github.com/yahyaari/mare-nostrum", r.x + r.w / 2, r.y + r.h - 22, { size: 10, color: INK.faint, align: "center" });
+}
+
+/**
+ * Kaydet / Yükle (kayıt yuvaları, main.js): her yuva bir satır - medeniyetin rengi ve adı, tur, ne zaman
+ * kaydedildiği; sağda Kaydet ya da Yükle. Yüklerken en üstte otomatik kayıt da var.
+ */
+function slotsModal(ctx, cam, game, ui, boxes, T, m) {
+  const load = m.mode === "load";
+  const rows = [...(load && ui.saved ? [{ key: "auto", meta: ui.saved }] : []), ...Array.from({ length: m.count }, (_, i) => ({ key: i + 1, meta: ui.slots?.[i + 1] ?? null }))];
+  const r = modalFrame(ctx, cam, boxes, 92 + rows.length * 62 + 66, 460);
+  text(ctx, load ? T.loadTitle : T.saveTitle, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  const x = r.x + 22, w = r.w - 44;
+  rows.forEach((row, i) => {
+    const y = r.y + 64 + i * 62, s = row.meta;
+    ctx.fillStyle = "rgba(120,95,60,0.08)";
+    roundRect(ctx, x, y, w, 54, 4);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(90,70,48,0.25)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Medeniyetin rengi; boş yuvada soluk halka.
+    ctx.beginPath();
+    ctx.arc(x + 24, y + 27, 12, 0, TAU);
+    if (s) { ctx.fillStyle = colorOf(s.player); ctx.fill(); }
+    ctx.strokeStyle = s ? GOLD_DARK : "rgba(90,70,48,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    const label = row.key === "auto" ? T.autoSlot : fill(T.slotN, row.key);
+    text(ctx, label, x + 46, y + 22, { bold: true, size: 14 });
+    const sub = !s ? T.slotEmpty
+      : fill(T.contInfo, civName(s.player, ui.lang), s.turn) + (s.players > 1 ? ` · ${fill(T.playersN, s.players)}` : "")
+        + (s.at ? " · " + new Date(s.at).toLocaleString(ui.lang === "tr" ? "tr-TR" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
+    fit(ctx, sub, x + 46, y + 41, w - 46 - 112, { italic: true, size: 12, color: s ? INK.soft : INK.faint });
+    const act = load ? { do: "continue", slot: row.key === "auto" ? null : row.key } : { do: "saveSlot", n: row.key };
+    button(ctx, boxes, { x: x + w - 100, y: y + 10, w: 92, h: 34, label: load ? T.loadBtn : T.saveBtn, main: !load || !!s, size: 14, off: load && !s, act });
+  });
+  button(ctx, boxes, { x: r.x + r.w / 2 - 80, y: r.y + r.h - 54, w: 160, h: 38, label: T.closeBtn, size: 14, act: { do: "close" } });
 }
 
 /**

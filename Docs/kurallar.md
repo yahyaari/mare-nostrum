@@ -232,6 +232,22 @@ bölüğü 10 asker; Asker bas sekmesinde yıldızlı beşinci kart, medeniyet s
   çıkar; askersiz filo sadece denizde gezer ve limanlara girer. Çanakkale ve İstanbul boğazları
   açık (Bizans'ın yolu orada feribot).
 
+### 6c. Dinlenme
+
+Kullanıcının istediği "olmazsa olmazlar"ın ikincisi (26.10; Total War'daki gibi). `src/rules/refill.js`.
+
+- Savaşta eriyen bölük (kartı 10'dan az; kayıplar türlere dağıldığı için her türde en çok bir yarım
+  bölük olur) **evde dinlenince toparlanır**: kendi yerleşiminin garnizonu, ya da kendi yerleşiminde,
+  kapısında veya kendi toprağında bu tur hiç yürümemiş, savaşmamış ordu (hareket puanı dolu, kuşatmıyor).
+- Her türün yarım bölüğü turda **3 asker** kazanır, bölüğü tamamlayana kadar. Askerler o yerin
+  nüfusundan gelir; yerde en az 20 kişi kalır.
+- Kuşatılan yerde ve ambar boşken (yiyecek 1'den az) toparlanma yok. Barbarlar toparlanmaz.
+- Yok olan bölük geri gelmez - yenisi basılır.
+- Tur sonu hesabında, üretimden sonra. Oyuncuya haber: "Dinlenen bölükler toparlandı: +12 asker".
+- Kartta: dinlenen yarım bölüğün sayısının yanında yeşil ▲, ipucunda "Dinleniyor: turda +3 asker".
+  Ordu bu tur yürürse ok kaybolur.
+- Denge (70 oyun, zaferler kapalı): ilk düşüş 49 -> 48, ayakta kalan toplam 327 -> 332 (gürültü payında).
+
 ---
 
 ## 7. Savaş (otomatik)
@@ -520,6 +536,11 @@ oyundan çıkar.
 
 ## 12. Ekran
 
+- **Kayıt yuvaları** (kullanıcının "olmazsa olmazlar"ının üçüncüsü, 26.10): otomatik kaydın (her tur) yanında
+  üç yuva. Menüde *Kaydet* ve *Yükle*; açılış ekranında *Devam et*in yanında *Yükle*. Her yuva bir satır:
+  medeniyetin rengi, adı, turu, kaydedildiği gün ve saat (birkaç oyunculuysa kaç oyuncu). Yeni oyun yalnız
+  otomatik kaydı siler, yuvalardakiler kalır; yuvadan yüklenen oyun otomatik kayda da geçer. Yuvanın özeti
+  ayrı anahtarda (`mn.slots`), oyun `mn.slot.N`te (main.js).
 - **Üst bant:** Tur sayısı, para, silah, yiyecek (her birinin yanında turluk + / −).
 - **Bina kartları** (kullanıcı 26.10: "tarla 1->2 yazıyor yanında bir buton, sıkıcı; Total War'da görsel
   vardı, sağ üst köşede seviyesi"): şehir, liman ve yapılar sekmelerinde her yapı bir kart - üstte

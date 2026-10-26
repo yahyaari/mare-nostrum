@@ -69,9 +69,33 @@ function save() {
   try { localStorage.setItem(SAVE, JSON.stringify(game)); } catch { /* bkz. yukarı */ }
 }
 
-function load() {
+// Kayıt yuvaları (kullanıcının istediği "olmazsa olmazlar"ın üçüncüsü, 26.10): otomatik kaydın yanında
+// üç yuva; yeni oyun yuvalardakini silmez. Her yuvanın özeti (medeniyet, tur, saat) ayrı bir anahtarda,
+// liste her açılışta bütün oyunu okumasın.
+const SLOTS = 3;
+const slotKey = (n) => `mn.slot.${n}`;
+
+function slotMeta() {
   try {
-    const s = JSON.parse(localStorage.getItem(SAVE) ?? "null");
+    const m = JSON.parse(localStorage.getItem("mn.slots") ?? "{}");
+    return Object.fromEntries(Object.entries(m).filter(([n]) => localStorage.getItem(slotKey(n))));
+  } catch { return {}; }
+}
+
+function saveSlot(n) {
+  if (!game) return false;
+  try {
+    localStorage.setItem(slotKey(n), JSON.stringify(game));
+    const m = slotMeta();
+    m[n] = { player: game.player, turn: game.turn, at: Date.now(), players: humansOf(game).length };
+    localStorage.setItem("mn.slots", JSON.stringify(m));
+    return true;
+  } catch { return false; }
+}
+
+function load(key = SAVE) {
+  try {
+    const s = JSON.parse(localStorage.getItem(key) ?? "null");
     if (s && s.places && s.civs) migrate(s);
     if (s && s.version === VERSION && s.places && s.civs) return s;
   } catch { /* bozuk kayıt: yokmuş gibi */ }
@@ -508,9 +532,24 @@ function dispatch(act) {
       save();
       break;
     }
+    case "slots":
+      // Kaydet / Yükle penceresi: yuvaların özeti.
+      ui.slots = slotMeta();
+      ui.modal = { kind: "slots", mode: act.mode, count: SLOTS };
+      break;
+    case "saveSlot":
+      if (saveSlot(act.n)) {
+        sound.click();
+        ui.slots = slotMeta();
+        toast(fill(T().savedTo, act.n));
+      } else toast(T().saveFail);
+      break;
     case "continue":
-      game = load();
-      if (!game) { ui.saved = null; break; }
+      // Otomatik kayıt ya da bir yuva; yüklenen oyun otomatik kayda da geçer ("Devam et" onu açar).
+      game = load(act.slot ? slotKey(act.slot) : SAVE);
+      if (!game) { if (!act.slot) ui.saved = null; break; }
+      if (act.slot) save();
+      ui.saved = { player: game.player, turn: game.turn };
       ui.screen = "game";
       cam.pad = GAME_PAD;
       ui.sel = null;
@@ -1412,6 +1451,7 @@ window.addEventListener("resize", fit);
     ui.saved = { player: s.player, turn: s.turn };
     ui.pick = s.player;
   }
+  ui.slots = slotMeta();
 }
 fit();
 // Açılışta harita bütün Akdeniz'den seçili medeniyetin topraklarına süzülür.

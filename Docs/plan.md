@@ -88,7 +88,10 @@ barbar kamplarını seçti.
 Kullanıcı (26.10) "strateji oyunlarının olmazsa olmazları" sordu; önerdiğim beş iş için "hepsini sırayla
 yapalım": (1) medeniyete özel birlikler, (2) bölüklerin dinlenince dolması, (3) kayıt yuvaları, (4) oyun
 sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) ticaret yolları.
-15. **Medeniyete özel birlikler** (bu adım): kurallar.md 5b. `N.unique`, `elite` yuvası, kayıt 19.
+15. **Medeniyete özel birlikler** (0bc3fee): kurallar.md 5b. `N.unique`, `elite` yuvası, kayıt 19.
+16. **Dinlenme**: kurallar.md 6c, `src/rules/refill.js`. Kartta yeşil ▲.
+17. **Kayıt yuvaları**: kurallar.md bölüm 12 (Ekran). Üç yuva + otomatik kayıt; menüde Kaydet / Yükle.
+    (16 ve 17 aynı commit'te.)
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 

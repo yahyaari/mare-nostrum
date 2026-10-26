@@ -923,6 +923,53 @@ section("Medeniyete özel birlikler (bölüm 5b)");
   check("eski kayıt: özel birlik yuvası eklenir", old.version === S.VERSION && Object.values(old.places).every((p) => p.elite === 0) && old.armies.every((x) => x.elite === 0));
 }
 
+section("Dinlenme (bölüm 6c)");
+
+{
+  const RF = await import("../src/rules/refill.js");
+  const { TEXT } = await import("../src/text.js");
+  for (const lang of ["en", "tr"]) check(`${lang}: dinlenme yazıları`, TEXT[lang].cardRest && TEXT[lang].evRefill);
+  for (const lang of ["en", "tr"]) check(`${lang}: kayıt yuvası yazıları`, ["saveBtn", "loadBtn", "saveTitle", "loadTitle", "autoSlot", "slotN", "slotEmpty", "savedTo", "saveFail", "closeBtn", "playersN"].every((k) => TEXT[lang][k]));
+  // Garnizon: yarım bölük turda 3 asker kazanır, nüfustan.
+  const s = S.newGame("rome", 7);
+  s.places.rome.inf = 37; s.places.rome.arch = 20; s.civs.rome.food = 20;
+  const pop = s.places.rome.pop;
+  const ev = [];
+  RF.replenish(s, ev);
+  check("garnizonun yarım bölüğü turda 3 asker kazanır, tam bölük değişmez", s.places.rome.inf === 40 && s.places.rome.arch === 20 && s.places.rome.pop === pop - 3);
+  check("oyuncuya haber: kaç asker toparlandı", ev.some((e) => e.type === "refill" && e.civ === "rome" && e.men === 3));
+  s.places.rome.inf = 31;
+  RF.replenish(s, []);
+  check("bölüğü tamamlayana kadar, fazlası değil", s.places.rome.inf === 34);
+  // Ordu: kendi şehrinde, yürümeden bekleyen toparlanır; yürüyen ya da yabancı toprakta olan toparlanmaz.
+  const a = raise(s, "rome", { inf: 40 });
+  a.inf = 25;
+  a.mp = M.mpMax(a);
+  RF.replenish(s, []);
+  check("şehrinde dinlenen ordu toparlanır", a.inf === 28);
+  a.mp = 1;
+  RF.replenish(s, []);
+  check("bu tur yürüyen ordu toparlanmaz", a.inf === 28);
+  a.mp = M.mpMax(a);
+  Object.assign(a, { at: null, ...POS.massalia });
+  RF.replenish(s, []);
+  check("yabancı toprakta dinlenme yok", a.inf === 28 && RF.restPlace(s, a) === null);
+  // Ambar boşsa ya da şehir kuşatılmışsa yok; yerin en az 20 kişisi kalır.
+  const t = S.newGame("rome", 7);
+  t.places.rome.inf = 37; t.civs.rome.food = 0;
+  RF.replenish(t, []);
+  check("ambar boşken dinlenme yok", t.places.rome.inf === 37);
+  t.civs.rome.food = 20; t.places.rome.pop = N.refill.keep + 1;
+  RF.replenish(t, []);
+  check("şehirde en az 20 kişi kalır", t.places.rome.inf === 38 && t.places.rome.pop === N.refill.keep);
+  // Barbar kampları dinlenmez (sahipsiz).
+  const u = S.newGame("rome", 7);
+  const camp = u.armies.find((x) => x.camp);
+  camp.inf = 23;
+  RF.replenish(u, []);
+  check("barbar kampı toparlanmaz", camp.inf === 23);
+}
+
 // ---------------------------------------------------------------------------------------------
 section("Dağlar ve geri çekilme (bölüm 7, 22b)");
 
@@ -2388,6 +2435,7 @@ const C2 = await import("../src/rules/combat.js");
   w.civs.rome.food = 1000; // kıtlık karışmasın
   const wa = S.formArmy(w, "rome", 10, 0);
   wa.inf = 200;
+  wa.mp = 0; // bu tur yürüdü: dinlenme (refill.js) karışmasın
   const evs = T.endTurn(w);
   check("kış: ordu %3 erir", S.armyById(w, wa.id)?.inf === 194);
   check("kış yıpratması raporda", evs.some((e) => e.type === "winter" && e.lost >= 6));

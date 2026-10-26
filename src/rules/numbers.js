@@ -62,6 +62,9 @@ export const N = {
     saka: { as: "arch", melee: 0.8, volley: 1, charge: 0.6, cost: { money: 3, weapons: 2, food: 1 } }, // atlı okçu
   },
   eliteBarracks: 2,
+  // Dinlenme (bölüm 6c, refill.js): kendi toprağında yürümeyen ordunun ve garnizonun her yarım bölüğü
+  // turda `men` asker kazanır, yerin nüfusundan (en az `keep` kişi kalır).
+  refill: { men: 3, keep: 20 },
   cavUpkeep: 1, // süvari bölüğü turda kaç bölük gibi yer (2 iken süvari yiyeceğe göre piyadeden zayıftı: tuzak birlik)
   upkeep: 1, // bölük başına turda yiyecek
   starve: 0.1, // açlıkta turda kayıp

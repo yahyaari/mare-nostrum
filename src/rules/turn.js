@@ -22,6 +22,7 @@ import { record, snapshot } from "./chronicle.js";
 import { isWinter } from "./season.js";
 import { techMul, tickResearch } from "./research.js";
 import { tickBarbarians } from "./barbarians.js";
+import { replenish } from "./refill.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -93,6 +94,8 @@ export function endTurn(state) {
   // İnşaatlar bir tur ilerler (üretimden önce: biten tarla bu tur üretir).
   progressBuilds(state, events);
   economy(state, events);
+  // Dinlenen bölükler toparlanır (üretimden sonra: ambar boşaldıysa olmaz; turun hareketleri belli).
+  replenish(state, events);
   // Bilim araştırmaya akar (üretimden sonra: bu turun nüfusuyla).
   tickResearch(state, events);
   // Son ödemesini yapan ticaret anlaşmaları düşer (oyuncununki habere).
