@@ -33,7 +33,7 @@ export function spawnBandits(state) {
   if (!spot) return null;
   const a = {
     id: state.nextArmy++, owner: null, bandit: true, at: null, ...centre(spot[1]),
-    inf: B.inf, arch: B.arch, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, mp: 0, route: [], general: null, xp: 0,
+    inf: B.inf, arch: B.arch, cav: 0, siege: 0, elite: 0, ships: 0, trireme: 0, quinq: 0, mp: 0, route: [], general: null, xp: 0,
   };
   state.armies.push(a);
   state.tutorial = true;

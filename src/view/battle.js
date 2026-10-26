@@ -12,7 +12,7 @@ import { TAU, colorOf } from "./kit.js";
 export const SCENE_MS = 2900;
 const MAX_FIGS = 16;
 
-const menOf = (u) => (u ? (u.inf ?? 0) + (u.arch ?? 0) + (u.cav ?? 0) + (u.siege ?? 0) : 0);
+const menOf = (u) => (u ? (u.inf ?? 0) + (u.arch ?? 0) + (u.cav ?? 0) + (u.siege ?? 0) + (u.elite ?? 0) : 0);
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const ease = (x) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
 
@@ -22,7 +22,7 @@ function figures(u) {
   if (!total) return [];
   const n = Math.max(2, Math.min(MAX_FIGS, Math.round(4 + total / 25)));
   const out = [];
-  for (const k of ["inf", "arch", "cav", "siege"]) {
+  for (const k of ["elite", "inf", "arch", "cav", "siege"]) {
     if (!u[k]) continue;
     const c = Math.max(1, Math.round((u[k] / total) * n));
     for (let i = 0; i < c; i++) out.push(k);
@@ -30,20 +30,20 @@ function figures(u) {
   return out.slice(0, MAX_FIGS);
 }
 
-/** Figürlerin sahnedeki yerleri: piyade önde, okçu arkada, süvari kanatta, makine en arkada. */
+/** Figürlerin sahnedeki yerleri: özel birlik en önde, piyade önde, okçu arkada, süvari kanatta, makine en arkada. */
 function layout(figs, side, r, walls) {
   const mid = r.x + r.w / 2, base = r.y + r.h - 12;
   const pos = [];
-  const counts = { inf: 0, arch: 0, cav: 0, siege: 0 };
-  const col = { inf: 0, arch: 1, cav: 0, siege: 2 };
+  const counts = { inf: 0, arch: 0, cav: 0, siege: 0, elite: 0 };
+  const col = { inf: 0, arch: 1, cav: 0, siege: 2, elite: -0.8 };
   for (const k of figs) {
     const i = counts[k]++;
-    const rowLen = k === "cav" ? 3 : 4;
+    const rowLen = k === "cav" || k === "elite" ? 3 : 4;
     const c = col[k] + Math.floor(i / rowLen) * (k === "cav" ? 0.9 : 1);
     const lane = i % rowLen;
     const front = walls && side < 0 ? 42 : 58;
     const x = mid - side * (front + c * 34 + (k === "cav" ? 14 : 0)) + (lane % 2) * side * -9;
-    const y = base - lane * (k === "cav" ? 20 : 15);
+    const y = base - lane * (k === "cav" || k === "elite" ? 19 : 15);
     pos.push({ k, x, y });
   }
   return pos;
@@ -58,7 +58,8 @@ export function trooper(ctx, k, owner, x, y, side, s = 1.05) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.strokeStyle = "#2d2318";
-  if (k === "cav") {
+  if (k === "elite") eliteFigure(ctx, owner, color);
+  else if (k === "cav") {
     // At: gövde, boyun ve baş, bacaklar; üstünde süvari.
     ctx.fillStyle = "#6e4e33";
     ctx.beginPath();
@@ -160,6 +161,332 @@ export function trooper(ctx, k, owner, x, y, side, s = 1.05) {
     }
   }
   ctx.restore();
+}
+
+// ---- medeniyete özel birlikler (numbers.js N.unique) ----
+//
+// Her medeniyetin kendi figürü, trooper'ın ölçeğinde (ayak y=0, ileri +x): Roma lejyoneri (büyük
+// kalkan, sorguç), Kartaca fili (sırtında kule), Mısır savaş arabası, Makedon falanksı (uzun sarisa),
+// Part katafraktı (zırhlı at ve atlı), Galya savaşçısı (çıplak gövde, uzun kalkan, kalkık kılıç),
+// Saka atlı okçusu (sivri börk, yay). Bağımsızın elindeki seçkin asker sıradan piyade gibi.
+
+const SKIN = "#d9b48c", INK_D = "#2d2318", STEEL = "#8a8f92", BRONZE = "#b08d3c";
+
+function eliteFigure(ctx, owner, color) {
+  if (owner === "carthage") elephant(ctx, color);
+  else if (owner === "egypt") chariot(ctx, color);
+  else if (owner === "parthia") { horse(ctx, "#7d8186", true); rider(ctx, shade(color, -0.25), "cone"); lance(ctx, -6, -19, 23, -23); }
+  else if (owner === "saka") { horse(ctx, "#8a6a45", false); rider(ctx, color, "peak"); bow(ctx, 4, -23); }
+  else if (owner === "gaul") warrior(ctx, color);
+  else if (owner === "macedon") { footman(ctx, color, "bronze"); pike(ctx); roundShield(ctx, BRONZE); }
+  else if (owner === "rome") { footman(ctx, color, "crest"); scutum(ctx, color); }
+  else footman(ctx, color, null);
+}
+
+/** Yaya: bacaklar, tunik, baş; `helm`: "crest" (sorguçlu Roma miğferi), "bronze" (Yunan). */
+function footman(ctx, color, helm) {
+  ctx.strokeStyle = INK_D;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-1.6, 0); ctx.lineTo(-1.2, -6);
+  ctx.moveTo(1.6, 0); ctx.lineTo(1.2, -6);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-3.5, -5); ctx.lineTo(3.5, -5); ctx.lineTo(2.6, -14); ctx.lineTo(-2.6, -14);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, -16.8, 2.8, 0, TAU);
+  ctx.fillStyle = SKIN;
+  ctx.fill();
+  ctx.stroke();
+  if (helm) {
+    ctx.beginPath();
+    ctx.arc(0, -17.2, 3.1, Math.PI, TAU);
+    ctx.fillStyle = helm === "bronze" ? BRONZE : STEEL;
+    ctx.fill();
+    ctx.stroke();
+    if (helm === "crest") {
+      ctx.fillStyle = "#b8332a";
+      ctx.fillRect(-2.6, -22.6, 5.2, 2.4);
+    }
+  }
+}
+
+/** Roma kalkanı: uzun, kavisli dikdörtgen, ortasında altın göbek; arkasında kısa kılıç. */
+function scutum(ctx, color) {
+  ctx.strokeStyle = STEEL;
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(4, -9); ctx.lineTo(10, -12);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(1.4, -15.5, 6, 14, 1.6) : ctx.rect(1.4, -15.5, 6, 14);
+  ctx.fillStyle = shade(color, -0.15);
+  ctx.fill();
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(4.4, -8.5, 1.3, 0, TAU);
+  ctx.fillStyle = GOLD_LIGHT;
+  ctx.fill();
+}
+
+/** Makedon sarisası: yatıktan biraz kalkık, çok uzun mızrak. */
+function pike(ctx) {
+  ctx.strokeStyle = "#6e4e33";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(-7, -7); ctx.lineTo(25, -18);
+  ctx.stroke();
+  ctx.strokeStyle = STEEL;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(23, -17.3); ctx.lineTo(27, -18.7);
+  ctx.stroke();
+}
+
+function roundShield(ctx, fill) {
+  ctx.beginPath();
+  ctx.arc(3.6, -9.6, 4.8, 0, TAU);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = INK_D;
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(3.6, -9.6, 1.4, 0, TAU);
+  ctx.fillStyle = GOLD_LIGHT;
+  ctx.fill();
+}
+
+/** Galya savaşçısı: renkli pantolon, çıplak gövde, dikleşmiş saç, uzun oval kalkan, kalkık kılıç. */
+function warrior(ctx, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-1.7, 0); ctx.lineTo(-1.3, -7);
+  ctx.moveTo(1.7, 0); ctx.lineTo(1.3, -7);
+  ctx.stroke();
+  ctx.strokeStyle = INK_D;
+  ctx.beginPath();
+  ctx.moveTo(-3.2, -6); ctx.lineTo(3.2, -6); ctx.lineTo(2.8, -14); ctx.lineTo(-2.8, -14);
+  ctx.closePath();
+  ctx.fillStyle = SKIN;
+  ctx.fill();
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, -16.8, 2.8, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = "#c9a14a";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  for (const dx of [-2, 0, 2]) { ctx.moveTo(dx, -19); ctx.lineTo(dx * 1.4, -22); }
+  ctx.stroke();
+  ctx.strokeStyle = STEEL;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-2, -13); ctx.lineTo(-6, -25);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(3.8, -9, 2.7, 6.8, 0, 0, TAU);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+  ctx.strokeStyle = INK_D;
+  ctx.beginPath();
+  ctx.moveTo(3.8, -15); ctx.lineTo(3.8, -3);
+  ctx.stroke();
+}
+
+/** At: gövde, boyun ve baş, bacaklar; `armour`: pullu zırh (katafrakt). */
+function horse(ctx, coat, armour) {
+  ctx.strokeStyle = INK_D;
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(0, -10, 11, 5, 0, 0, TAU);
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(8, -12); ctx.lineTo(14, -20); ctx.lineTo(17, -18); ctx.lineTo(12, -9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  if (armour) {
+    ctx.strokeStyle = "rgba(240,240,235,0.55)";
+    ctx.lineWidth = 0.7;
+    for (let i = -8; i <= 8; i += 3) for (const yy of [-12, -9]) {
+      ctx.beginPath();
+      ctx.arc(i, yy, 1.4, 0, Math.PI);
+      ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = INK_D;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  for (const lx of [-8, -4, 5, 9]) { ctx.moveTo(lx, -6); ctx.lineTo(lx + 1, 0); }
+  ctx.stroke();
+}
+
+/** Atlı: gövde ve baş; `hat`: "cone" (konik miğfer) ya da "peak" (Saka'nın sivri börkü). */
+function rider(ctx, color, hat) {
+  ctx.strokeStyle = INK_D;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = color;
+  ctx.fillRect(-3, -24, 6, 10);
+  ctx.strokeRect(-3, -24, 6, 10);
+  ctx.beginPath();
+  ctx.arc(0, -27, 2.8, 0, TAU);
+  ctx.fillStyle = SKIN;
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  if (hat === "peak") { ctx.moveTo(-3, -28); ctx.lineTo(3, -28); ctx.lineTo(-1.5, -36); }
+  else { ctx.moveTo(-3.1, -27.5); ctx.lineTo(3.1, -27.5); ctx.lineTo(0, -32.5); }
+  ctx.closePath();
+  ctx.fillStyle = hat === "peak" ? color : STEEL;
+  ctx.fill();
+  ctx.stroke();
+}
+
+function lance(ctx, x0, y0, x1, y1) {
+  ctx.strokeStyle = "#6e4e33";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+  ctx.stroke();
+}
+
+function bow(ctx, x, y) {
+  ctx.strokeStyle = "#6e4e33";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(x, y, 6, -1.2, 1.2);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(240,230,200,0.8)";
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(x + 6 * Math.cos(-1.2), y + 6 * Math.sin(-1.2));
+  ctx.lineTo(x + 6 * Math.cos(1.2), y + 6 * Math.sin(1.2));
+  ctx.stroke();
+}
+
+/** Kartaca fili: iri gri gövde, kalın bacaklar, kulak, hortum, fildişi; sırtında renkli kule. */
+function elephant(ctx, color) {
+  ctx.strokeStyle = INK_D;
+  ctx.lineWidth = 4.2;
+  ctx.beginPath();
+  for (const lx of [-8, -3, 4, 9]) { ctx.moveTo(lx, -8); ctx.lineTo(lx, 0); }
+  ctx.stroke();
+  ctx.strokeStyle = "#8d8a86";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (const lx of [-8, -3, 4, 9]) { ctx.moveTo(lx, -8); ctx.lineTo(lx, -0.8); }
+  ctx.stroke();
+  ctx.strokeStyle = INK_D;
+  ctx.fillStyle = "#8d8a86";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(0, -14, 13, 8.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(12.5, -17, 5.8, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(16.5, -14);
+  ctx.quadraticCurveTo(20.5, -8, 18.5, -2);
+  ctx.stroke();
+  ctx.strokeStyle = "#8d8a86";
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+  ctx.strokeStyle = "#f3ead6";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(15, -12.5);
+  ctx.quadraticCurveTo(18, -11, 20.5, -12.5);
+  ctx.stroke();
+  ctx.fillStyle = "#77736e";
+  ctx.strokeStyle = INK_D;
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.ellipse(9.5, -17, 3.2, 4.8, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  // Kule ve içinde bir mızraklı.
+  ctx.fillStyle = color;
+  ctx.fillRect(-7, -29, 11, 7);
+  ctx.strokeRect(-7, -29, 11, 7);
+  ctx.strokeStyle = GOLD;
+  ctx.beginPath();
+  ctx.moveTo(-7, -26); ctx.lineTo(4, -26);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(-1.5, -31, 2.3, 0, TAU);
+  ctx.fillStyle = SKIN;
+  ctx.fill();
+  ctx.strokeStyle = INK_D;
+  ctx.stroke();
+  lance(ctx, -3, -29, 9, -36);
+}
+
+/** Mısır savaş arabası: önde at, arkada tekerlekli araba, üstünde yaylı. */
+function chariot(ctx, color) {
+  ctx.save();
+  ctx.translate(9, 0);
+  ctx.scale(0.82, 0.82);
+  horse(ctx, "#a0784c", false);
+  ctx.restore();
+  ctx.strokeStyle = "#5b3f26";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-3, -9); ctx.lineTo(4, -9);
+  ctx.stroke();
+  ctx.strokeStyle = INK_D;
+  ctx.fillStyle = shade(color, -0.1);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-12, -14); ctx.lineTo(-3, -14); ctx.lineTo(-3, -8); ctx.lineTo(-12, -8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(-7.5, -5, 5, 0, TAU);
+  ctx.fillStyle = "#6e4e33";
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const a = (i * Math.PI) / 3;
+    ctx.moveTo(-7.5 - 4.5 * Math.cos(a), -5 - 4.5 * Math.sin(a));
+    ctx.lineTo(-7.5 + 4.5 * Math.cos(a), -5 + 4.5 * Math.sin(a));
+  }
+  ctx.stroke();
+  // Arabadaki yaylı.
+  ctx.strokeStyle = INK_D;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = color;
+  ctx.fillRect(-10, -23, 5, 9);
+  ctx.strokeRect(-10, -23, 5, 9);
+  ctx.beginPath();
+  ctx.arc(-7.5, -25.6, 2.6, 0, TAU);
+  ctx.fillStyle = SKIN;
+  ctx.fill();
+  ctx.stroke();
+  bow(ctx, -4, -20);
 }
 
 /** Düşenler: kayıp oranı kadar figür, dağınık sırayla (her üç figürde bir değil). */

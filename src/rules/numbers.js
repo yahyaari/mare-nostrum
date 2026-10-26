@@ -2,7 +2,8 @@
 // ayarlanacak. Bir sayıyı burada değiştiren, kurallar.md'yi de değiştirsin.
 
 // Asker türleri, her yerde bu sırayla. Kuşatma makinesi dövüşmez ama sayılır (mürettebat).
-export const UNITS = ["inf", "arch", "cav", "siege"];
+// `elite`: medeniyete özel birlik (N.unique) - her medeniyetin bu yuvası kendi birliği.
+export const UNITS = ["inf", "arch", "cav", "siege", "elite"];
 
 // Gemi türleri (kullanıcı 22.10: "kadırgalar, savaş gemileri vs olsun, birleştirip büyük bir
 // filo kuralım"), tersane seviyesiyle açılır - kışlanın askerleri açması gibi. Kadırga asker
@@ -43,6 +44,24 @@ export const N = {
     cav: { money: 2, weapons: 2, food: 1 },
     siege: { money: 3, weapons: 3, food: 1 },
   },
+  // Medeniyete özel birlikler (bölüm 5b; kullanıcı 26.10 strateji oyunlarının olmazsa olmazlarından:
+  // Civilization ve Total War'daki gibi her medeniyetin kendi birliği). Kurallarda tek yuva (`elite`),
+  // davranışı sahibinin medeniyetinden: `as` hangi tür gibi dövüşür (inf ve cav önde durup okçuyu
+  // korur, arch arkada; araştırmanın o türe çarpanını alır), `melee` göğüs göğüse adam başı güç
+  // (piyade 1), `volley` ok yağmuru (okçu bölüğü 1), `charge` okçuya hücum (süvari bölüğü 1),
+  // `attack` / `defend` saldırırken / savunurken çarpan, `stop` düşmanın hücumunu durdurma (bölük
+  // başına, bir süvari bölüğünün hücumu cinsinden). Kışla `eliteBarracks` ister. Fiyata Roma'nın
+  // x1.5 parası, Galya'nın bedava parası da uyar.
+  unique: {
+    rome: { as: "inf", melee: 1.7, cost: { money: 3, weapons: 2, food: 1 } }, // lejyoner
+    carthage: { as: "cav", melee: 2.2, charge: 1.6, cost: { money: 4, weapons: 3, food: 2 } }, // savaş fili
+    egypt: { as: "cav", melee: 1.5, charge: 1.4, volley: 0.6, cost: { money: 3, weapons: 2, food: 1 } }, // savaş arabası
+    macedon: { as: "inf", melee: 1.3, defend: 1.5, stop: 1, cost: { money: 2, weapons: 2, food: 1 } }, // falanks
+    parthia: { as: "cav", melee: 1.9, charge: 0.8, cost: { money: 4, weapons: 3, food: 1 } }, // katafrakt
+    gaul: { as: "inf", melee: 1.2, attack: 1.5, cost: { money: 2, weapons: 1, food: 1 } }, // savaşçı
+    saka: { as: "arch", melee: 0.8, volley: 1, charge: 0.6, cost: { money: 3, weapons: 2, food: 1 } }, // atlı okçu
+  },
+  eliteBarracks: 2,
   cavUpkeep: 1, // süvari bölüğü turda kaç bölük gibi yer (2 iken süvari yiyeceğe göre piyadeden zayıftı: tuzak birlik)
   upkeep: 1, // bölük başına turda yiyecek
   starve: 0.1, // açlıkta turda kayıp
@@ -163,6 +182,8 @@ export const N = {
   aiGreed: 0.005, // eşik her tur bu kadar düşer ...
   aiWarRatioMin: 1.1, // ... ama bundan aşağı değil
   aiWarChance: 0.15,
+  aiElite: 0.2, // ordunun özel birlik payı ...
+  aiEliteFrom: 15, // ... bu turdan sonra (erken basınca yayılma yavaşlıyordu)
 
   // Sadakat (bölüm 12). 0-100. Başlangıçta herkes 100; alınan yer düşük başlar.
   loyalty: {
@@ -245,6 +266,9 @@ export const TRAITS = {
   gaul: { recruitMoney: 0, growth: 1.5, arch: 0.7 },
   saka: { moves: 2, siege: 0.6, cav: 1.3 },
 };
+
+/** Bir medeniyetin özel birliği (bağımsızın eline geçen seçkin asker sıradan piyade gibi dövüşür). */
+export const uniqueOf = (civ) => (civ && N.unique[civ]) || { as: "inf", melee: 1, cost: N.cost.inf };
 
 /** Bir medeniyetin bir özelliği; bağımsızlar (null) ve yazılmayanlar için varsayılan. */
 export const trait = (civ, key, otherwise = 1) => {

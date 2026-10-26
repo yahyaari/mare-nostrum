@@ -877,6 +877,52 @@ section("Barbarlar (bölüm 26)");
   check("eski kayıt: barbar kampları kurulur", old.version === S.VERSION && BA.campsOf(old).length > 0 && old.barbarians);
 }
 
+section("Medeniyete özel birlikler (bölüm 5b)");
+
+{
+  const { TEXT } = await import("../src/text.js");
+  const { uniqueOf } = await import("../src/rules/numbers.js");
+  check("her medeniyetin özel birliği var", CIVS.every((c) => ["inf", "arch", "cav"].includes(N.unique[c.id]?.as) && N.unique[c.id].melee > 0 && N.unique[c.id].cost.money > 0));
+  check("bağımsızın elindeki seçkin asker sıradan piyade gibi", uniqueOf(null).as === "inf" && uniqueOf(null).melee === 1);
+  for (const lang of ["en", "tr"]) check(`${lang}: özel birlik adları`, CIVS.every((c) => TEXT[lang].eliteOf[c.id]?.length === 3 && TEXT[lang].eliteOf[c.id].every(Boolean)) && TEXT[lang].elite && TEXT[lang].uniqueLine);
+
+  // Kışla 2 ister; fiyatı medeniyetin birliğinden, Roma'nın parası x1.5.
+  const s = S.newGame("rome", 7);
+  s.civs.rome.money = 200; s.civs.rome.weapons = 50; s.civs.rome.food = 50;
+  check("kışla 1'de özel birlik basılmaz", S.recruitInfo(s, "rome", "elite").why === "needBarracks");
+  s.places.rome.barracks = 2;
+  const m0 = s.civs.rome.money;
+  check("kışla 2'de lejyoner basılır: 10 asker, 3 x 1.5 para, 2 silah", S.recruit(s, "rome", "elite") && s.places.rome.elite === N.company && s.civs.rome.money === m0 - 4.5 && s.civs.rome.weapons === 48);
+  check("özel birlik kartlarda", S.cardsOf(s.places.rome).some((c) => c.type === "elite" && c.men === N.company));
+  check("yeni oyunda her yerde özel birlik yuvası 0", Object.values(S.newGame("egypt", 3).places).every((p) => p.elite === 0));
+
+  // Savaş: lejyoner piyadeden güçlü, falanks hücumu durdurur, atlı okçu ok atar, fil okçulara dalar.
+  const wall = { civ: "gaul", inf: 100 };
+  check("60 lejyoner 100 piyadeyi yener, 60 Roma piyadesi yenemez", C.fight({ civ: "rome", elite: 60 }, wall, null).attWins && !C.fight({ civ: "rome", inf: 60 }, wall, null).attWins);
+  check("falanks süvari hücumunu durdurur", C.fight({ civ: "carthage", cav: 30, inf: 50 }, { civ: "macedon", elite: 30, inf: 30, arch: 30 }, null).charge.byAtt === 0
+    && C.fight({ civ: "carthage", cav: 30, inf: 50 }, { civ: "gaul", inf: 60, arch: 30 }, null).charge.byAtt > 0);
+  check("atlı okçu ok yağdırır, korunmasız da dövüşür", C.fight({ civ: "saka", elite: 50 }, { civ: "gaul", inf: 50 }, null).volley.byAtt > 0);
+  check("fil okçulara dalar", C.fight({ civ: "carthage", elite: 30, inf: 30 }, { civ: "parthia", inf: 30, arch: 40 }, null).charge.byAtt > 0);
+  check("Galya savaşçısı saldırırken savunurkenden güçlü", C.fight({ civ: "gaul", elite: 50 }, { civ: "rome", inf: 1 }, null).attPow > C.fight({ civ: "rome", inf: 1 }, { civ: "gaul", elite: 50 }, null).defPow);
+  check("savaş dökümünde özel birlik satırı", C.explain({ civ: "rome", elite: 30 }, { civ: "gaul", inf: 30 }, null).att.some(([k]) => k === "elite:rome"));
+
+  // Bilgisayar da basar.
+  const { aiTurn: AI5 } = await import("../src/rules/ai.js");
+  const a = S.newGame("rome", 7);
+  a.places.carthage.barracks = 2;
+  a.turn = N.aiEliteFrom + 5;
+  Object.assign(a.civs.carthage, { money: 300, weapons: 80, food: 80 });
+  AI5(a, "carthage", []);
+  check("bilgisayar özel birliğini basar", S.placesOf(a, "carthage").some((id) => a.places[id].elite > 0) || a.armies.some((x) => x.owner === "carthage" && x.elite > 0));
+
+  // Eski kayıt (18): yuva eklenir.
+  const old = S.newGame("rome", 7);
+  for (const u of [...Object.values(old.places), ...old.armies]) delete u.elite;
+  old.version = 18;
+  S.migrate(old);
+  check("eski kayıt: özel birlik yuvası eklenir", old.version === S.VERSION && Object.values(old.places).every((p) => p.elite === 0) && old.armies.every((x) => x.elite === 0));
+}
+
 // ---------------------------------------------------------------------------------------------
 section("Dağlar ve geri çekilme (bölüm 7, 22b)");
 

@@ -155,6 +155,38 @@ Bir **bölük** 10 askerdir. Asker basmak şehrin nüfusundan düşer.
 - **Açlık:** Yiyecek ambarı biterse bütün askerler her tur %10 eriyir ve nüfus artmaz.
 - Basılan asker şehrin garnizonuna girer.
 
+### 5b. Medeniyete özel birlikler
+
+Kullanıcı 26.10 strateji oyunlarının olmazsa olmazlarını sordu; Civilization'daki ve Total War'daki
+gibi her medeniyetin kendi birliği listede birinciydi, "hepsini sırayla yapalım" dedi. Kurallarda tek
+yuva (`elite`), davranışı sahibinin medeniyetinden (`numbers.js N.unique`). Hepsi **kışla 2** ister,
+bölüğü 10 asker; Asker bas sekmesinde yıldızlı beşinci kart, medeniyet seçiminde de yazılı.
+
+| Medeniyet | Birlik | Bir bölük | Savaşta |
+|---|---|---|---|
+| Roma | **Lejyoner** | 3 para (x1.5) + 2 silah + 1 yiyecek | Piyade gibi önde; göğüs göğüse x1.7 |
+| Kartaca | **Savaş fili** | 4 para + 3 silah + 2 yiyecek | Süvari gibi: okçulara 1.6 bölük hücumu, göğüs göğüse x2.2, sura karşı yarı |
+| Mısır | **Savaş arabası** | 3 para + 2 silah + 1 yiyecek | Süvari gibi: hücum 1.4, ok yağmuru 0.6 okçu bölüğü, göğüs göğüse x1.5 |
+| Makedonya | **Falanks** | 2 para + 2 silah + 1 yiyecek | Piyade gibi; x1.3, savunurken x1.5; her bölük bir süvari bölüğünün hücumunu durdurur |
+| Partlar | **Katafrakt** | 4 para + 3 silah + 1 yiyecek | Süvari gibi: göğüs göğüse x1.9, hücum 0.8, sura karşı yarı |
+| Galya | **Savaşçı** | 2 para (Galya'ya bedava) + 1 silah + 1 yiyecek | Piyade gibi; x1.2, saldırırken x1.5 |
+| Sakalar | **Atlı okçu** | 3 para + 2 silah + 1 yiyecek | Okçu gibi ok yağdırır (1 okçu bölüğü), korunmaya ihtiyacı yok (x0.8), hücum 0.6 |
+
+- Pahalılar ama yiyecek (ordunun tavanı) ve turluk asker basma hakkı aynı: kalite mi nicelik mi kararı.
+- Araştırma, dövüştükleri türün çarpanını verir (lejyonere piyadeninki); medeniyetin genel gücü (Kartaca
+  x0.85) de geçerli, ama türlerin özellikleri (Roma piyadesi x1.25 gibi) geçmez - birliğin kendi sayıları var.
+- Savaş penceresinin dökümünde adıyla bir satır ("Lejyoner +%70"; piyadeden güçlüyse).
+- Bağımsızın eline geçen seçkin asker (isyan) sıradan piyade gibi dövüşür.
+- Bilgisayar ordusunun beşte birini özel birliğinden ister (`N.aiElite`), ama ancak 15. turdan sonra ve
+  kasası ile cephaneliği bolken (fiyatının üç katı): erken basınca silahı tükeniyor, bağımsızları çok geç
+  alıyordu (25. turda 1-4 yerine 4-9 bağımsız).
+- Eski kayıtlara yuva eklenir (kayıt 19).
+- Denge (70 oyun, zaferler kapalı): ilk düşüş 42 -> 49, 150. turda ayakta kalan toplam 291 -> 327; ilk
+  denemede savaş arabası zayıftı (Mısır ayakta 24), katafrakt güçlüydü: araba x1.2 -> x1.5, hücum 1.2 -> 1.4;
+  katafrakt x2.1 -> x1.9. Son hâli Mısır 37, Makedonya 33, Partlar en büyük 26 oyunda (önce 29).
+- Çizimler `view/battle.js`: lejyoner (büyük kalkan, sorguç), fil (sırtında kule), savaş arabası, falanks
+  (uzun sarisa), katafrakt (pullu zırhlı at), Galya savaşçısı (çıplak gövde, kalkık kılıç), atlı okçu (sivri börk).
+
 ---
 
 ## 6. Ordular ve hareket

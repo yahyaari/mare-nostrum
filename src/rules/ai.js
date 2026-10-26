@@ -277,11 +277,19 @@ function recruitAll(state, civ) {
       if (budget(state, civ).food < 1) return;
       const total = strength(state, civ) || 1;
       const units = [...placesOf(state, civ).map((p) => state.places[p]), ...armiesOf(state, civ)];
-      const have = (k) => units.reduce((n, u) => n + u[k], 0) / total;
-      // En çok eksik olan tür, basılabiliyorsa; yoksa piyade.
-      const type = ["siege", "cav", "arch"]
-        .filter((k) => have(k) < mix[k] && !recruitInfo(state, id, k).why)
-        .sort((a, b) => have(a) / mix[a] - have(b) / mix[b])[0] ?? "inf";
+      const have = (k) => units.reduce((n, u) => n + (u[k] ?? 0), 0) / total;
+      // En çok eksik olan tür, basılabiliyorsa; yoksa piyade. Özel birlik de ordunun bir parçası,
+      // ama ancak ilk turlardan sonra ve kasa ile cephanelik bolken: pahalı ve silah yiyor, erken
+      // basınca bilgisayar bağımsızları çok geç alıyordu (25. turda 1-4 yerine 4-9 bağımsız kalıyordu).
+      const want = { elite: N.aiElite, ...mix };
+      const rich = (k) => {
+        if (k !== "elite") return true;
+        const c = recruitInfo(state, id, k).cost, me = state.civs[civ];
+        return state.turn >= N.aiEliteFrom && me.money >= c.money * 3 && me.weapons >= c.weapons * 3;
+      };
+      const type = ["elite", "siege", "cav", "arch"]
+        .filter((k) => have(k) < want[k] && rich(k) && !recruitInfo(state, id, k).why)
+        .sort((a, b) => have(a) / want[a] - have(b) / want[b])[0] ?? "inf";
       if (!recruit(state, id, type)) break;
     }
   }

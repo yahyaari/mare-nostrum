@@ -25,7 +25,7 @@ import { campsOf } from "../rules/barbarians.js";
 import { dealLeft, dealOf, moodLevel, moodOf, persona } from "../rules/leaders.js";
 import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turnsLeft as techTurns } from "../rules/research.js";
-import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
+import { N, SHIPS, UNITS, trait, uniqueOf } from "../rules/numbers.js";
 import {
   BUILDINGS, PORT_UPGRADES, UPGRADES, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
@@ -215,7 +215,7 @@ function civPanel(ctx, ui, boxes, T, civ, area) {
   const army = fill(T.startArmy, troops(T, { ...st, cav: 0, siege: 0 }));
   // Alttaki sabit kısım (gezinme, zorluk, oyuncular, başla, devam) ve metin; görsel kalan yeri alır.
   const bottomH = 40 + 14 + 36 + 14 + 36 + 14 + 48 + (ui.saved ? 54 : 0) + 18;
-  const textH = 44 + 20 + 18 + desc.length * 19 + 14 + 44 + landRows.length * 16 + 16 + 10;
+  const textH = 44 + 20 + 18 + desc.length * 19 + 14 + 44 + 26 + landRows.length * 16 + 16 + 10;
   const illH = Math.round(Math.max(110, Math.min(300, area.h * 0.32, area.h - 20 - bottomH - textH)));
   const h = 20 + illH + textH + bottomH;
   const r = { x: area.x, y: area.y + Math.max(0, Math.round((area.h - h) / 2)), w: area.w, h: Math.min(area.h, h) };
@@ -239,6 +239,10 @@ function civPanel(ctx, ui, boxes, T, civ, area) {
   text(ctx, "▲ " + good, x, y, { bold: true, size: 14, color: INK.good });
   text(ctx, "▼ " + bad, x, y + 22, { bold: true, size: 14, color: INK.bad });
   y += 44;
+  // Kendi birliği (bölüm 5b): figürü ve adı.
+  trooper(ctx, "elite", civ.id, x + 11, y + 6, -1, 0.72);
+  fit(ctx, fill(T.uniqueLine, unitTitle(T, "elite", civ.id), T.eliteOf[civ.id][1]), x + 30, y, w - 30, { bold: true, size: 14, color: GOLD_DARK });
+  y += 26;
   landRows.forEach((l, i) => text(ctx, l, x, y + i * 16, { italic: true, size: 12, color: INK.soft }));
   text(ctx, army, x, y + landRows.length * 16, { italic: true, size: 12, color: INK.soft });
   ctx.restore();
@@ -384,9 +388,16 @@ function kindLine(id, game, T, hid = false) {
     .filter(Boolean).join(" · ") + " · " + fill(T.lvl, pl.level) + (fleetOf(pl) && !hid ? ` · ${fleetOf(pl)} ${T.ships}` : "");
 }
 
+/** Bir asker türünün adı (küçük harfle); özel birliğinki sahibinin medeniyetinden ("lejyoner"). */
+const unitName = (T, k, civ) => (k === "elite" ? T.eliteOf[civ]?.[0] ?? T.elite : T[k]);
+/** Büyük harfle başlayan ad (kartlarda). */
+const unitTitle = (T, k, civ) => { const s = unitName(T, k, civ); return s[0].toLocaleUpperCase() + s.slice(1); };
+/** Bir asker türünün ne işe yaradığı (ipucunda). */
+const unitTip = (T, k, civ) => (k === "elite" ? T.eliteOf[civ]?.[2] ?? "" : T[UNIT_TIP[k]]);
+
 /** "120 piyade · 40 okçu · 20 süvari": piyade ve okçu hep, ötekiler varsa. */
-function troops(T, u) {
-  return UNITS.filter((k) => k === "inf" || k === "arch" || u[k] > 0).map((k) => `${u[k] ?? 0} ${T[k]}`).join(" · ");
+function troops(T, u, civ = u.owner) {
+  return UNITS.filter((k) => k === "inf" || k === "arch" || u[k] > 0).map((k) => `${u[k] ?? 0} ${unitName(T, k, civ)}`).join(" · ");
 }
 
 function whyText(why, T) {
@@ -463,10 +474,10 @@ function unitCard(ctx, boxes, T, c, owner, x, y, w, h, on, act) {
     ctx.stroke();
   }
   ctx.restore();
-  const name = boat ? T.shipNames[c.type] : T[c.type][0].toLocaleUpperCase() + T[c.type].slice(1);
+  const name = boat ? T.shipNames[c.type] : unitTitle(T, c.type, owner);
   const tip = boat
     ? [name, shipLine(c.type, T), T.shipTips[c.type], act ? T.cardPick : null]
-    : [name, fill(T.cardMen, c.men, N.company), T[UNIT_TIP[c.type]], act ? T.cardPick : null];
+    : [name, fill(T.cardMen, c.men, N.company), unitTip(T, c.type, owner), act ? T.cardPick : null];
   boxes.push({ x, y: top, w, h: h + lift, act, tip, want: act });
 }
 
@@ -916,7 +927,11 @@ function troopArt(ctx, type, owner, ix, iy, iw, ih, k) {
     trooper(ctx, "cav", owner, cx - 14 * k, ground + 4 * k, -1, 1.2 * k);
   } else if (type === "cav") trooper(ctx, "cav", owner, cx - 4 * k, ground + 4 * k, -1, 1.2 * k);
   else if (type === "siege") trooper(ctx, "siege", owner, cx - 3 * k, ground + 3 * k, -1, 1.4 * k);
-  else if (iw > ih * 1.5) {
+  else if (type === "elite" && owner === "carthage") trooper(ctx, "elite", owner, cx - 4 * k, ground + 4 * k, -1, 1.2 * k);
+  else if (type === "elite" && uniqueOf(owner).as !== "inf") {
+    if (iw > ih * 1.5) trooper(ctx, "elite", owner, cx + 18 * k, ground - 1 * k, -1, 1.05 * k);
+    trooper(ctx, "elite", owner, iw > ih * 1.5 ? cx - 14 * k : cx - 4 * k, ground + 4 * k, -1, 1.2 * k);
+  } else if (iw > ih * 1.5) {
     for (const dx of [-24, 0, 24]) trooper(ctx, type, owner, cx + dx * k, ground - 1 * k, -1, 1.05 * k);
     for (const dx of [-12, 12]) trooper(ctx, type, owner, cx + dx * k, ground + 5 * k, -1, 1.3 * k);
   } else {
@@ -939,15 +954,17 @@ function recruitBlock(ctx, game, boxes, T, id, x, y, w, h) {
   fit(ctx, fill(T.companyMen, N.company), x + lw + 10, y + 15, w / 2 - lw - 10, { italic: true, size: 12, color: INK.soft });
   const why = ri.why && ri.why !== "done" ? whyText(ri.why, T) : fill(T.recruitLeft, ri.left);
   fit(ctx, why, x + w, y + 15, w / 2, { italic: true, size: 12, color: ri.why && ri.why !== "done" ? INK.bad : INK.good, align: "right" });
-  const gap = 6, cw = (w - gap * 3) / 4;
+  const gap = 6, cw = (w - gap * (UNITS.length - 1)) / UNITS.length;
   const pl = game.places[id];
   UNITS.forEach((type, i) => {
     const info = recruitInfo(game, id, type);
-    const name = T.unitShort[type];
+    const elite = type === "elite";
+    const name = elite ? "★ " + unitTitle(T, type, pl.owner) : T.unitShort[type];
     troopCard(ctx, boxes, T, {
       x: x + i * (cw + gap), y: y + 26, w: cw, h, type, owner: pl.owner, name, have: Math.ceil((pl[type] ?? 0) / N.company),
+      role: elite ? T.eliteOf[pl.owner]?.[1] : null,
       cost: recruitCost(game.player, type), purse: game.civs[game.player], why: info.why, plus: "+" + N.company, act: { do: "recruit", id, type },
-      tip: [name, T[UNIT_TIP[type]], info.why ? [whyText(info.why, T), "bad"] : null],
+      tip: [name, unitTip(T, type, pl.owner), info.why ? [whyText(info.why, T), "bad"] : null],
     });
   });
 }
@@ -959,7 +976,7 @@ function troopCard(ctx, boxes, T, o) {
   actionCard(ctx, boxes, {
     ...o, label: o.plus,
     art: (ix, iy, iw, ih) => troopArt(ctx, o.type, o.owner, ix, iy, iw, ih, Math.min(iw / 58, ih / 62)),
-    badge: o.have, sub: locked ? (why.startsWith("tech_") ? T.techs[why.slice(5)][0] : whyText(why, T)) : T.role[o.type],
+    badge: o.have, sub: locked ? (why.startsWith("tech_") ? T.techs[why.slice(5)][0] : whyText(why, T)) : o.role ?? T.role[o.type],
     subColor: "rgba(243,231,201,0.7)", subItalic: true, state: locked ? "locked" : why ? "off" : "ready",
   });
 }
@@ -1531,7 +1548,7 @@ export function placeTip(game, id, lang, hid, go) {
   const relText = rel === "war" ? T.war : rel === "ally" ? T.ally : rel === "neutral" ? T.neutral : null;
   const out = [placeName(id, lang), `${owner}${relText ? " · " + relText : ""} · ${fill(T.lvl, pl.level)}`];
   const d = defenders(game, id);
-  out.push(hid ? T.fogUnknown : men(d) ? troops(T, d) : T.undefended);
+  out.push(hid ? T.fogUnknown : men(d) ? troops(T, d, pl.owner) : T.undefended);
   const walls = wallsOf(game, id);
   if (walls) out.push(`${T.walls}: ${wallsText(walls, T)}`);
   for (const wd of wondersAt(game, id)) out.push([T.wonders[wd.id][0], "warn"]);
@@ -1843,7 +1860,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
       for (const k of UNITS) for (let i = 0; i < Math.max(u[k] > 0 ? 1 : 0, Math.round(((u[k] ?? 0) / total) * n)); i++) figs.push(k);
       figs.slice(0, 9).forEach((k, i) => trooper(ctx, k, owner, flip ? bx + cw - 20 - i * 21 : bx + 20 + i * 21, by + 84 - (i % 2) * 4, flip ? 1 : -1, 1.05));
     } else text(ctx, T.undefended, bx + 12, by + 80, { italic: true, size: 12, color: INK.soft });
-    fit(ctx, sea && b ? `⛵ ${fleetOf(u)} ${T.ships}` : total ? troops(T, u) : "", bx + 10, by + 104, cw - 20, { size: 12 });
+    fit(ctx, sea && b ? `⛵ ${fleetOf(u)} ${T.ships}` : total ? troops(T, u, owner) : "", bx + 10, by + 104, cw - 20, { size: 12 });
     if (power !== null) text(ctx, fill(T.powerN, Math.round(power)), bx + cw - 10, by + 26, { bold: true, size: 13, align: "right", color: INK.soft });
   };
   side(x, me, a, T.yours, a.general, a.xp ?? 0, pow?.attPow ?? null, false);
@@ -1882,7 +1899,8 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     const ly = y + 12 + i * 18;
     const s = fmt1(key, v);
     const sw = text(ctx, s, bx, ly, { bold: true, size: 13, color: good(key, v) ? INK.good : INK.bad });
-    fit(ctx, T.mods[key] ?? key, bx + Math.max(sw + 6, 46), ly, cw - Math.max(sw + 6, 46), { size: 13 });
+    const label = key.startsWith("elite:") ? unitTitle(T, "elite", key.slice(6) || null) : T.mods[key] ?? key;
+    fit(ctx, label, bx + Math.max(sw + 6, 46), ly, cw - Math.max(sw + 6, 46), { size: 13 });
   });
   if (!modRows) text(ctx, T.noMods, r.x + r.w / 2, y + 12, { italic: true, size: 12, color: INK.soft, align: "center" });
   list(x, ex.att);

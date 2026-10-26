@@ -8,11 +8,14 @@
 //      söker. Bonuslarla çarpılır, üstüne ±%10 şans. Büyük güç kazanır.
 //   4. Kaybeden dağılır. Kazanan, güçler ne kadar yakınsa o kadar çok kaybeder.
 //
+// Medeniyete özel birlik (`elite`, numbers.js N.unique): sahibine göre ok atar, hücum eder, hücumu
+// durdurur; göğüs göğüse kendi gücüyle, önde (okçuyu korur) ya da arkada.
+//
 // Taş-kâğıt-makas: okçu piyadeyi yıpratır, süvari okçuyu biçer, piyade (ve sur) süvariyi durdurur,
 // kuşatma makinesi suru açar.
 
 import { has, might } from "./generals.js";
-import { N, SHIPS, UNITS, trait } from "./numbers.js";
+import { N, SHIPS, UNITS, trait, uniqueOf } from "./numbers.js";
 
 /**
  * `att`, `def`: { civ, inf, arch, cav, siege, gen?, vet?, terrain?, mods? } (bağımsızın civ'i null; gen:
@@ -30,11 +33,16 @@ export function fight(att, def, walls, luck = [1, 1]) {
   const volleyOf = (gen) => (has(gen, "archer") ? 1.5 : 1);
 
   // 1. Ok yağmuru ve süvari hücumu, aynı anda: herkes savaştan önceki sayısıyla vurur.
-  // Hücum sadece okçuları biçer; sura dalan süvari yarı etkili.
-  const byAtt = Math.round((a.arch / N.company) * N.volley * archMul(att) * siege * volleyOf(att.gen));
-  const byDef = Math.round((d.arch / N.company) * N.volley * archMul(def) * breach(walls === "castle" ? N.castleVolley : 1) * volleyOf(def.gen));
-  const chargeA = Math.round((a.cav / N.company) * N.charge * cavMul(att) * (walls ? N.cavWall : 1));
-  const chargeD = Math.round((d.cav / N.company) * N.charge * cavMul(def));
+  // Hücum sadece okçuları biçer; sura dalan süvari yarı etkili. Özel birlikler de atar ve dalar
+  // (savaş arabası, atlı okçu, fil); falanks karşı tarafın hücumunu durdurur.
+  const ua = uniqueOf(att.civ), ud = uniqueOf(def.civ);
+  const shots = (u, U, s) => (u.arch / N.company) * archMul(s) + (u.elite / N.company) * (U.volley ?? 0) * eliteMul(s);
+  const rush = (u, U, s) => (u.cav / N.company) * cavMul(s) + (u.elite / N.company) * (U.charge ?? 0) * eliteMul(s);
+  const stop = (u, U) => (u.elite / N.company) * (U.stop ?? 0) * N.charge;
+  const byAtt = Math.round(shots(a, ua, att) * N.volley * siege * volleyOf(att.gen));
+  const byDef = Math.round(shots(d, ud, def) * N.volley * breach(walls === "castle" ? N.castleVolley : 1) * volleyOf(def.gen));
+  const chargeA = Math.max(0, Math.round(rush(a, ua, att) * N.charge * (walls ? N.cavWall : 1) - stop(d, ud)));
+  const chargeD = Math.max(0, Math.round(rush(d, ud, def) * N.charge - stop(a, ua)));
   d.arch = Math.max(0, d.arch - chargeA);
   a.arch = Math.max(0, a.arch - chargeD);
   lose(d, byAtt);
@@ -125,13 +133,20 @@ const all = (s) => trait(s.civ, "all") * tech(s, "all");
 const archMul = (s) => trait(s.civ, "arch") * tech(s, "arch") * all(s);
 const cavMul = (s) => trait(s.civ, "cav") * tech(s, "cav") * all(s);
 const infMul = (s, defending) => trait(s.civ, "inf") * tech(s, "inf") * all(s) * (defending ? trait(s.civ, "defInf") : 1);
+// Özel birlik: dövüştüğü türün araştırması (lejyonere piyadeninki), milletin genel gücü.
+const eliteMul = (s) => tech(s, uniqueOf(s.civ).as) * all(s);
+/** Özel birliğin adam başı göğüs göğüse gücü (saldırıda / savunmada). */
+const eliteMelee = (U, defending) => (U.melee ?? 1) * (defending ? U.defend ?? 1 : U.attack ?? 1);
 
 function power(u, s, defending, assault) {
-  const screen = u.inf + u.cav;
+  const U = uniqueOf(s.civ);
+  // Atlı okçu arkada durur ama korumaya ihtiyacı yok; öteki özel birlikler önde, okçuyu korur.
+  const screen = u.inf + u.cav + (U.as === "arch" ? 0 : u.elite);
   const covered = Math.min(u.arch, screen), bare = u.arch - covered;
   return u.inf * infMul(s, defending)
     + u.cav * N.cavMelee * cavMul(s) * (assault ? N.cavWall : 1)
-    + (covered * N.archMelee + bare * N.archBare) * archMul(s);
+    + (covered * N.archMelee + bare * N.archBare) * archMul(s)
+    + u.elite * eliteMelee(U, defending) * eliteMul(s) * (assault && U.as === "cav" ? N.cavWall : 1);
 }
 
 /** Kayıpları türlere oranla dağıtır (yuvarlamadan artan, en kalabalık türden düşer). */
@@ -179,6 +194,9 @@ export function explain(att, def, walls) {
     if ((u.inf ?? 0) > 0) put(list, "inf", trait(u.civ, "inf") * (defending ? trait(u.civ, "defInf") : 1));
     if ((u.arch ?? 0) > 0) put(list, "arch", trait(u.civ, "arch"));
     if ((u.cav ?? 0) > 0) put(list, "cav", trait(u.civ, "cav"));
+    // Özel birlik: adı ve göğüs göğüse gücü, piyadeden güçlüyse (atlı okçunun gücü okunda).
+    const U = uniqueOf(u.civ);
+    if ((u.elite ?? 0) > 0 && eliteMelee(U, defending) > 1) list.push(["elite:" + (u.civ ?? ""), eliteMelee(U, defending)]);
     // Araştırma: ayrı satırlar (hangi teknolojinin yaradığı görünsün).
     put(list, "techAll", tech(u, "all"));
     if ((u.inf ?? 0) > 0) put(list, "techInf", tech(u, "inf"));

@@ -6,14 +6,14 @@
 
 import { CIVS, PLACES } from "../data/world.js";
 import { byId } from "./graph.js";
-import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
+import { LEVELS, N, SHIPS, UNITS, trait, uniqueOf } from "./numbers.js";
 import { buildableById, holds } from "./wonders.js";
 import { POS, cellOf, dist, isLand } from "./map.js";
 import { TECHS, freeTech, grant, knows, techMul, unlocked, unlockerOf } from "./research.js";
 import { dealMoney } from "./leaders.js";
 import { spawnCamps } from "./barbarians.js";
 
-export const VERSION = 18;
+export const VERSION = 19;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -131,6 +131,11 @@ export function migrate(s) {
     if (!s.barbarians) spawnCamps(s);
     s.version = 18;
   }
+  if (s.version === 18) {
+    // Medeniyete özel birlikler: yeni yuva (bölüm 5b).
+    for (const u of [...Object.values(s.places), ...s.armies]) u.elite ??= 0;
+    s.version = 19;
+  }
   return s;
 }
 
@@ -154,7 +159,7 @@ export function newGame(player, seed = 1, level = "normal") {
     const lv = free ? start.level : p.capital ? 2 : 1;
     const place = {
       owner: p.owner, level: lv, industry: 1, farms: 1, barracks: 1,
-      pop: 0, inf: 0, arch: 0, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, upgraded: false, recruited: 0,
+      pop: 0, inf: 0, arch: 0, cav: 0, siege: 0, elite: 0, ships: 0, trireme: 0, quinq: 0, upgraded: false, recruited: 0,
       builds: [], // süren inşaatlar: { what, left, total, paid }
       // Liman yapıları (sadece limanda kullanılır). Tersane 1 ile başlar: gemi yapılabilsin.
       fishery: 0, shipyard: p.port ? 1 : 0, trade: 0, fort: 0, built: 0,
@@ -550,7 +555,7 @@ export function buildShip(state, id, type = "ships") {
 // ---- asker basma ----
 
 export function recruitCost(civ, type) {
-  const c = N.cost[type];
+  const c = type === "elite" ? uniqueOf(civ).cost : N.cost[type];
   return { money: c.money * trait(civ, "recruitMoney", 1), weapons: c.weapons, food: c.food };
 }
 
@@ -563,6 +568,7 @@ export function recruitInfo(state, id, type) {
   else if (type === "arch" && pl.barracks < 2) why = "needBarracks";
   else if (type === "cav" && pl.barracks < 3) why = "needBarracks3";
   else if (type === "siege" && pl.industry < 3) why = "needIndustry3";
+  else if (type === "elite" && pl.barracks < N.eliteBarracks) why = "needBarracks";
   else if (pl.recruited >= pl.barracks) why = "done";
   else if (pl.pop < N.company + 10) why = "pop"; // şehri boşaltma: en az 10 kişi kalsın
   else if (civ.money < cost.money) why = "money";

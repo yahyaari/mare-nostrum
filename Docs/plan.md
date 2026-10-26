@@ -85,6 +85,11 @@ barbar kamplarını seçti.
     görünür, başkentin kampı karadan varılır (`home`), öğretici bitince kamera ev kampına kayar,
     kamera alttan panel kadar taşabilir (Mısır'ın kampı panelin altında kalıyordu).
 
+Kullanıcı (26.10) "strateji oyunlarının olmazsa olmazları" sordu; önerdiğim beş iş için "hepsini sırayla
+yapalım": (1) medeniyete özel birlikler, (2) bölüklerin dinlenince dolması, (3) kayıt yuvaları, (4) oyun
+sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) ticaret yolları.
+15. **Medeniyete özel birlikler** (bu adım): kurallar.md 5b. `N.unique`, `elite` yuvası, kayıt 19.
+
 **Sırada:** kullanıcı oynayıp söyleyecek.
 
 ## ÖNCEKİLER (22.10 akşam)

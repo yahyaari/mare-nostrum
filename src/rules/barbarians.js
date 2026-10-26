@@ -58,7 +58,7 @@ function freeSpots(state, near = null) {
 function makeCamp(state, c) {
   const a = {
     id: state.nextArmy++, owner: null, barbarian: true, camp: true, at: null, ...centre(c),
-    inf: B().start, arch: Math.round(B().start / 3), cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0,
+    inf: B().start, arch: Math.round(B().start / 3), cav: 0, siege: 0, elite: 0, ships: 0, trireme: 0, quinq: 0,
     mp: 0, route: [], general: null, xp: 0, born: state.turn,
   };
   state.armies.push(a);
@@ -104,7 +104,7 @@ export function tickBarbarians(state, events) {
     const k = 0.5;
     const r = {
       id: state.nextArmy++, owner: null, barbarian: true, raider: true, target, at: null, x: a.x, y: a.y,
-      inf: Math.floor(a.inf * k), arch: Math.floor(a.arch * k), cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0,
+      inf: Math.floor(a.inf * k), arch: Math.floor(a.arch * k), cav: 0, siege: 0, elite: 0, ships: 0, trireme: 0, quinq: 0,
       mp: N.march.mp, route: [], general: null, xp: 0,
     };
     a.inf -= r.inf;
@@ -171,7 +171,7 @@ function raid(state, r, id, events) {
 
 /** Akının hedefi: kampa en yakın, sahibi olan, akıncıların umutsuz olmadığı yerleşim (menzil içinde). */
 function raidTarget(state, camp) {
-  const r = { owner: null, inf: Math.floor(camp.inf / 2), arch: Math.floor(camp.arch / 2), cav: 0, siege: 0, x: camp.x, y: camp.y, xp: 0 };
+  const r = { owner: null, inf: Math.floor(camp.inf / 2), arch: Math.floor(camp.arch / 2), cav: 0, siege: 0, elite: 0, x: camp.x, y: camp.y, xp: 0 };
   const cand = PLACES.filter((p) => state.places[p.id].owner && dist(POS[p.id], camp) <= B().reach)
     .filter((p) => forecast(state, r, null, p.id).odds !== "hopeless")
     .sort((p, q) => dist(POS[p.id], camp) - dist(POS[q.id], camp));
