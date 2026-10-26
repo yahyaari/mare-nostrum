@@ -10,7 +10,7 @@
 import { fight } from "./combat.js";
 import { breakAlliance, declareWar, makeDeal } from "./diplomacy.js";
 import { seat } from "./loyalty.js";
-import { defenders, wallsOf } from "./moves.js";
+import { capture, defenders, wallsOf } from "./moves.js";
 import { N, UNITS } from "./numbers.js";
 import { random } from "./rng.js";
 import { armiesAt, budget, empty, info, isHuman, key, men, placesOf, relation, strength } from "./state.js";
@@ -23,6 +23,36 @@ const placeWhere = (state, civ, ok) => pick(state, placesOf(state, civ).filter(o
  * isteyen seçenek `money` taşır, bedavası en sonda), `apply` (sonucu), `ai` (bilgisayarın seçimi).
  */
 export const EVENTS = {
+  // İç savaş (crises.js): rastgele düşmez (`manual`), büyük imparatorluğa crises.js yazar.
+  civilWar: {
+    manual: true,
+    where: () => null,
+    options: (s, it) => [{ key: "bribe", money: it.bribe }, { key: "endure" }],
+    apply(s, it, ch) {
+      const hit = it.rebels.filter((id) => s.places[id].owner === it.civ);
+      if (ch === "bribe") {
+        for (const id of hit) s.places[id].loyalty = Math.min(s.places[id].loyalty, N.crises.civilWar.calm);
+        return { count: hit.length };
+      }
+      // Reddedildi: eyaletler kopar, bağımsız olur; garnizonları ve içerideki orduları valilerin yanına geçer.
+      for (const id of hit) {
+        const pl = s.places[id];
+        const troops = Object.fromEntries(UNITS.map((k) => [k, pl[k] ?? 0]));
+        for (const a of s.armies.filter((x) => x.at === id && x.owner === it.civ)) for (const k of UNITS) troops[k] += a[k] ?? 0;
+        s.armies = s.armies.filter((x) => !(x.at === id && x.owner === it.civ));
+        capture(s, id, null);
+        for (const k of UNITS) pl[k] = troops[k];
+      }
+      return { count: hit.length, seceded: true };
+    },
+    // Bilgisayar: en büyük imparatorluksa ödemez (kriz büyüyeni frenlesin diye; bilgisayarın kasası geç
+    // oyunda binlerce, paraya bakan karar ona işlemiyordu); değilse parası iki katı yetiyorsa öder.
+    ai: (s, it) => {
+      const size = (c) => Object.values(s.places).filter((p) => p.owner === c).length;
+      const top = Object.keys(s.civs).every((c) => c === it.civ || size(c) <= size(it.civ));
+      return !top && s.civs[it.civ].money >= it.bribe * 2 ? "bribe" : "endure";
+    },
+  },
   plague: {
     where: (s, c) => placeWhere(s, c, (id) => s.places[id].pop >= 100),
     options: () => [{ key: "quarantine", money: 12 }, { key: "endure" }],
@@ -212,7 +242,7 @@ const item = (state, fields) => {
 /** Tur sonu: bir medeniyete olay düşer mi. Oyuncununki mektup olur, bilgisayarınki hemen çözülür. */
 export function roll(state, civ) {
   if (state.turn < N.events.from || random(state) >= N.events.chance) return null;
-  const keys = Object.keys(EVENTS);
+  const keys = Object.keys(EVENTS).filter((k) => !EVENTS[k].manual);
   for (let tries = 0; tries < 4; tries++) {
     const k = keys[Math.floor(random(state) * keys.length)];
     const place = EVENTS[k].where(state, civ);
@@ -225,6 +255,16 @@ export function roll(state, civ) {
     return resolve(state, it, aiChoice(state, it));
   }
   return null;
+}
+
+/** Kuralların yazdığı bir olay (crises.js): oyuncununki gelen kutusuna, bilgisayarınki hemen çözülür. */
+export function letter(state, civ, k, place, fields = {}) {
+  const it = item(state, { type: "event", key: k, civ, place, ...fields });
+  if (isHuman(state, civ)) {
+    state.inbox.push(it);
+    return it;
+  }
+  return resolve(state, it, aiChoice(state, it));
 }
 
 /** Bilgisayardan bir oyuncuya (`target`) teklif (ai.js çağırır). Aynı medeniyetten aynı oyuncuya aynı tur bir tane. */

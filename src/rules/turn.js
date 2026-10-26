@@ -23,6 +23,7 @@ import { isWinter } from "./season.js";
 import { techMul, tickResearch } from "./research.js";
 import { tickBarbarians } from "./barbarians.js";
 import { replenish } from "./refill.js";
+import { tickCrises } from "./crises.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -74,6 +75,8 @@ export function endTurn(state) {
   }
   // Barbarlar: kamplar büyür, akıncılar yürür ve saldırır.
   tickBarbarians(state, events);
+  // Büyük krizler: iç savaş, salgın, büyük göç (oyunun sonunu canlı tutar).
+  tickCrises(state, events);
   // Kuşatmalar bir tur ilerler (üretimden önce: kuşatılan yer bu tur bir şey üretmez).
   tickSieges(state, events);
   // Tarafsızın toprağında duran ordular o medeniyeti öfkelendirir.

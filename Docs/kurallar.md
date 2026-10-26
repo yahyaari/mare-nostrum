@@ -1005,3 +1005,33 @@ savaşılacak düşman). `src/rules/barbarians.js`.
   tamamen kapalıyken de 295: düşüş akınlardan değil, kamplar oyunları başka bir gidişata sokuyor
   (ve 70 oyunun gürültüsü +-10). Yağmayı yumuşatmak (nüfusun %15'i, akın 1/8) 291, akını seyrekleştirmek
   302 okudu - gürültü içinde; erken hareket için varsayılanlar kaldı.
+
+---
+
+## 27. Büyük krizler
+
+Kullanıcının istediği "olmazsa olmazlar"ın dördüncüsü (26.10): oyunun sonunu canlı tutmak. Strateji
+oyunlarının bilinen sorunu, büyüyenin bir noktadan sonra rahatça kazanması (plan.md "dünyanın donması").
+Çaresi büyüklerin başına gelen dertler. `src/rules/crises.js`, hepsi **50. turdan** sonra.
+
+- **İç savaş:** en az 10 yeri olan medeniyete turda %3 ihtimalle (iki iç savaş arası en az 40 tur).
+  Başkentten en uzak yerlerin onda üçünün valileri ayaklanır. Oyuncuya mektup: *valilere altın dağıt*
+  (şehir başına 20 para, ama en az kasanın yarısı; kalırlar, sadakatleri 35'e düşer) ya da *reddet*
+  (eyaletler hemen kopar, bağımsız olur; garnizonları ve içlerindeki ordular valilerin yanına geçer -
+  geri almak gerekir). Bilgisayar en büyük imparatorluksa ödemez, değilse parası iki katı yetiyorsa öder
+  (bilgisayarın kasası geç oyunda binlerce: ilk sürümde 37 iç savaşın 33'ünde ödedi, hiçbir şey değişmedi).
+  Başkalarının iç savaşı ve kopan eyaletleri haberlere düşer.
+- **Büyük salgın:** turda %2 ihtimalle (en az 40 tur arayla) dünyanın en kalabalık şehrinde başlar; 6 tur
+  boyunca her uğradığı şehirden yollarla komşulara yarı yarıya geçer. Uğradığı yerin nüfusunun dörtte biri,
+  garnizonun ve kapıdaki orduların onda biri ölür; her hamam seviyesi kaybı %20 azaltır (en çok %60).
+  Haritada uğradığı yerlerin sancağının solunda yeşilimsi bir hastalık bulutu; haberde başladığı yer ve
+  oyuncunun her şehrindeki kayıp.
+- **Büyük göç (Kimberler):** 70. turdan sonra turda %3 ihtimalle (en az 40 tur arayla, aynı anda bir tane)
+  en çok yeri olan medeniyetin başkentinden en uzak yerinin 2.6-5 birim yakınında 150 + tur sayısı kadar
+  barbar belirir (yarısı piyade, okçu ve süvari). Akıncılar gibi yürür ve yağmalar, ama yağmadan sonra
+  dağılmaz: sağ kalanlarıyla 8 birim içindeki bir sonraki yere (önce kurbanın) yürür. Yenilince yok olur,
+  25 turda dağılır. Sisde de görünür, tehdit uyarısına ve ipucu balonuna girer.
+- Ölçüm (21 bot oyunu, 150. tur): en büyüğün yeri ortalama 22.5 -> 20.9, en çok 38 -> 30 (iç savaşların
+  yarısından çoğu kopmayla bitiyor); 70 oyunda ilk düşüş 48 (aynı), ayakta kalan toplam 332 -> 335.
+  14 bot oyununda: oyun başına ~2.7 iç savaş, ~1.2 büyük salgın (her biri ~6 yere uğrar),
+  ~1 büyük göç (her biri ~3 şehri yağmalar, 44 akından 37'si yağma).

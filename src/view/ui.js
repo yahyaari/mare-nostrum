@@ -56,7 +56,7 @@ import { SIZE } from "../geo.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
 /** Bir ordunun sahibinin adı: haydutların sahibi yok (rules/bandits.js). */
-const ownerName = (a, T, lang) => (a.bandit ? T.bandits : a.camp ? T.barbCamp : a.barbarian ? T.barbarians : civName(a.owner, lang, T.free));
+const ownerName = (a, T, lang) => (a.bandit ? T.bandits : a.camp ? T.barbCamp : a.horde ? T.horde : a.barbarian ? T.barbarians : civName(a.owner, lang, T.free));
 
 /** Pencere açılırken süzülerek gelsin: bu kadar milisaniye. */
 export const MODAL_MS = 180;
@@ -2101,6 +2101,14 @@ export function eventLines(game, lang) {
     }
     if (e.type === "raidOut" && e.owner === me) out.push([fill(T.evRaidOut, placeName(e.target, lang), e.men), "bad"]);
     if (e.type === "campNew") out.push([T.evCampNew, null]);
+    // Büyük krizler (crises.js).
+    if (e.type === "civilWar" && e.civ !== me) out.push([fill(T.evCivilWar, civName(e.civ, lang), e.count), null]);
+    if (e.type === "seceded") out.push([fill(T.evSeceded, e.count, civName(e.civ, lang)), e.civ === me ? "bad" : null]);
+    if (e.type === "plagueStart") out.push([fill(T.evPlagueStart, placeName(e.place, lang)), e.owner === me ? "bad" : "warn"]);
+    if (e.type === "plagueHit" && e.owner === me) out.push([fill(T.evPlagueHit, placeName(e.place, lang), e.lost, e.men), "bad"]);
+    if (e.type === "plagueEnd") out.push([fill(T.evPlagueEnd, e.places), null]);
+    if (e.type === "hordeCame") out.push([fill(T.evHorde, e.men, placeName(e.place, lang), civName(e.civ, lang)), e.civ === me ? "bad" : "warn"]);
+    if (e.type === "hordeGone") out.push([T.evHordeGone, null]);
     if (e.type === "battle" && e.barbarians && !e.field && e.defender === me) out.push(e.won ? [fill(T.evRaidTook, placeName(e.place, lang), e.sacked?.pop ?? 0, e.sacked?.money ?? 0), "bad"] : [fill(T.evRaidHeld, placeName(e.place, lang)), "good"]);
     if (e.type === "wonderBuilt") out.push([fill(T.evWonderBuilt, name(e.civ), T.wonders[e.wonder][0], placeName(e.place, lang)), e.civ === me ? "good" : "bad"]);
     if (e.type === "wonderMissed" && e.civ === me) out.push([fill(T.evWonderMissed, T.wonders[e.wonder][0], e.refund), "bad"]);
@@ -2392,7 +2400,7 @@ export function letterText(game, it, lang) {
   const T = TEXT[lang];
   const L = T.letters[it.key];
   const who = it.type === "offer" ? civName(it.civ, lang) : placeName(it.place, lang);
-  const a = it.type === "offer" ? it.amount ?? "" : it.raiders ?? "";
+  const a = it.type === "offer" ? it.amount ?? "" : it.raiders ?? it.count ?? "";
   const b = it.type === "offer" ? N.offers.truce : it.bribe ?? "";
   return {
     title: fill(L.title, who, a, b),

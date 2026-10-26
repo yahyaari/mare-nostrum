@@ -65,6 +65,22 @@ export const N = {
   // Dinlenme (bölüm 6c, refill.js): kendi toprağında yürümeyen ordunun ve garnizonun her yarım bölüğü
   // turda `men` asker kazanır, yerin nüfusundan (en az `keep` kişi kalır).
   refill: { men: 3, keep: 20 },
+  // Büyük krizler (bölüm 27, crises.js), `from`. turdan sonra.
+  // İç savaş: en az `places` yeri olan medeniyete turda `chance` ihtimalle (aralarında en az `gap` tur);
+  // başkentten en uzak yerlerin `share` kadarı garnizonlarıyla kopar, bağımsız olur - valilere şehir başına
+  // `pay` para, ama en az kasanın `treasury` payı verilirse kalırlar, sadakatleri `calm`a düşer.
+  // Büyük salgın: turda `chance` (`gap` tur arayla); en kalabalık şehirde başlar, `turns` tur boyunca
+  // her şehirden yollarla komşulara `spread` ihtimalle geçer; vardığı yerin nüfusunun `pop` payı ve
+  // askerin `army` payı ölür; her hamam seviyesi `baths` hafifletir (en çok `bathsMax`).
+  // Büyük göç: `from`. turdan sonra turda `chance` (`gap` tur arayla), `base` + tur x `perTurn` barbar
+  // (okçu `arch`, süvari `cav` payı), en çok yeri olanın sınırının `near` yakınında; her yağmadan sonra
+  // `next` birim içindeki yeni hedefe yürür; `life` turda dağılır.
+  crises: {
+    from: 50,
+    civilWar: { places: 10, chance: 0.03, gap: 40, share: 0.3, calm: 35, pay: 20, treasury: 0.5 },
+    plague: { chance: 0.02, gap: 40, turns: 6, spread: 0.5, pop: 0.25, army: 0.1, baths: 0.2, bathsMax: 0.6 },
+    horde: { from: 70, chance: 0.03, gap: 40, base: 150, perTurn: 1, arch: 0.3, cav: 0.2, near: [2.6, 5], next: 8, life: 25 },
+  },
   cavUpkeep: 1, // süvari bölüğü turda kaç bölük gibi yer (2 iken süvari yiyeceğe göre piyadeden zayıftı: tuzak birlik)
   upkeep: 1, // bölük başına turda yiyecek
   starve: 0.1, // açlıkta turda kayıp

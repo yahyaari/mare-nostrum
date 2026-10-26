@@ -30,6 +30,7 @@ import * as anim from "./view/anim.js";
 import * as sound from "./view/sound.js";
 import { relation } from "./rules/state.js";
 import { eyes, seen as seenBy, sight } from "./rules/sight.js";
+import { plagueAt } from "./rules/crises.js";
 import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
 import { sendSpy } from "./rules/spies.js";
@@ -334,7 +335,9 @@ function mapView() {
     sea: !a.at && !isLand(cellOf(a.x, a.y)),
     camp: !!a.besieging || !!a.bandit || !!a.camp,
     barb: !!a.camp,
+    horde: !!a.horde,
   }));
+  view.plague = plagueAt(game);
   view.sieges = Object.fromEntries(game.armies.filter((a) => a.besieging).map((a) => [a.besieging, a.owner]));
   // İnşa edilen harikaların yerleri (haritada işaret).
   view.built = Object.fromEntries(Object.values(game.built ?? {}).map((id) => [id, true]));

@@ -92,6 +92,8 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
 16. **Dinlenme**: kurallar.md 6c, `src/rules/refill.js`. Kartta yeşil ▲.
 17. **Kayıt yuvaları**: kurallar.md bölüm 12 (Ekran). Üç yuva + otomatik kayıt; menüde Kaydet / Yükle.
     (16 ve 17 aynı commit'te.)
+18. **Büyük krizler** (bu adım): kurallar.md bölüm 27, `src/rules/crises.js`. İç savaş (mektup), büyük salgın,
+    Kimber göçü.
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 

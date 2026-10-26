@@ -22,6 +22,7 @@ import { H, PLACE_CELL, POS, W, centre, dist, field, isLand, isRoad, placeAtCell
 import { canAttack, forecast, order, sides } from "./moves.js";
 import { armiesAt, empty, men } from "./state.js";
 import { UNITS } from "./numbers.js";
+import { hordeTarget } from "./crises.js";
 
 const B = () => N.barbarians;
 
@@ -40,6 +41,9 @@ function staticSpots() {
   }
   return STATIC;
 }
+
+/** Kara, yol olmayan, yerleşimlerin dibinde olmayan noktalar (büyük göç de buralardan gelir, crises.js). */
+export const landSpots = () => staticSpots();
 
 /** Bir kamp kurulabilecek kareler: sahibi olan her yerleşimden ve öteki kamplardan uzak (`near`: bir başkentin yakını). */
 function freeSpots(state, near = null) {
@@ -115,6 +119,13 @@ export function tickBarbarians(state, events) {
   // Akıncılar: hedefe yürür, menzildeyse saldırır; hedef artık yoksa ya da yol yoksa dağılır.
   for (const r of state.armies.filter((x) => x.raider && !x.at)) {
     r.mp = N.march.mp;
+    // Büyük göç (crises.js): ömrü dolunca dağılır; hedefi el değiştirdiyse yenisini seçer.
+    if (r.horde && state.turn - r.born > N.crises.horde.life) {
+      state.armies = state.armies.filter((x) => x !== r);
+      events.push({ type: "hordeGone", turn: state.turn, civ: r.victim });
+      continue;
+    }
+    if (r.horde && !state.places[r.target]?.owner) r.target = hordeTarget(state, r) ?? r.target;
     const pl = state.places[r.target];
     if (!pl?.owner) { state.armies = state.armies.filter((x) => x !== r); continue; }
     if (!canAttack(state, r, r.target)) order(state, r.id, { place: r.target });
@@ -155,7 +166,13 @@ function raid(state, r, id, events) {
     const keep = sd.def[k] > 0 ? res.def[k] / sd.def[k] : 0;
     for (const u of units) u[k] = Math.floor(u[k] * keep);
   }
-  state.armies = state.armies.filter((a) => a !== r && !(a.at === id && a.owner === owner && empty(a)));
+  // Akıncı yağmadan sonra dağılır; büyük göç sağ kalanlarıyla bir sonraki şehre yürür.
+  const onward = r.horde && res.attWins ? hordeTarget(state, { ...r, x: POS[id].x, y: POS[id].y }, id) : null;
+  if (onward) {
+    for (const k of UNITS) r[k] = res.att[k];
+    r.target = onward;
+  }
+  state.armies = state.armies.filter((a) => (a !== r || (onward && !empty(r))) && !(a.at === id && a.owner === owner && empty(a)));
   if (res.attWins) {
     const b = B();
     const lost = Math.round(pl.pop * b.sackPop);

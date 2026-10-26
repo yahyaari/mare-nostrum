@@ -710,6 +710,25 @@ function drawPlaces(ctx, cam, view, L) {
       ctx.fill();
       ctx.globalAlpha = 1;
     }
+    // Salgının uğradığı yer (crises.js): sancağın solunda yeşilimsi bir hastalık bulutu.
+    if (view.plague?.has(p.id)) {
+      const x = s.x - f.w / 2 - 9, y = s.y - f.pole + 3;
+      ctx.fillStyle = "rgba(120,150,60,0.85)";
+      ctx.strokeStyle = "rgba(40,50,20,0.9)";
+      ctx.lineWidth = 1;
+      for (const [dx, dy, r] of [[-3, 1, 4], [3, 1, 4], [0, -2.5, 4.5]]) {
+        ctx.beginPath();
+        ctx.arc(x + dx, y + dy, r, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(30,36,14,0.9)";
+      for (const dx of [-1.6, 1.6]) {
+        ctx.beginPath();
+        ctx.arc(x + dx, y - 1, 0.9, 0, TAU);
+        ctx.fill();
+      }
+    }
     // Huzursuz (sadakati düşük) kendi yerin: sancağın yanında kırmızı bir ünlem rozeti.
     const lo = view.unrest?.[p.id];
     if (lo !== undefined) {
@@ -750,7 +769,7 @@ function drawPlaces(ctx, cam, view, L) {
   for (const a of view.armies ?? []) {
     // Sisin içindeki yabancı ordu görünmez (yürürken de: bulunduğu nokta açık mı). Barbar kampları
     // yerleşimler gibi hep görünür: kıpırdamazlar, herkesin ilk hedefi (akıncıları sis gizler).
-    if (view.fog && a.owner !== view.me && !a.barb && !(a.float ? clear(a.float, view.eyes ?? []) : view.seen.has(a.at))) continue;
+    if (view.fog && a.owner !== view.me && !a.barb && !a.horde && !(a.float ? clear(a.float, view.eyes ?? []) : view.seen.has(a.at))) continue;
     // Yerleşimin dışındaki ordu (sahada ya da animasyonla yürürken) bulunduğu yerde; aynı yerde
     // duran ordular yan yana. Kuşatan ordunun yanında kamp çadırları.
     if (a.float) {

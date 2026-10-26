@@ -970,6 +970,97 @@ section("Dinlenme (bölüm 6c)");
   check("barbar kampı toparlanmaz", camp.inf === 23);
 }
 
+section("Büyük krizler (bölüm 27)");
+
+{
+  const CR = await import("../src/rules/crises.js");
+  const BA = await import("../src/rules/barbarians.js");
+  const EV = await import("../src/rules/events.js");
+  const { TEXT } = await import("../src/text.js");
+  const { neighbours } = await import("../src/rules/graph.js");
+  for (const lang of ["en", "tr"]) check(`${lang}: kriz yazıları`, ["horde", "evCivilWar", "evPlagueStart", "evPlagueHit", "evPlagueEnd", "evHorde", "evHordeGone"].every((k) => TEXT[lang][k]) && TEXT[lang].letters.civilWar?.bribe && TEXT[lang].letters.civilWar?.endure);
+  const sure = (key, fn) => { const c = N.crises[key].chance; N.crises[key].chance = 1; try { return fn(); } finally { N.crises[key].chance = c; } };
+  // Bir medeniyete on yer ver.
+  const grow = (st, civ, n) => { for (const p of PLACES.filter((q) => !q.capital && st.places[q.id].owner !== civ).slice(0, Math.max(0, n - S.placesOf(st, civ).length))) M.capture(st, p.id, civ); };
+
+  // İç savaş: oyuncuya mektup, uzak eyaletler; reddederse sadakat 10, altınla 35.
+  const w = S.newGame("rome", 7);
+  w.turn = N.crises.from + 1;
+  grow(w, "rome", N.crises.civilWar.places);
+  const evs = [];
+  sure("civilWar", () => CR.tickCrises(w, evs));
+  const it = w.inbox.find((x) => x.key === "civilWar");
+  const rebels = CR.rebelsOf(w, "rome");
+  check("iç savaş: büyük imparatorluğa mektup gelir, başkentten en uzak eyaletler", !!it && it.count === rebels.length && rebels.length === Math.ceil(S.placesOf(w, "rome").length * N.crises.civilWar.share) && !rebels.includes("rome") && evs.some((e) => e.type === "civilWar"));
+  w.civs.rome.money = 0;
+  for (const id of rebels) w.places[id].inf = 37;
+  EV.resolve(w, it, "bribe");
+  check("parası yetmezse reddetmiş sayılır: eyaletler garnizonlarıyla kopar", rebels.every((id) => w.places[id].owner === null && w.places[id].inf === 37) && w.places.rome.owner === "rome");
+  const w2 = S.newGame("rome", 7);
+  w2.turn = N.crises.from + 1;
+  grow(w2, "rome", N.crises.civilWar.places);
+  sure("civilWar", () => CR.tickCrises(w2, []));
+  const it2 = w2.inbox.find((x) => x.key === "civilWar");
+  w2.civs.rome.money = 1000;
+  for (const id of it2.rebels) w2.places[id].loyalty = 100; // ele geçirilen yerler düşük sadakatle başlar
+  EV.resolve(w2, it2, "bribe");
+  check("valilere altın: sadakat yalnız 35'e düşer, parası gider", it2.rebels.every((id) => w2.places[id].loyalty === N.crises.civilWar.calm) && w2.civs.rome.money === 1000 - it2.bribe);
+  sure("civilWar", () => CR.tickCrises(w2, []));
+  check("iç savaş arası en az 40 tur", w2.inbox.filter((x) => x.key === "civilWar").length === 0);
+  const small = S.newGame("rome", 7);
+  small.turn = N.crises.from + 1;
+  sure("civilWar", () => CR.tickCrises(small, []));
+  check("küçük medeniyette iç savaş yok", !small.inbox.some((x) => x.key === "civilWar"));
+  check("iç savaş rastgele olay olarak düşmez", EV.EVENTS.civilWar.manual === true);
+
+  // Büyük salgın: en kalabalık şehirde başlar, yollarla yayılır; hamam hafifletir.
+  const p = S.newGame("rome", 7);
+  p.turn = N.crises.from + 1;
+  p.places.carthage.pop = 500;
+  const pop0 = p.places.carthage.pop, inf0 = p.places.carthage.inf;
+  const pe = [];
+  sure("plague", () => CR.tickCrises(p, pe));
+  check("salgın en kalabalık şehirde başlar: nüfusun dörtte biri, askerin onda biri", pe.some((e) => e.type === "plagueStart" && e.place === "carthage") && p.places.carthage.pop === pop0 - Math.round(pop0 * N.crises.plague.pop) && p.places.carthage.inf === inf0 - Math.floor(inf0 * N.crises.plague.army));
+  const sp = N.crises.plague.spread;
+  N.crises.plague.spread = 1;
+  const pe2 = [];
+  CR.tickCrises(p, pe2);
+  N.crises.plague.spread = sp;
+  check("salgın yollarla komşulara geçer", neighbours("carthage").every((n) => CR.plagueAt(p).has(n)) && pe2.filter((e) => e.type === "plagueHit").length === neighbours("carthage").length);
+  const b = S.newGame("rome", 7);
+  b.turn = N.crises.from + 1;
+  b.places.carthage.pop = 500; b.places.carthage.baths = 3;
+  sure("plague", () => CR.tickCrises(b, []));
+  check("hamamlar salgını hafifletir", 500 - b.places.carthage.pop === Math.round(500 * N.crises.plague.pop * (1 - Math.min(N.crises.plague.bathsMax, 3 * N.crises.plague.baths))));
+
+  // Büyük göç: en çok yeri olanın sınırında; yağmalayınca dağılmaz, sonraki şehre yürür.
+  const h = S.newGame("rome", 7);
+  h.turn = N.crises.horde.from + 1;
+  grow(h, "parthia", 12);
+  h.crises = { war: {}, plague: null, lastPlague: h.turn, lastHorde: 0 };
+  const he = [];
+  sure("horde", () => CR.tickCrises(h, he));
+  const horde = h.armies.find((a) => a.horde);
+  check("büyük göç en çok yeri olanın üstüne gelir", !!horde && horde.victim === "parthia" && h.places[horde.target].owner === "parthia" && he.some((e) => e.type === "hordeCame"));
+  check("göç büyük: en az 150 + tur kadar", S.men(horde) >= N.crises.horde.base + h.turn - 2);
+  // Ariminum'un garnizonunu boşalt, göçü kapısına koy: yağmalar ve Roma'nın yakındaki bir sonraki şehrini hedefler.
+  horde.victim = "rome";
+  horde.target = "ariminum";
+  const first = horde.target;
+  h.places[first].inf = 0; h.places[first].arch = 0;
+  for (const a of h.armies.filter((x) => x.at === first)) h.armies.splice(h.armies.indexOf(a), 1);
+  Object.assign(horde, before({}, first));
+  h.barbarians.lastCamp = h.turn;
+  const hb = [];
+  BA.tickBarbarians(h, hb);
+  check("göç yağmalar ve dağılmaz, yeni hedefe yürür", hb.some((e) => e.type === "battle" && e.barbarians && e.won && e.place === first) && h.armies.includes(horde) && horde.target !== first);
+  // Ömrü dolunca dağılır.
+  h.turn = horde.born + N.crises.horde.life + 1;
+  const hg = [];
+  BA.tickBarbarians(h, hg);
+  check("göç ömrü dolunca dağılır", !h.armies.includes(horde) && hg.some((e) => e.type === "hordeGone"));
+}
+
 // ---------------------------------------------------------------------------------------------
 section("Dağlar ve geri çekilme (bölüm 7, 22b)");
 
