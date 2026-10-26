@@ -96,9 +96,13 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     Kimber göçü.
 19. **Ticaret yolları** (2b42913): kurallar.md bölüm 28, `src/rules/trade.js`. Önerilen beş işin sonuncusu.
 
-20. **Taktik savaş** (bu adım; kullanıcı bir görsel gönderdi - tepeden saha, nokta blokları - "sonuçları gör
+20. **Taktik savaş** (f9b452d; kullanıcı bir görsel gönderdi - tepeden saha, nokta blokları - "sonuçları gör
     ve savaş seçeneği olsun ... tıklayıp şuraya git buraya git"): kurallar.md bölüm 29, `src/rules/tactics.js`,
     `src/view/tactics.js`. Saldırı penceresinde Sonucu gör / ⚔ Savaş.
+21. **Bölük, diziliş, kuşatma** (bu adım; "40 piyadeyi ikiye ayıramadım, uzatabilsem, etrafını sarsalar"):
+    Böl / Birleştir / Genişlet / Derinleştir, sağ sürükleyerek hat, yandan x1.5 / arkadan x2. kurallar.md 29.
+    Sırada (kullanıcı aynı anda istedi): savaş sahasında arazi - dağ, nehir, köprü, orman, köy, haritadaki
+    yere göre.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

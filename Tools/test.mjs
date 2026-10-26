@@ -1163,6 +1163,38 @@ section("Taktik savaş (bölüm 29)");
   const ro = TC.outcome(r);
   check("geri çekilen: savaş kaybedilir, askerler kaçabilir", !ro.attWins && ro.escaped.inf === 80);
 
+  // Bölme, birleştirme, diziliş (kullanıcı 26.10: "40 piyade tek bir taburdu, ikiye ayıramadım; uzatabilsem").
+  const sp = TC.setupBattle({ civ: "rome", inf: 40, arch: 20 }, { civ: "gaul", inf: 40 }, null, 3);
+  const p40 = sp.units.find((u) => u.side === "att" && u.type === "inf");
+  const half = TC.split(sp, p40.id);
+  check("birlik ikiye bölünür, asker sayısı korunur", !!half && p40.men + half.men === 40 && half.type === "inf" && sp.units.includes(half));
+  check("çok küçük birlik bölünmez", TC.split(sp, sp.units.find((u) => u.side === "att" && u.type === "arch").id) !== null && TC.split(TC.setupBattle({ civ: "rome", inf: 8 }, { civ: "gaul", inf: 8 }, null, 1), 1) === null);
+  const whole = TC.merge(sp, [p40.id, half.id]);
+  check("aynı türden birlikler birleşir", whole === p40 && p40.men === 40 && !sp.units.includes(half));
+  const c0 = TC.footprint(p40).cols;
+  TC.reshape(sp, [p40.id], 1);
+  const wide = TC.footprint(p40);
+  TC.reshape(sp, [p40.id], -1);
+  TC.reshape(sp, [p40.id], -1);
+  check("genişlet cepheyi uzatır, derinleştir kısaltır", wide.cols > c0 && TC.footprint(p40).cols < wide.cols && wide.rows < Math.ceil(40 / c0));
+  const pl = TC.planLine(sp, [p40.id], { x: 40, y: 10 }, { x: 40, y: 50 });
+  check("hat çizimi: birlik çizgi boyunca uzar, düşmana döner", pl.length === 1 && pl[0].cols >= 20 && Math.abs(Math.cos(pl[0].facing) - 1) < 1e-6);
+  // Kuşatma: yandan ve arkadan vurulan birlik çok daha çabuk bozulur.
+  const routIn = (where) => {
+    const bb = TC.setupBattle({ civ: "gaul", inf: 80 }, { civ: "gaul", inf: 40 }, null, 3);
+    const [a1, a2] = bb.units.filter((u) => u.side === "att"), d = bb.units.find((u) => u.side === "def");
+    const F = TC.footprint;
+    Object.assign(d, { x: 50, y: 30, facing: Math.PI });
+    Object.assign(a1, { x: 50 - F(a1).d / 2 - F(d).d / 2 - 0.3, y: 30, facing: 0 });
+    if (where === "rear") Object.assign(a2, { x: 50 + F(a2).d / 2 + F(d).d / 2 + 0.3, y: 30, facing: Math.PI });
+    else Object.assign(a2, { x: 5, y: 5 });
+    let t = 0;
+    while (!d.routed && !d.dead && t < 60) { TC.step(bb, 0.1); t += 0.1; }
+    return { t, face: where === "rear" ? TC.faceOf(d, a2) : null };
+  };
+  const front = routIn("none"), rear = routIn("rear");
+  check("arkadan vurulan birlik çabuk bozulur", rear.face === "rear" && rear.t < 15 && front.t > rear.t * 3, `${front.t.toFixed(1)} / ${rear.t.toFixed(1)}`);
+
   // Kurallara hazır sonuç: yer alınır, sağ kalanlar ordunun askeri olur.
   const g = S.newGame("rome", 7);
   const a = raise(g, "rome", { inf: 120 });

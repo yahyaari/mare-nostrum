@@ -3,10 +3,12 @@
 // birliğin üstündeki rozetten ayrılır: piyade sık blok ve kılıç, okçu seyrek ve yay, süvari uzunca noktalar
 // ve nal, kuşatma makinesi kareler ve tekerlek, özel birlik altın kenarlı noktalar ve yıldız. Üstte iki
 // tarafın gücü ve süre, altta oyuncunun birliklerinin kartları ve düğmeler (duraklat, hız, otomatik, geri
-// çekil). Savaş duraklatılmış başlar: önce emirler, sonra Başlat. Bitince sonuç panosu.
+// çekil); bir birlik seçiliyken sahanın altında Böl, Birleştir, Genişlet, Derinleştir. Sağ sürüklerken çizilen
+// hat ve birliklerin orada alacağı yer soluk dikdörtgenlerle görünür. Savaş duraklatılmış başlar: önce
+// emirler, sonra Başlat. Bitince sonuç panosu.
 
 import { N } from "../rules/numbers.js";
-import { footprint, strength } from "../rules/tactics.js";
+import { extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shade } from "./pieces.js";
 import { INK, TAU, button, colorOf, measure, panel, text, wrap } from "./kit.js";
 
@@ -30,9 +32,9 @@ export function toField(cam, x, y) {
 export function unitAt(b, p, side = null) {
   let best = null, bd = Infinity;
   for (const u of b.units) {
-    if (u.dead || u.gone || (side && u.side !== side)) continue;
+    if (u.dead || u.gone || (side && u.side !== side) || !inside(u, p, 1.6)) continue;
     const d = Math.hypot(u.x - p.x, u.y - p.y);
-    if (d < footprint(u).r + 1.6 && d < bd) { best = u; bd = d; }
+    if (d < bd) { best = u; bd = d; }
   }
   return best;
 }
@@ -72,8 +74,11 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
     ctx.fillStyle = "rgba(236,212,154,0.08)";
     ctx.fillRect(x, y, Math.abs(B.drag.x1 - B.drag.x0), Math.abs(B.drag.y1 - B.drag.y0));
   }
+  // Sağ sürükleme: çizilen hat ve birliklerin orada alacağı yer.
+  if (B.plan?.length) plan(ctx, f, B);
   topBar(ctx, cam, B, T, lang);
   bottomBar(ctx, cam, B, T, boxes);
+  if (B.sel.size && !b.over) formationBar(ctx, cam, f, B, T, boxes);
   if (b.over) endPanel(ctx, cam, B, T, lang, boxes);
   else if (B.paused && b.t === 0) startHint(ctx, cam, f, T, boxes);
 }
@@ -165,13 +170,21 @@ function block(ctx, f, u, owner, selected, now) {
   ctx.save();
   if (u.routed) ctx.globalAlpha = 0.55;
   if (selected) {
-    ctx.beginPath();
-    ctx.ellipse(f.x + u.x * f.k, f.y + u.y * f.k, (fp.r + 1.4) * f.k, (fp.r + 1.4) * f.k * 0.8, u.facing, 0, TAU);
+    rectPath(ctx, f, u.x, u.y, u.facing, fp.d / 2 + 0.9, fp.w / 2 + 0.9);
     ctx.fillStyle = "rgba(236,212,154,0.18)";
     ctx.fill();
     ctx.strokeStyle = GOLD_LIGHT;
     ctx.lineWidth = 1.5;
     ctx.stroke();
+    // Cephe: önünde küçük bir ok.
+    const tx = f.x + (u.x + cos * (fp.d / 2 + 2.2)) * f.k, ty = f.y + (u.y + sin * (fp.d / 2 + 2.2)) * f.k;
+    ctx.beginPath();
+    ctx.moveTo(tx + cos * 5, ty + sin * 5);
+    ctx.lineTo(tx - sin * 4, ty + cos * 4);
+    ctx.lineTo(tx + sin * 4, ty - cos * 4);
+    ctx.closePath();
+    ctx.fillStyle = GOLD_LIGHT;
+    ctx.fill();
   }
   for (let i = 0; i < n; i++) {
     const row = i % fp.rows, col = Math.floor(i / fp.rows);
@@ -193,10 +206,71 @@ function block(ctx, f, u, owner, selected, now) {
   ctx.restore();
 }
 
+/** Bir birliğin dikdörtgen yolu (saha birimiyle merkez, cephe yönü, yarı derinlik, yarı genişlik). */
+function rectPath(ctx, f, x, y, facing, hd, hw) {
+  const c = Math.cos(facing), s = Math.sin(facing);
+  const pt = (a, b) => [f.x + (x + a * c - b * s) * f.k, f.y + (y + a * s + b * c) * f.k];
+  ctx.beginPath();
+  for (const [i, [a, b]] of [[hd, -hw], [hd, hw], [-hd, hw], [-hd, -hw]].entries()) {
+    const [px, py] = pt(a, b);
+    if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+}
+
+/** Sağ sürüklemenin önizlemesi: hat ve her birliğin varacağı yer (soluk dikdörtgen, cephesi altın). */
+function plan(ctx, f, B) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(236,212,154,0.9)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(B.drawLine.x0, B.drawLine.y0);
+  ctx.lineTo(B.drawLine.x1, B.drawLine.y1);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  for (const t of B.plan) {
+    const u = B.b.units.find((v) => v.id === t.id);
+    if (!u) continue;
+    const fp = footprint({ ...u, cols: t.cols });
+    rectPath(ctx, f, t.x, t.y, t.facing, fp.d / 2, fp.w / 2);
+    ctx.fillStyle = "rgba(236,212,154,0.22)";
+    ctx.fill();
+    ctx.strokeStyle = GOLD_LIGHT;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Seçili birlikler için: Böl, Birleştir, Genişlet, Derinleştir (sahanın alt kenarında). */
+function formationBar(ctx, cam, f, B, T, boxes) {
+  const sel = B.b.units.filter((u) => B.sel.has(u.id) && !u.dead && !u.gone && !u.routed);
+  if (!sel.length) return;
+  const one = sel.length === 1 ? sel[0] : null;
+  const sameType = sel.length > 1 && sel.every((u) => u.type === sel[0].type);
+  const btns = [
+    { label: T.tacSplit, act: { do: "tacSplit" }, off: !one || one.men < N.tactics.minSplit * 2, tip: [T.tacSplit, T.tacSplitTip] },
+    { label: T.tacMerge, act: { do: "tacMerge" }, off: !sameType, tip: [T.tacMerge, T.tacMergeTip] },
+    { label: T.tacWide, act: { do: "tacWide" }, tip: [T.tacWide, T.tacWideTip] },
+    { label: T.tacDeep, act: { do: "tacDeep" }, tip: [T.tacDeep, T.tacDeepTip] },
+  ];
+  const bw = 112, gap = 6, w = btns.length * bw + (btns.length - 1) * gap;
+  const x0 = cam.w / 2 - w / 2, y = f.y + f.h - 40;
+  ctx.fillStyle = "rgba(28,21,14,0.75)";
+  roundRect(ctx, x0 - 8, y - 6, w + 16, 40, 6);
+  ctx.fill();
+  btns.forEach((o, i) => button(ctx, boxes, { x: x0 + i * (bw + gap), y, w: bw, h: 28, size: 13, ...o }));
+  // Seçili birliğin dizilişi: kaç sıra, kaç asker cephe.
+  if (one) {
+    const fp = footprint(one);
+    text(ctx, `${fp.cols} × ${fp.rows}`, x0 + w + 16, y + 19, { bold: true, size: 12, color: GOLD_LIGHT });
+  }
+}
+
 /** Birliğin rozeti: türünün simgesi, sayısı, moral çubuğu. */
 function badge(ctx, f, u, owner, selected) {
-  const fp = footprint(u);
-  const x = f.x + u.x * f.k, y = f.y + (u.y - fp.r) * f.k - 13;
+  const x = f.x + u.x * f.k, y = f.y + (u.y - extent(u).y) * f.k - 13;
   const R = 9;
   ctx.save();
   if (u.routed) ctx.globalAlpha = 0.6;
@@ -209,7 +283,7 @@ function badge(ctx, f, u, owner, selected) {
   ctx.stroke();
   glyph(ctx, u.elite ? "elite" : u.type, x, y, selected ? DARK : CREAM);
   // Moral (yeşil -> kızıl) ve sayı.
-  const m = Math.max(0, Math.min(1, (u.morale - (1 - u.men / u.start) * 100 * N.tactics.morale.loss) / 100));
+  const m = Math.max(0, Math.min(1, moraleOf(u) / 100));
   ctx.fillStyle = "rgba(20,14,8,0.7)";
   ctx.fillRect(x - 11, y + R + 2, 22, 3.5);
   ctx.fillStyle = u.routed ? "#9a4a3a" : m > 0.5 ? "#7fb85a" : m > 0.25 ? "#d6a63a" : "#c4523a";
@@ -375,7 +449,7 @@ function bottomBar(ctx, cam, B, T, boxes) {
     let size = 10;
     while (size > 7 && measure(ctx, nm, { size }) > cw - 4) size -= 0.5;
     text(ctx, nm, x + cw / 2, y + 66, { size, color: "rgba(243,231,201,0.75)", align: "center" });
-    const m = out || u.routed ? 0 : Math.max(0, Math.min(1, (u.morale - (1 - u.men / u.start) * 100 * N.tactics.morale.loss) / 100));
+    const m = out || u.routed ? 0 : Math.max(0, Math.min(1, moraleOf(u) / 100));
     ctx.fillStyle = "rgba(255,255,255,0.12)";
     ctx.fillRect(x + 6, y + h - 12, cw - 12, 5);
     ctx.fillStyle = m > 0.5 ? "#7fb85a" : m > 0.25 ? "#d6a63a" : "#c4523a";

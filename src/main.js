@@ -36,7 +36,7 @@ import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
 import { sendSpy } from "./rules/spies.js";
 import { SCENE_MS } from "./view/battle.js";
-import { aiOrders, command as tacCommand, outcome, setupBattle, step as stepBattle } from "./rules/tactics.js";
+import { aiOrders, command as tacCommand, merge as tacMerge, orderLine, outcome, planLine, reshape, setupBattle, split as tacSplit, step as stepBattle } from "./rules/tactics.js";
 import { drawTactics, toField, unitAt } from "./view/tactics.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
@@ -1128,6 +1128,24 @@ function dispatch(act) {
       // Geri çekil: savaş kaybedilir, sahada kalanlar kaçar (geri çekilen ordu olurlar).
       if (ui.battle && !ui.battle.b.over) { ui.battle.b.over = { winner: "def", retreat: true }; sound.defeat(); }
       break;
+    case "tacSplit": {
+      // Seçili birlik ikiye bölünür; iki yarısı da seçili kalır.
+      const B = ui.battle;
+      const id = B && B.sel.size === 1 ? [...B.sel][0] : null;
+      const v = id ? tacSplit(B.b, id) : null;
+      if (v) B.sel = new Set([id, v.id]);
+      break;
+    }
+    case "tacMerge": {
+      const B = ui.battle;
+      const head = B ? tacMerge(B.b, [...B.sel]) : null;
+      if (head) B.sel = new Set([head.id]);
+      break;
+    }
+    case "tacWide":
+    case "tacDeep":
+      if (ui.battle) reshape(ui.battle.b, [...ui.battle.sel], act.do === "tacWide" ? 1 : -1);
+      break;
     case "tacPick":
       if (ui.battle) {
         if (act.add) { if (ui.battle.sel.has(act.id)) ui.battle.sel.delete(act.id); else ui.battle.sel.add(act.id); }
@@ -1549,9 +1567,15 @@ window.addEventListener("pointermove", (e) => {
     const p = at(e);
     pointer.x = p.x;
     pointer.y = p.y;
-    if (pointers.has(e.pointerId) && gesture && !gesture.pinch && gesture.button === 0) {
+    if (pointers.has(e.pointerId) && gesture && !gesture.pinch) {
       gesture.moved = Math.max(gesture.moved, Math.hypot(p.x - gesture.startX, p.y - gesture.startY));
-      if (gesture.moved > 6) ui.battle.drag = { x0: gesture.startX, y0: gesture.startY, x1: p.x, y1: p.y };
+      // Sol sürükleme: seçim kutusu. Sağ sürükleme: seçili birliklerin dizileceği hat (önizlemesiyle).
+      if (gesture.moved > 6 && gesture.button === 0) ui.battle.drag = { x0: gesture.startX, y0: gesture.startY, x1: p.x, y1: p.y };
+      if (gesture.moved > 10 && gesture.button === 2 && ui.battle.sel.size) {
+        const B = ui.battle;
+        B.drawLine = { x0: gesture.startX, y0: gesture.startY, x1: p.x, y1: p.y };
+        B.plan = planLine(B.b, [...B.sel], toField(cam, gesture.startX, gesture.startY), toField(cam, p.x, p.y));
+      }
     }
     return;
   }
@@ -1586,7 +1610,13 @@ const release = (e) => {
     pointers.delete(e.pointerId);
     pointer.down = false;
     gesture = null;
-    if (e.type === "pointerup" && g?.button === 2) battleOrder(p);
+    if (e.type === "pointerup" && g?.button === 2) {
+      const B = ui.battle;
+      if (B.drawLine) { orderLine(B.b, [...B.sel], toField(cam, B.drawLine.x0, B.drawLine.y0), toField(cam, B.drawLine.x1, B.drawLine.y1)); sound.click(); }
+      else battleOrder(p);
+      B.drawLine = null;
+      B.plan = null;
+    }
     else if (e.type === "pointerup" && g?.button === 0) {
       if (ui.battle.drag) battleBox(ui.battle.drag, e.shiftKey);
       else battleClick(p, e.shiftKey || e.ctrlKey);

@@ -1094,9 +1094,22 @@ süvari ayrılsın". `src/rules/tactics.js` (kurallar, saf), `src/view/tactics.j
   (iki tarafın kaybı, kaçanlar), *Haritaya dön*. Sonuç kuralların saldırısına hazır sonuç olarak gider:
   kazanan sağ kalanlarıyla (yer alınır, ganimet, tecrübe), kaybedenin sahadan kaçabilenleri geri çekilen
   ordu olur (en az 10 asker), haritada sonuç şeridi.
+- **Bölük ve diziliş** (kullanıcı 26.10: "40 piyade tek bir taburdu, ikiye ayıramadım; 2 sütun şeklinde
+  uzatabilsem, düşmanın etrafını sarsalar"): her birlik bir dikdörtgen - `cols` asker cephe, gerisi derinlik.
+  Seçili birlik için sahanın altında *Böl* (iki yarı yan yana; her yarı en az 5), *Birleştir* (aynı türden,
+  20 birim içindekiler), *⟷ Genişlet*, *↕ Derinleştir*; yanında "11 × 2" gibi cephe ve sıra. **Sağ
+  sürükle**: seçili birliklerin dizileceği hat çizilir (önizlemesi soluk dikdörtgenler); birlikler hattın
+  uzunluğunu askerleri oranında paylaşır, düşmana dönük dizilir. Seçili birliğin önünde cephesini gösteren ok.
+- **Genişlik ve derinlik:** göğüs göğüse yalnız ön 3 sıra dövüşür - geniş hat çok askerle vurur; ama 2 ve
+  daha az sıralı ince hat kayıptan x1.25 moral kaybeder, 4 ve daha çok sıralı derin blok x0.85.
+- **Kuşatma:** vuranın düşmanın hangi yüzüne değdiği (önü, yanı, arkası) dikdörtgenlere göre. Yandan vuran
+  x1.5, arkadan x2 öldürür; yandan vurulanın morali saniyede 3, arkadan 7 düşer; hücum da yandan ve arkadan
+  daha ağır, falanks yalnız önden durdurur. Dövüşen birlik yavaş döner (0.5 rad/sn): sarılan arkasını hemen
+  toplayamaz. Ölçüm: eşit iki birlik önden 2 dakikada bozulmazken, arkadan da vurulan 6 sn'de bozuluyor.
+  Birlikler artık dikdörtgen olarak çarpışır (ayırma eksenleri): dost birlikler iç içe girmez, düşman değer.
 - **Çarpanlar** otomatik savaştakiyle aynı (combat.js): medeniyet, araştırma, özel birlikler, general,
   tecrübe, arazi, sur (makineler söker). Bilgisayarın birlikleri: atıcılar menzilde durup atar, atlı okçu
   yaklaşan yayadan kaçar, süvari okçulara dalar, ötekiler en yakına; surun ardındaki savunan düşman yaklaşınca çıkar.
-- **Ayar:** iki tarafı da bilgisayara oynatılan 300 rastgele savaşta kazanan %87 otomatik savaşla aynı
-  (güç farkı belirgin olanlarda %93); kazananın kaybı otomatikte %30, taktikte %20 (kaçanlar kurtuluyor).
-  Ortalama savaş ~35 sn (x1 hızda). 1200 askerlik bir savaşın tamamı 0.1 sn'de hesaplanıyor.
+- **Ayar:** iki tarafı da bilgisayara oynatılan 300 rastgele savaşta kazanan %83 otomatik savaşla aynı
+  (güç farkı belirgin olanlarda %88; diziliş ve kuşatma gelince %87'den indi - kendiliğinden yandan çarpışmalar);
+  kazananın kaybı otomatikte %29, taktikte %24. Ortanca savaş ~40 sn (x1 hızda), surlu yerde daha uzun. 1200 askerlik bir savaşın tamamı 0.1 sn'de hesaplanıyor.

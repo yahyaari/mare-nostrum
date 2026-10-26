@@ -1,22 +1,25 @@
 // Taktik savaş (kurallar.md bölüm 29). Kullanıcı 26.10: "savaşa girerken sonuçları gör ve savaş seçeneği
 // olsun; savaş dediğimizde birlikleri tepeden görüp onlara tıklayıp şuraya git buraya git diye komut
-// vererek canlı bir savaş; sadece yuvarlak noktalar bile yeter, okçu süvari ayrılsın".
+// vererek canlı bir savaş; sadece yuvarlak noktalar bile yeter, okçu süvari ayrılsın". Sonra: "40 piyade tek
+// bir taburdu, ikiye ayıramadım; 2 sütun şeklinde uzatabilsem, düşmanın etrafını sarsalar".
 //
 // Saf hesap: DOM yok. Ekranı view/tactics.js çizer, main.js sürer; bitince sonuç moves.js attack / strike'a
 // hazır sonuç (`result`) olarak gider - yerin alınması, geri çekilme, tecrübe aynı kurallardan.
 //
 // Saha W x H birim; saldıran solda, savunan sağda. Her taraf askerlerini türlerine göre birliklere toplar
-// (N.tactics.per); her birlik bir blok, her nokta bir asker. Birlik emredilen yere yürür; düşmana değince
-// göğüs göğüse dövüşür (ikisi de durur); okçu menzildeki düşmana ok yağdırır (oklar uçar, varınca düşürür);
-// süvari dalarken hücum vurur (en çok okçuya; falanks durdurur). Kayıp verdikçe, kuşatılınca, hücum yiyince
-// moral düşer; moral bitince birlik bozulup kendi kenarına kaçar - kaçanlar sağ kalır. Bir tarafın dövüşen
-// birliği kalmayınca savaş biter; süre dolarsa savunan kazanır. Çarpanlar otomatik savaştakiyle aynı
-// (combat.js): medeniyet, araştırma, general, tecrübe, arazi, sur.
+// (N.tactics.per); her birlik bir dikdörtgen blok - `cols` asker cephe, gerisi derinlik; her nokta bir asker.
+// Birlik bölünür, birleşir, genişler, derinleşir; sağ sürükleyerek çizilen hatta dizilir. Emredilen yere
+// yürür; düşmana değince göğüs göğüse dövüşür (ön sıraları, N.tactics.ranks); yandan ve arkadan vuran daha
+// çok öldürür ve morali çökertir, dövüşen birlik yavaş döner - sarmak işe yarar. Okçu menzildekine ok
+// yağdırır; süvari dalarken hücum vurur (falanks durdurur). Moral bitince birlik bozulup kendi kenarına kaçar
+// - kaçanlar sağ kalır. Bir tarafın dövüşen birliği kalmayınca savaş biter; süre dolarsa savunan kazanır.
+// Çarpanlar otomatik savaştakiyle aynı (combat.js): medeniyet, araştırma, general, tecrübe, arazi, sur.
 
 import { archMul, cavMul, eliteMelee, eliteMul, infMul, sideMuls } from "./combat.js";
 import { N, UNITS, uniqueOf } from "./numbers.js";
 
 const K = () => N.tactics;
+const PI2 = Math.PI * 2;
 
 /** Tohumlu küçük rastgele sayı üreteci (savaş kendi içinde tekrarlanabilir). */
 function rng(seed) {
@@ -47,18 +50,58 @@ function profile(type, s, defending, assault) {
   };
 }
 
-/** Bir türün dizilişi: noktalar arası uzaklık ve kaç sıra. */
+/** Bir türün dizilişi: noktalar arası uzaklık ve varsayılan derinlik (sıra). */
 const SPACING = { inf: 0.9, arch: 1.25, cav: 1.35, siege: 2.4, elite: 1.0 };
 const ROWS = { inf: 5, arch: 4, cav: 4, siege: 2, elite: 5 };
 
-/** Birliğin kapladığı yer: genişlik (cephe), derinlik, yarıçap. */
+/** Birliğin kapladığı yer: cephe genişliği `w`, derinlik `d`, sıra ve sütun sayısı, kabaca yarıçap. */
 export function footprint(u) {
   const sp = SPACING[u.type] * (u.mounted ? 1.25 : 1);
   const n = Math.max(1, Math.ceil(u.men));
-  const rows = Math.min(ROWS[u.type], n);
-  const cols = Math.ceil(n / rows);
+  const cols = Math.max(1, Math.min(n, Math.round(u.cols ?? Math.ceil(n / Math.min(ROWS[u.type], n)))));
+  const rows = Math.ceil(n / cols);
   const w = cols * sp, d = rows * sp;
-  return { w, d, r: Math.hypot(w, d) / 2 * 0.62, sp, rows, cols };
+  return { w, d, r: Math.hypot(w, d) / 2, sp, rows, cols };
+}
+
+/** Birliğin dikdörtgeni: merkez, cephe yönü (ileri) ve yarı derinlik / yarı genişlik. */
+function rect(u) {
+  const f = footprint(u);
+  return { x: u.x, y: u.y, fx: Math.cos(u.facing), fy: Math.sin(u.facing), hd: f.d / 2, hw: f.w / 2, r: f.r };
+}
+
+/** Bir noktanın birliğin yerel çerçevesindeki yeri: ileri (`lx`) ve yan (`ly`). */
+function local(u, p) {
+  const c = Math.cos(u.facing), s = Math.sin(u.facing), dx = p.x - u.x, dy = p.y - u.y;
+  return { lx: dx * c + dy * s, ly: -dx * s + dy * c };
+}
+
+/** Bir nokta birliğin üstünde mi (`pad` kadar pay ile). */
+export function inside(u, p, pad = 0) {
+  const f = footprint(u), q = local(u, p);
+  return Math.abs(q.lx) <= f.d / 2 + pad && Math.abs(q.ly) <= f.w / 2 + pad;
+}
+
+/**
+ * İki dikdörtgen arası (ayırma eksenleriyle): `gap` > 0 aralarındaki boşluk (kabaca), < 0 iç içelik; `axis`
+ * A'dan B'ye itme yönü.
+ */
+function gapOf(A, B) {
+  let best = -Infinity, axis = null;
+  for (const [ax, ay] of [[A.fx, A.fy], [-A.fy, A.fx], [B.fx, B.fy], [-B.fy, B.fx]]) {
+    const rA = A.hd * Math.abs(A.fx * ax + A.fy * ay) + A.hw * Math.abs(-A.fy * ax + A.fx * ay);
+    const rB = B.hd * Math.abs(B.fx * ax + B.fy * ay) + B.hw * Math.abs(-B.fy * ax + B.fx * ay);
+    const c = (B.x - A.x) * ax + (B.y - A.y) * ay;
+    const g = Math.abs(c) - rA - rB;
+    if (g > best) { best = g; axis = c < 0 ? [-ax, -ay] : [ax, ay]; }
+  }
+  return { gap: best, axis };
+}
+
+/** Bir birliğin x ve y boyunca yarı uzunluğu (dönüşüyle). */
+export function extent(u) {
+  const f = footprint(u), c = Math.abs(Math.cos(u.facing)), s = Math.abs(Math.sin(u.facing));
+  return { x: c * f.d / 2 + s * f.w / 2, y: s * f.d / 2 + c * f.w / 2 };
 }
 
 /**
@@ -67,7 +110,7 @@ export function footprint(u) {
  */
 export function setupBattle(att, def, walls, seed = 1) {
   const muls = sideMuls(att, def, walls);
-  const b = { t: 0, over: null, walls, seed, rand: rng(seed), units: [], shots: [], fx: [], nextId: 1, sides: { att: { civ: att.civ, muls: muls.att, gen: !!att.gen }, def: { civ: def.civ, muls: muls.def, gen: !!def.gen } } };
+  const b = { t: 0, over: null, walls, seed, rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, sides: { att: { civ: att.civ, muls: muls.att, gen: !!att.gen }, def: { civ: def.civ, muls: muls.def, gen: !!def.gen } } };
   for (const side of ["att", "def"]) {
     const s = side === "att" ? att : def;
     const groups = {};
@@ -80,7 +123,11 @@ export function setupBattle(att, def, walls, seed = 1) {
         const men = Math.ceil(left / (n - i));
         left -= men;
         const p = profile(type, s, side === "def", side === "att" && !!walls);
-        const u = { id: b.nextId++, side, type, ...p, men, start: men, morale: 100 + (s.gen ? 10 : 0), moraleMax: 100 + (s.gen ? 10 : 0), x: 0, y: 0, facing: side === "att" ? 0 : Math.PI, order: null, target: null, state: "idle", cool: b.rand() * K().volley.every, engaged: false, routed: false, gone: false, dead: false, wasMoving: false };
+        const u = {
+          id: b.nextId++, side, type, ...p, men, start: men, cols: Math.ceil(men / Math.min(ROWS[type], men)),
+          morale: 100 + (s.gen ? 10 : 0), moraleMax: 100 + (s.gen ? 10 : 0), x: 0, y: 0, facing: side === "att" ? 0 : Math.PI,
+          order: null, cool: b.rand() * K().volley.every, engaged: false, routed: false, gone: false, dead: false, wasMoving: false,
+        };
         (groups[p.mounted || type === "cav" ? "cav" : p.kind === "arch" ? "arch" : type === "siege" ? "siege" : "front"] ??= []).push(u);
         b.units.push(u);
       }
@@ -117,13 +164,11 @@ function deploy(b, side, g) {
   const front = b.walls && side === "def" ? w - K().wallX - 4 : 20;
   const [top, bottom] = line(g.front ?? [], front, h / 2);
   line(g.arch ?? [], front - 8, h / 2);
-  // Atlılar: hattın üst ve alt ucunun ötesinde (sığmazsa sahanın kenarına).
+  // Atlılar: hattın üst ve alt ucunun ötesinde; yer yoksa okçuların arkasına.
   const cav = g.cav ?? [];
   const up = cav.filter((_, i) => i % 2 === 0), down = cav.filter((_, i) => i % 2 === 1);
   const span = (list) => list.reduce((s, u) => s + footprint(u).w + gap, 0);
-  // Hattın ucunda yer yoksa okçuların arkasına.
-  const fits = top - gap - span(up) >= 0 && bottom + gap + span(down) <= h;
-  if (fits) {
+  if (top - gap - span(up) >= 0 && bottom + gap + span(down) <= h) {
     line(up, front - 2, top - gap - span(up) / 2);
     line(down, front - 2, bottom + gap + span(down) / 2);
   } else {
@@ -131,7 +176,6 @@ function deploy(b, side, g) {
     line(down, front - 15, h * 0.75);
   }
   line(g.siege ?? [], front - 15, h / 2);
-  // Yine de üst üste binenler biraz açılır.
   for (let pass = 0; pass < 4; pass++) separate(b, 1);
 }
 
@@ -139,46 +183,174 @@ const alive = (u) => !u.dead && !u.gone;
 const fighting = (u) => alive(u) && !u.routed && u.type !== "siege";
 const foes = (b, u) => b.units.filter((v) => v.side !== u.side && alive(v) && !v.routed);
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const unitById = (b, id) => b.units.find((v) => v.id === id);
+/** Açı farkı, -π..π. */
+const angleTo = (from, to) => ((to - from + Math.PI * 3) % PI2) - Math.PI;
+/** Yavaşça dön: en çok `rate` radyan. */
+function turn(u, to, rate) {
+  const d = angleTo(u.facing, to);
+  u.facing += Math.max(-rate, Math.min(rate, d));
+}
 
-/** Emir ver: bir yere yürü (`{ x, y }`) ya da bir düşman birliğine saldır (`{ unit: id }`). */
+// ---- emirler ----
+
+/** Emir ver: bir yere yürü (`{ x, y, facing?, cols? }`) ya da bir düşman birliğine saldır (`{ unit: id }`). */
 export function command(b, ids, target) {
   for (const id of ids) {
-    const u = b.units.find((v) => v.id === id);
+    const u = unitById(b, id);
     if (!u || !alive(u) || u.routed) continue;
-    u.order = target.unit ? { unit: target.unit } : { x: Math.max(1, Math.min(K().w - 1, target.x)), y: Math.max(1, Math.min(K().h - 1, target.y)) };
+    if (target.unit) u.order = { unit: target.unit };
+    else {
+      u.order = { x: Math.max(1, Math.min(K().w - 1, target.x)), y: Math.max(1, Math.min(K().h - 1, target.y)), facing: target.facing ?? null };
+      if (target.cols) u.cols = Math.max(1, Math.min(Math.ceil(u.men), target.cols));
+    }
     u.manual = true;
   }
 }
 
-/** Birlikler birbirinin içine girmesin: dosttan itilir, düşmana değince durur. */
+/**
+ * Hat çiz (sağ sürükleme): seçili birlikler `p0`-`p1` çizgisine yan yana, hattın uzunluğunu askerleri
+ * oranında paylaşarak, cepheleri çizgide ve düşmana dönük dizilir. Dönen: her birliğin hedefi (önizleme
+ * ve emir için) - [{ id, x, y, facing, cols }].
+ */
+export function planLine(b, ids, p0, p1) {
+  const us = ids.map((id) => unitById(b, id)).filter((u) => u && alive(u) && !u.routed);
+  if (!us.length) return [];
+  const dx = p1.x - p0.x, dy = p1.y - p0.y, len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  // Cephe yönü: çizgiye dik, düşmanın ortasına doğru.
+  const en = b.units.filter((v) => v.side !== us[0].side && alive(v) && !v.routed);
+  const ex = en.length ? en.reduce((s, v) => s + v.x, 0) / en.length : (us[0].side === "att" ? K().w : 0);
+  const ey = en.length ? en.reduce((s, v) => s + v.y, 0) / en.length : K().h / 2;
+  let nx = -uy, ny = ux;
+  if ((ex - (p0.x + p1.x) / 2) * nx + (ey - (p0.y + p1.y) / 2) * ny < 0) { nx = -nx; ny = -ny; }
+  const facing = Math.atan2(ny, nx);
+  // Çizgi boyunca sırala: birlikler birbirinin yolunu kesmesin.
+  us.sort((a, c) => (a.x - p0.x) * ux + (a.y - p0.y) * uy - ((c.x - p0.x) * ux + (c.y - p0.y) * uy));
+  const total = us.reduce((s, u) => s + u.men, 0), gap = us.length > 1 ? 1 : 0;
+  const free = Math.max(1, len - gap * (us.length - 1));
+  let at = 0;
+  return us.map((u) => {
+    const share = (free * u.men) / total;
+    const sp = footprint(u).sp;
+    const cols = Math.max(Math.min(2, Math.ceil(u.men)), Math.min(Math.ceil(u.men), Math.round(share / sp)));
+    const d = Math.ceil(u.men / cols) * sp;
+    const mid = at + share / 2;
+    at += share + gap;
+    // Cephe çizgide: merkez derinliğin yarısı kadar geride.
+    return { id: u.id, x: p0.x + ux * mid - nx * d / 2, y: p0.y + uy * mid - ny * d / 2, facing, cols };
+  });
+}
+
+/** Hat çizimini uygula. */
+export function orderLine(b, ids, p0, p1) {
+  for (const t of planLine(b, ids, p0, p1)) command(b, [t.id], t);
+}
+
+/** Birliği ikiye böl: iki yarısı cephe boyunca yan yana. Dönen yeni yarı (ya da bölünemiyorsa null). */
+export function split(b, id) {
+  const u = unitById(b, id);
+  if (!u || !alive(u) || u.routed || u.men < K().minSplit * 2) return null;
+  const half = Math.floor(u.men / 2);
+  const v = { ...u, id: b.nextId++, men: u.men - half, start: Math.max(1, Math.round((u.start * (u.men - half)) / u.men)), order: null, manual: false, hit: new Set(u.hit ?? []) };
+  u.start = Math.max(1, u.start - v.start);
+  u.men = half;
+  u.cols = v.cols = Math.max(1, Math.ceil(u.cols / 2));
+  const off = footprint(u).w / 2 + 0.6, lx = -Math.sin(u.facing), ly = Math.cos(u.facing);
+  u.x -= lx * off; u.y -= ly * off;
+  v.x += lx * off; v.y += ly * off;
+  u.order = null;
+  b.units.splice(b.units.indexOf(u) + 1, 0, v);
+  return v;
+}
+
+/** Aynı türden birlikleri birleştir (ilkinde toplanır; çok uzaktakiler katılmaz). Dönen: kalan birlik. */
+export function merge(b, ids) {
+  const us = ids.map((id) => unitById(b, id)).filter((u) => u && alive(u) && !u.routed);
+  const head = us[0];
+  if (!head) return null;
+  const rest = us.slice(1).filter((u) => u.type === head.type && u.side === head.side && dist(u, head) <= K().mergeReach);
+  if (!rest.length) return null;
+  const all = [head, ...rest], men = all.reduce((s, u) => s + u.men, 0);
+  head.x = all.reduce((s, u) => s + u.x * u.men, 0) / men;
+  head.y = all.reduce((s, u) => s + u.y * u.men, 0) / men;
+  head.morale = all.reduce((s, u) => s + u.morale * u.men, 0) / men;
+  head.start = all.reduce((s, u) => s + u.start, 0);
+  head.cols = all.reduce((s, u) => s + footprint(u).cols, 0);
+  head.men = men;
+  head.order = null;
+  b.units = b.units.filter((u) => !rest.includes(u));
+  return head;
+}
+
+/** Diziliş: `+1` daha geniş (cephe uzar, derinlik azalır), `-1` daha derin. */
+export function reshape(b, ids, dir) {
+  for (const id of ids) {
+    const u = unitById(b, id);
+    if (!u || !alive(u) || u.routed) continue;
+    const c = footprint(u).cols, n = Math.ceil(u.men);
+    u.cols = dir > 0 ? Math.min(n, Math.max(c + 1, Math.round(c * 1.5))) : Math.max(Math.min(2, n), Math.min(c - 1, Math.round(c / 1.5)));
+  }
+}
+
+// ---- çarpışma ----
+
+/** Birlikler birbirinin içine girmesin: dosttan itilir; düşmanla değer ama iç içe geçmez. */
 function separate(b, k) {
   const us = b.units.filter(alive);
+  const R = us.map(rect);
   for (let i = 0; i < us.length; i++) {
     for (let j = i + 1; j < us.length; j++) {
       const a = us[i], c = us[j];
-      if (a.side !== c.side && !a.routed && !c.routed) continue;
-      const ra = footprint(a).r, rc = footprint(c).r;
-      const d = dist(a, c), need = (ra + rc) * 0.8;
-      if (d >= need || d === 0) continue;
-      const push = ((need - d) / 2) * k, nx = (a.x - c.x) / d, ny = (a.y - c.y) / d;
-      a.x += nx * push; a.y += ny * push;
-      c.x -= nx * push; c.y -= ny * push;
+      if (dist(a, c) > R[i].r + R[j].r) continue;
+      const foe = a.side !== c.side && !a.routed && !c.routed;
+      const g = gapOf(R[i], R[j]);
+      const want = foe ? -0.2 : 0.4;
+      if (g.gap >= want) continue;
+      const push = ((want - g.gap) / 2) * k;
+      a.x -= g.axis[0] * push; a.y -= g.axis[1] * push;
+      c.x += g.axis[0] * push; c.y += g.axis[1] * push;
+      R[i].x = a.x; R[i].y = a.y; R[j].x = c.x; R[j].y = c.y;
     }
   }
 }
 
-/** Bir birliğin değdiği düşmanlar (göğüs göğüse). */
-function contacts(b, u) {
-  const ru = footprint(u).r;
-  return foes(b, u).filter((v) => dist(u, v) <= ru + footprint(v).r + K().reach);
+/** Her birliğin değdiği düşmanlar (göğüs göğüse), bu adım için. */
+function contactMap(b) {
+  const m = new Map();
+  const us = b.units.filter((u) => alive(u) && !u.routed);
+  const R = new Map(us.map((u) => [u, rect(u)]));
+  for (const u of us) m.set(u, []);
+  for (let i = 0; i < us.length; i++) {
+    for (let j = i + 1; j < us.length; j++) {
+      const a = us[i], c = us[j];
+      if (a.side === c.side) continue;
+      const A = R.get(a), C = R.get(c);
+      if (dist(a, c) > A.r + C.r + K().reach) continue;
+      if (gapOf(A, C).gap > K().reach) continue;
+      m.get(a).push(c);
+      m.get(c).push(a);
+    }
+  }
+  return m;
 }
+const contacts = (b, u) => b.touch.get(u) ?? [];
+
+/** `u`, `v`ye hangi yüzünden vuruyor: "front", "flank", "rear" (v'nin dikdörtgenine göre). */
+export function faceOf(v, u) {
+  const f = footprint(v), q = local(v, u);
+  const outX = Math.abs(q.lx) - f.d / 2, outY = Math.abs(q.ly) - f.w / 2;
+  if (outY > outX) return "flank";
+  return q.lx >= 0 ? "front" : "rear";
+}
+
+// ---- bilgisayar ----
 
 /** Bilgisayarın emirleri (düşman tarafı; ya da Otomatik'te oyuncunun tarafı). Elle emir verilmiş birliğe dokunmaz. */
 export function aiOrders(b, side, all = false) {
-  const enemy = (u) => foes(b, u);
   for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed)) {
     if (u.manual && !all) continue;
-    const en = enemy(u);
+    const en = foes(b, u);
     if (!en.length) { u.order = null; continue; }
     const near = (list) => list.reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
     const nearest = near(en);
@@ -209,20 +381,23 @@ export function aiOrders(b, side, all = false) {
   }
 }
 
+// ---- adım ----
+
 /** Savaşı `dt` saniye ilerlet. */
 export function step(b, dt) {
   if (b.over) return;
   b.t += dt;
   const T = K();
-  // 1. Yürüyüş (dövüşmeyen, bozulmamış birlikler emirlerine; bozulanlar kendi kenarına).
+  // 1. Yürüyüş (dövüşmeyen, bozulmamış birlikler emirlerine; bozulanlar kendi kenarına). Dövüşen birlik
+  // yerinden kıpırdamaz, en çok vurduğu düşmana yavaşça döner (sarılan birlik arkasını hemen toplayamaz).
   for (const u of b.units.filter(alive)) {
-    const fighting_ = contacts(b, u).length > 0 && !u.routed;
-    u.engaged = fighting_;
+    const cs = u.routed ? [] : contacts(b, u);
+    u.engaged = cs.length > 0;
     let goal = null;
     if (u.routed) goal = { x: u.side === "att" ? -6 : T.w + 6, y: u.y };
-    else if (!fighting_ && u.order) {
+    else if (!u.engaged && u.order) {
       if (u.order.unit) {
-        const t = b.units.find((v) => v.id === u.order.unit);
+        const t = unitById(b, u.order.unit);
         if (!t || !alive(t) || t.routed) { u.order = null; u.manual = false; }
         else if (u.shoot > 0 && u.charge < 1 && dist(u, t) <= T.volley.range * 0.9) goal = null; // atıcı menzilde durur
         else goal = t;
@@ -233,16 +408,25 @@ export function step(b, dt) {
       const d = dist(u, goal);
       const sp = u.speed * (u.routed ? 1.15 : 1) * dt;
       if (d > 0.3) {
-        u.facing = Math.atan2(goal.y - u.y, goal.x - u.x);
+        // Uzaktaysa yürüdüğü yöne, varmak üzereyken (ya da yanına kayarken) emredilen cepheye döner.
+        const to = goal.facing != null && d < 4 ? goal.facing : Math.atan2(goal.y - u.y, goal.x - u.x);
+        turn(u, to, (u.routed ? 6 : T.turn.march) * dt);
         const k = Math.min(1, sp / d);
         u.x += (goal.x - u.x) * k;
         u.y += (goal.y - u.y) * k;
         u.wasMoving = true;
-      } else if (!u.order?.unit) { u.order = null; u.manual = false; }
-    } else if (!u.routed) {
-      // Duran birlik en yakın düşmana döner.
+      } else if (u.order && !u.order.unit) {
+        if (u.order.facing != null) u.facing = u.order.facing;
+        u.order = null;
+        u.manual = false;
+      }
+    } else if (u.engaged) {
+      const tgt = cs.find((v) => v.id === u.order?.unit) ?? cs[0];
+      turn(u, Math.atan2(tgt.y - u.y, tgt.x - u.x), T.turn.fight * dt);
+    } else if (!u.routed && !u.order) {
+      // Duran birlik, yakına gelen düşmana yavaşça döner (uzaktakine değil: verilen cephe korunur).
       const n = foes(b, u).reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
-      if (n) u.facing = Math.atan2(n.y - u.y, n.x - u.x);
+      if (n && dist(u, n) < T.turn.near) turn(u, Math.atan2(n.y - u.y, n.x - u.x), T.turn.idle * dt);
     }
     if (u.routed && (u.x < -4 || u.x > T.w + 4)) u.gone = true;
   }
@@ -252,36 +436,47 @@ export function step(b, dt) {
   const guarded = b.walls && b.units.some((v) => v.side === "def" && fighting(v) && v.kind !== "arch");
   if (guarded) {
     for (const u of b.units.filter((v) => alive(v) && !v.routed)) {
-      const r = footprint(u).r;
-      if (u.side === "att") u.x = Math.min(u.x, T.wallX - r - 0.4);
-      else u.x = Math.max(u.x, T.wallX + r + 0.4);
+      const ex = extent(u).x;
+      if (u.side === "att") u.x = Math.min(u.x, T.wallX - ex - 0.4);
+      else u.x = Math.max(u.x, T.wallX + ex + 0.4);
     }
   }
-  // 2. Hücum: atlı birlik yeni değdiği düşmana dalar (okçuya tam, ötekine az); falanks durdurur.
+  b.touch = contactMap(b);
+  const sideMul = (v, u) => ({ front: 1, flank: T.flank.side, rear: T.flank.rear })[faceOf(v, u)];
+  // 2. Hücum: atlı birlik yeni değdiği düşmana dalar (okçuya tam, ötekine az; yandan ve arkadan daha
+  // çok); falanks durdurur (önden).
   for (const u of b.units.filter((v) => alive(v) && !v.routed && v.charge > 0)) {
     for (const v of contacts(b, u)) {
       u.hit ??= new Set();
-      if (u.hit.has(v.id) || !u.wasMoving && u.engagedBefore) continue;
+      if (u.hit.has(v.id) || (!u.wasMoving && u.engagedBefore)) continue;
       u.hit.add(v.id);
-      const stop = v.stop > 0 ? (v.men / N.company) * v.stop : 0;
-      const raw = (u.men / N.company) * N.charge * u.charge * T.charge * (v.kind === "arch" ? 1 : T.chargeOther) * b.sides[u.side].muls.power;
+      const face = faceOf(v, u);
+      const stop = v.stop > 0 && face === "front" ? (v.men / N.company) * v.stop : 0;
+      const raw = (u.men / N.company) * N.charge * u.charge * T.charge * (v.kind === "arch" ? 1 : T.chargeOther) * b.sides[u.side].muls.power * sideMul(v, u);
       const kills = Math.max(0, raw - stop * N.charge * T.charge);
       hurt(b, v, kills);
-      v.morale -= kills > 0 ? T.morale.charge : 0;
+      v.morale -= kills > 0 ? T.morale.charge * (face === "front" ? 1 : 1.5) : 0;
       if (stop > 0) hurt(b, u, stop * T.charge * 2);
       b.fx.push({ kind: "charge", x: v.x, y: v.y, t: b.t });
     }
     u.engagedBefore = contacts(b, u).length > 0;
   }
-  // 3. Göğüs göğüse: her birlik değdiği düşmanlara gücü oranında asker düşürür (hedefine ağırlıklı).
+  // 3. Göğüs göğüse: ön sıralar dövüşür (geniş hat çok askerle vurur); yandan ve arkadan vuran daha çok
+  // öldürür; yandan ya da arkadan vurulan, birden çok düşmana değen birliğin morali hızla düşer.
   const dmg = new Map();
   for (const u of b.units.filter((v) => alive(v) && !v.routed)) {
     const cs = contacts(b, u);
     if (!cs.length) continue;
-    const out = u.men * u.melee * b.sides[u.side].muls.power * T.melee * dt;
+    const fighters = Math.min(u.men, footprint(u).cols * T.ranks);
+    const out = fighters * u.melee * b.sides[u.side].muls.power * T.melee * dt;
     const tgt = cs.find((v) => v.id === u.order?.unit) ?? cs[0];
-    for (const v of cs) dmg.set(v, (dmg.get(v) ?? 0) + out * (v === tgt ? 0.7 : 0.3 / Math.max(1, cs.length - 1)) * (cs.length === 1 ? 1 / 0.7 : 1));
-    // Birden çok düşmana değen (kuşatılan) birliğin morali hızla düşer.
+    for (const v of cs) {
+      const share = cs.length === 1 ? 1 : v === tgt ? 0.7 : 0.3 / (cs.length - 1);
+      dmg.set(v, (dmg.get(v) ?? 0) + out * share * sideMul(v, u));
+      const face = faceOf(v, u);
+      if (face === "flank") v.morale -= T.morale.flanked * dt;
+      if (face === "rear") v.morale -= T.morale.rear * dt;
+    }
     if (cs.length >= 2) u.morale -= T.morale.flank * dt;
   }
   for (const [v, k] of dmg) hurt(b, v, k);
@@ -289,7 +484,7 @@ export function step(b, dt) {
   for (const u of b.units.filter((v) => alive(v) && !v.routed && v.shoot > 0)) {
     u.cool -= dt;
     if (u.cool > 0 || contacts(b, u).length) continue;
-    const ordered = u.order?.unit ? b.units.find((v) => v.id === u.order.unit) : null;
+    const ordered = u.order?.unit ? unitById(b, u.order.unit) : null;
     const inRange = foes(b, u).filter((v) => dist(u, v) <= T.volley.range);
     const t = ordered && inRange.includes(ordered) ? ordered : inRange.reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
     if (!t) continue;
@@ -298,15 +493,15 @@ export function step(b, dt) {
     b.shots.push({ from: { x: u.x, y: u.y }, to: t.id, at: { x: t.x, y: t.y }, t0: b.t, t1: b.t + T.volley.flight, kills, side: u.side, n: Math.min(12, Math.ceil(u.men / 3)) });
   }
   for (const s of b.shots.filter((x) => x.t1 <= b.t)) {
-    const v = b.units.find((x) => x.id === s.to);
+    const v = unitById(b, s.to);
     if (v && alive(v)) { hurt(b, v, s.kills); v.morale -= T.morale.arrow; }
   }
   b.shots = b.shots.filter((x) => x.t1 > b.t);
-  // 5. Moral: kayıp oranı, kuşatılma; dövüşmeyen toparlanır. Biten bozulur, yakındaki dostlar sarsılır.
+  // 5. Moral: kayıp oranı (derin birlik daha dayanıklı, ince hat daha kırılgan), kuşatılma; dövüşmeyen
+  // toparlanır. Biten bozulur, yakındaki dostlar sarsılır.
   for (const u of b.units.filter((v) => alive(v) && !v.routed)) {
-    const lost = 1 - u.men / u.start;
     if (!u.engaged) u.morale = Math.min(u.moraleMax ?? 110, u.morale + T.morale.recover * dt);
-    if (u.morale - lost * 100 * T.morale.loss <= T.morale.rout || u.men < u.start * T.morale.floor) {
+    if (moraleOf(u) <= T.morale.rout || u.men < u.start * T.morale.floor) {
       u.routed = true;
       u.order = null;
       b.fx.push({ kind: "rout", x: u.x, y: u.y, t: b.t });
@@ -319,6 +514,13 @@ export function step(b, dt) {
   if (!left("def")) b.over = { winner: "att" };
   else if (!left("att")) b.over = { winner: "def" };
   else if (b.t >= T.time) b.over = { winner: "def", timeout: true };
+}
+
+/** Birliğin kalan morali (kayıplar düşülmüş): 0 ve altı bozulma; derinlik kaybın etkisini değiştirir. */
+export function moraleOf(u) {
+  const rows = footprint(u).rows;
+  const depth = rows >= 4 ? K().morale.deep : rows <= 2 ? K().morale.thin : 1;
+  return u.morale - (1 - u.men / u.start) * 100 * K().morale.loss * depth;
 }
 
 /** Bir birlikten asker düşer (kesirli; sayılırken aşağı yuvarlanır). */
