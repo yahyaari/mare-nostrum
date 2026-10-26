@@ -1060,3 +1060,43 @@ Kullanıcının istediği "olmazsa olmazlar"ın beşincisi (26.10). `src/rules/t
 - Bilgisayar boş yuvası olan her şehrinde en kazançlı yolu kurar.
 - Denge (70 oyun, zaferler kapalı): ilk düşüş 48 -> 58, ayakta kalan toplam 335 -> 347 (ek para savunmayı
   güçlendiriyor; her oyunda savaş çıkıyor, 25. turda bağımsızların çoğu alınıyor - test.mjs bakıyor).
+
+---
+
+## 29. Taktik savaş
+
+Kullanıcı 26.10 (bir görsel gönderdi: tepeden bir saha, iki tarafın nokta blokları ve generallerin yıldızları):
+"savaşa girerken sonuçları gör ve savaş seçeneği olsun; savaş dediğimizde birlikleri tepeden görüp onlara
+tıklayıp şuraya git buraya git diye komut vererek canlı bir savaş; sadece yuvarlak noktalar bile yeter, okçu
+süvari ayrılsın". `src/rules/tactics.js` (kurallar, saf), `src/view/tactics.js` (ekran), main.js (sürüş).
+
+- **Seçim:** saldırı penceresinde *Sonucu gör* (otomatik savaş, eskisi gibi) ve *⚔ Savaş* (taktik savaş;
+  karada ve savunan varsa - deniz savaşları hep otomatik). Kuşatılabilen yerde *Kuşat* da var.
+- **Saha:** 100 x 60 birim, tepeden; saldıran solda, savunan sağda. Her taraf askerini türlere göre
+  birliklere toplar (piyade 40'ar, okçu / süvari / özel birlik 30'ar, makine 20'şer; eşit büyüklükte).
+  Her birlik bir nokta bloku, her nokta bir asker, sahibinin renginde: piyade sık blok, okçu seyrek ve açık
+  renk, süvari uzunca noktalar, makine kareler, özel birlik altın kenarlı. Üstünde rozet: türünün simgesi
+  (kılıç, yay, nal, tekerlek, yıldız), sayısı, moral çubuğu.
+- **Diziliş:** piyade ve özel piyade önde bir hat, okçular arkasında, atlılar hattın iki ucunda (yer yoksa
+  arkada), makineler en arkada. Surlu yerde savunan surun ardında; ardında şehrin evleri.
+- **Kumanda:** savaş duraklatılmış başlar (Ordun dizildi - Savaşı başlat). Sol tık birlik seçer (Shift ile
+  ekler), sürükleyince kutu seçer, alttaki kartlar da seçer; sağ tık düşmana saldırır ya da oraya yürür
+  (birlikte seçilenler dizilişini korur). Boşluk duraklatır; Hız x1 / x2 / x4; *Otomatik* senin birliklerini
+  de bilgisayara verir; *Geri çekil* savaşı bırakır (kalanlar kaçar, geri çekilen ordu olur).
+- **Dövüş:** birlikler emredilen yere yürür (piyade 3.5, süvari 8 birim/sn), düşmana değince göğüs göğüse
+  dövüşür (adam başı güç; birden çok düşmana değen kuşatılmış sayılır). Okçu 26 birim menzildekine 2.5 sn'de
+  bir ok yağdırır, oklar uçar, varınca düşürür. Atlı birlik dalarken hücum vurur (okçuya tam, ötekine az);
+  falanks hücumu durdurur. Sur: duvarı tutan yaya savunan varken saldıran duvarın önünde kalır (göğüs göğüse
+  duvarın iki yanından); kalmayınca surdan geçilir.
+- **Moral:** 100 (general +10). Kayıp verdikçe, kuşatılınca, hücum ve ok yiyince düşer; dövüşmeyen toparlanır.
+  Biten birlik bozulur, kendi kenarına kaçar (yakındaki dostları sarsılır); sahadan çıkan kurtulur.
+- **Bitiş:** bir tarafın dövüşen birliği kalmayınca; 3 dakikada bitmezse savunan kazanır. Sonuç panosu
+  (iki tarafın kaybı, kaçanlar), *Haritaya dön*. Sonuç kuralların saldırısına hazır sonuç olarak gider:
+  kazanan sağ kalanlarıyla (yer alınır, ganimet, tecrübe), kaybedenin sahadan kaçabilenleri geri çekilen
+  ordu olur (en az 10 asker), haritada sonuç şeridi.
+- **Çarpanlar** otomatik savaştakiyle aynı (combat.js): medeniyet, araştırma, özel birlikler, general,
+  tecrübe, arazi, sur (makineler söker). Bilgisayarın birlikleri: atıcılar menzilde durup atar, atlı okçu
+  yaklaşan yayadan kaçar, süvari okçulara dalar, ötekiler en yakına; surun ardındaki savunan düşman yaklaşınca çıkar.
+- **Ayar:** iki tarafı da bilgisayara oynatılan 300 rastgele savaşta kazanan %87 otomatik savaşla aynı
+  (güç farkı belirgin olanlarda %93); kazananın kaybı otomatikte %30, taktikte %20 (kaçanlar kurtuluyor).
+  Ortalama savaş ~35 sn (x1 hızda). 1200 askerlik bir savaşın tamamı 0.1 sn'de hesaplanıyor.

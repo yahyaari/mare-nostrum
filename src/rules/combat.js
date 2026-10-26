@@ -130,13 +130,13 @@ const men = (u) => UNITS.reduce((n, k) => n + (u[k] ?? 0), 0);
 // Bir tarafın çarpanları: milletinin özelliği x araştırması (side.mods).
 const tech = (s, k) => s.mods?.[k] ?? 1;
 const all = (s) => trait(s.civ, "all") * tech(s, "all");
-const archMul = (s) => trait(s.civ, "arch") * tech(s, "arch") * all(s);
-const cavMul = (s) => trait(s.civ, "cav") * tech(s, "cav") * all(s);
-const infMul = (s, defending) => trait(s.civ, "inf") * tech(s, "inf") * all(s) * (defending ? trait(s.civ, "defInf") : 1);
+export const archMul = (s) => trait(s.civ, "arch") * tech(s, "arch") * all(s);
+export const cavMul = (s) => trait(s.civ, "cav") * tech(s, "cav") * all(s);
+export const infMul = (s, defending) => trait(s.civ, "inf") * tech(s, "inf") * all(s) * (defending ? trait(s.civ, "defInf") : 1);
 // Özel birlik: dövüştüğü türün araştırması (lejyonere piyadeninki), milletin genel gücü.
-const eliteMul = (s) => tech(s, uniqueOf(s.civ).as) * all(s);
+export const eliteMul = (s) => tech(s, uniqueOf(s.civ).as) * all(s);
 /** Özel birliğin adam başı göğüs göğüse gücü (saldırıda / savunmada). */
-const eliteMelee = (U, defending) => (U.melee ?? 1) * (defending ? U.defend ?? 1 : U.attack ?? 1);
+export const eliteMelee = (U, defending) => (U.melee ?? 1) * (defending ? U.defend ?? 1 : U.attack ?? 1);
 
 function power(u, s, defending, assault) {
   const U = uniqueOf(s.civ);
@@ -147,6 +147,22 @@ function power(u, s, defending, assault) {
     + u.cav * N.cavMelee * cavMul(s) * (assault ? N.cavWall : 1)
     + (covered * N.archMelee + bare * N.archBare) * archMul(s)
     + u.elite * eliteMelee(U, defending) * eliteMul(s) * (assault && U.as === "cav" ? N.cavWall : 1);
+}
+
+/**
+ * Taktik savaş için (tactics.js): iki tarafın genel çarpanları, otomatik savaştakiyle aynı - general,
+ * tecrübe, arazi; savunanın suru (makineler ve kuşatma ustası söker), surda saldıranın bozkır cezası,
+ * okçu generalinin oku.
+ */
+export function sideMuls(att, def, walls) {
+  const engines = Math.min(1, ((att.siege ?? 0) / N.company) * N.siegeBreach);
+  const breach = (m) => 1 + (m - 1) * (has(att.gen, "siege") ? 0.5 : 1) * (1 - engines);
+  const wall = breach(walls ? (walls === "castle" ? N.castleWall : N.cityWall) * tech(def, "walls") : 1);
+  const steppe = walls ? trait(att.civ, "siege") : 1;
+  return {
+    att: { power: might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * steppe, volley: (has(att.gen, "archer") ? 1.5 : 1) * steppe },
+    def: { power: might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * wall, volley: (has(def.gen, "archer") ? 1.5 : 1) * breach(walls === "castle" ? N.castleVolley : 1) },
+  };
 }
 
 /** Kayıpları türlere oranla dağıtır (yuvarlamadan artan, en kalabalık türden düşer). */

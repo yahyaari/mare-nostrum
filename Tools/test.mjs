@@ -1114,6 +1114,74 @@ section("Ticaret yolları (bölüm 28)");
   check("bilgisayar ticaret yolu kurar", TR.routesFrom(w, "carthage").length === 1);
 }
 
+section("Arayüz tür listeleri");
+
+{
+  // 0bc3fee'de main.js'in kart imzası elle yazılmış bir listeydi; özel birlik gelince seçim hep sıfırlandı.
+  const src = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  check("main.js asker türlerini elle listelemiyor", !src.includes('["inf", "arch", "cav"'));
+}
+
+section("Taktik savaş (bölüm 29)");
+
+{
+  const TC = await import("../src/rules/tactics.js");
+  const { TEXT } = await import("../src/text.js");
+  for (const lang of ["en", "tr"]) check(`${lang}: taktik savaş yazıları`, ["seeResult", "fightIt", "tacTitle", "tacPaused", "tacPause", "tacGo", "tacSpeed", "tacAuto", "tacRetreat", "tacHelp", "tacStart", "tacWon", "tacLost", "tacBack"].every((k) => TEXT[lang][k]));
+  const army = { civ: "rome", inf: 100, arch: 40, cav: 30, elite: 20, siege: 0 };
+  const b = TC.setupBattle(army, { civ: "gaul", inf: 120, arch: 30 }, null, 5);
+  const count = (side, k) => b.units.filter((u) => u.side === side && u.type === k).reduce((n, u) => n + u.men, 0);
+  check("birlikler türlere göre toplanır, asker sayısı aynı", ["inf", "arch", "cav", "elite"].every((k) => count("att", k) === army[k]) && count("def", "inf") === 120);
+  check("birlikler sahada, saldıran solda savunan sağda", b.units.every((u) => u.x > 0 && u.x < N.tactics.w && u.y > 0 && u.y < N.tactics.h) && b.units.filter((u) => u.side === "att").every((u) => u.x < N.tactics.w / 2) && b.units.filter((u) => u.side === "def").every((u) => u.x > N.tactics.w / 2));
+  // Emir: seçilen birlik oraya yürür.
+  const inf = b.units.find((u) => u.side === "att" && u.type === "inf");
+  const x0 = inf.x;
+  TC.command(b, [inf.id], { x: x0 + 10, y: inf.y });
+  for (let i = 0; i < 20; i++) TC.step(b, 0.1);
+  check("emir verilen birlik yürür", inf.x > x0 + 4);
+  // Bitiş ve sonuç.
+  TC.autoplay(b);
+  const o = TC.outcome(b);
+  check("savaş biter, bir taraf kazanır", !!b.over && typeof o.attWins === "boolean");
+  check("kazananın sağ kalanları başlangıçtan çok değil, kaybedeninki sıfır", UNITS.every((k) => (o.attWins ? o.att : o.def)[k] <= ((o.attWins ? army : { inf: 120, arch: 30 })[k] ?? 0)) && UNITS.every((k) => (o.attWins ? o.def : o.att)[k] === 0));
+  // Açık üstünlük: sonuç otomatik savaşla aynı.
+  const strong = TC.outcome(TC.autoplay(TC.setupBattle({ civ: "rome", inf: 200, arch: 60 }, { civ: "gaul", inf: 60, arch: 20 }, null, 9)));
+  const weak = TC.outcome(TC.autoplay(TC.setupBattle({ civ: "gaul", inf: 50 }, { civ: "rome", inf: 150, arch: 50 }, null, 9)));
+  check("açık üstün taraf kazanır (iki yönde)", strong.attWins && !weak.attWins);
+  // Okçular menzildekine ok atar.
+  const a2 = TC.setupBattle({ civ: "parthia", arch: 60 }, { civ: "gaul", inf: 60 }, null, 2);
+  let shots = 0;
+  for (let i = 0; i < 300 && !a2.over; i++) { TC.aiOrders(a2, "att", true); TC.aiOrders(a2, "def"); TC.step(a2, 0.1); shots += a2.shots.length; }
+  check("okçular ok yağdırır", shots > 0);
+  // Sur: duvarı tutan savunan varken saldıran geçemez.
+  const w = TC.setupBattle({ civ: "rome", inf: 200 }, { civ: "gaul", inf: 80, arch: 20 }, "city", 4);
+  for (let i = 0; i < 200; i++) { TC.aiOrders(w, "att", true); TC.aiOrders(w, "def"); TC.step(w, 0.1); }
+  check("surda: saldıran duvarın önünde kalır", w.units.filter((u) => u.side === "att" && !u.dead && !u.routed && !u.gone).every((u) => u.x < N.tactics.wallX));
+  // Geri çekil: savaş kaybedilir, kalanlar kaçar.
+  const r = TC.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 80 }, null, 6);
+  r.over = { winner: "def", retreat: true };
+  const ro = TC.outcome(r);
+  check("geri çekilen: savaş kaybedilir, askerler kaçabilir", !ro.attWins && ro.escaped.inf === 80);
+
+  // Kurallara hazır sonuç: yer alınır, sağ kalanlar ordunun askeri olur.
+  const g = S.newGame("rome", 7);
+  const a = raise(g, "rome", { inf: 120 });
+  before(a, "tarentum");
+  a.mp = 4;
+  g.places.tarentum.owner = null;
+  const res = { attWins: true, att: { inf: 90, arch: 0, cav: 0, siege: 0, elite: 0 }, def: { inf: 0, arch: 0, cav: 0, siege: 0, elite: 0 }, attPow: 90, defPow: 1, escaped: {}, tactical: true };
+  const ev = M.attack(g, a.id, "tarentum", null, res);
+  check("taktik zafer: yer alınır, sağ kalanlar ordunun askeri", ev?.won && g.places.tarentum.owner === "rome" && a.inf === 90 && a.at === "tarentum");
+  // Meydan muharebesini kaybeden saldıran: sahadan kaçabilenler geri çekilen ordu olur.
+  const h = S.newGame("rome", 7);
+  const camp = h.armies.find((x) => x.camp);
+  const ha = raise(h, "rome", { inf: 60 });
+  Object.assign(ha, { at: null, x: camp.x - 0.5, y: camp.y, mp: 4, route: [] });
+  const lost = { attWins: false, att: { inf: 0, arch: 0, cav: 0, siege: 0, elite: 0 }, def: { inf: 20, arch: 8, cav: 0, siege: 0, elite: 0 }, attPow: 1, defPow: 28, escaped: { inf: 25, arch: 0, cav: 0, siege: 0, elite: 0 }, tactical: true };
+  const fev = M.strike(h, ha.id, camp.id, null, lost);
+  check("taktik yenilgi: kaçabilenler geri çekilir", fev && !fev.won && fev.retreat?.men === 25 && S.armyById(h, ha.id)?.inf === 25 && camp.inf === 20);
+}
+
 // ---------------------------------------------------------------------------------------------
 section("Dağlar ve geri çekilme (bölüm 7, 22b)");
 

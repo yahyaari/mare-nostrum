@@ -8,7 +8,7 @@ import { CIVS, PLACES } from "./data/world.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace, proposeTrade } from "./rules/diplomacy.js";
 import { roadBetween } from "./rules/graph.js";
 import {
-  access, attack, canAttack, canStrike, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, strike, turnsFor,
+  access, attack, canAttack, canStrike, fieldSides, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, sides, strike, turnsFor,
 } from "./rules/moves.js";
 import { PLACE_CELL, POS, cellOf, centre, dist, isLand, pathCost, regionOf, search, smooth, stepCost } from "./rules/map.js";
 import {
@@ -36,10 +36,12 @@ import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
 import { sendSpy } from "./rules/spies.js";
 import { SCENE_MS } from "./view/battle.js";
+import { aiOrders, command as tacCommand, outcome, setupBattle, step as stepBattle } from "./rules/tactics.js";
+import { drawTactics, toField, unitAt } from "./view/tactics.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { CARD_H, FIGHT_MS, MODAL_MS, campNear, gainText, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
+import { CARD_H, FIGHT_MS, MODAL_MS, campNear, cardSig, gainText, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
 import { TOP, chipRise } from "./view/hud.js";
 import { SIZE, project } from "./geo.js";
 import { trait } from "./rules/numbers.js";
@@ -167,6 +169,8 @@ function redraw() {
   queued = true;
   requestAnimationFrame(() => {
     queued = false;
+    // Taktik savaş: harita yerine savaş sahası (kendi döngüsü).
+    if (ui.screen === "battle" && ui.battle) return battleFrame();
     const gliding = stepGlide();
     const view = anim.shape(mapView());
     for (const c of anim.cues()) cue(c);
@@ -188,6 +192,84 @@ function redraw() {
     else if (!ambient && !document.hidden) ambient = setTimeout(() => { ambient = null; redraw(); }, 50);
     if (!anim.busy()) settle();
   });
+}
+
+// ---- taktik savaş (rules/tactics.js, view/tactics.js) ----
+//
+// Saldırı penceresinde "Savaş": harita yerine saha; savaş gerçek zamanlı ilerler (duraklat, hız), düşmanı
+// bilgisayar yönetir, oyuncu birliklerini seçip sağ tıkla yürütür ya da saldırtır. Bitince sonuç kuralların
+// saldırısına hazır sonuç olarak gider (yer alınır, geri çekilir, tecrübe) ve haritaya dönülür.
+
+/** Bir taktik savaş karesi: zaman ilerler (duraklatılmadıysa), bilgisayar emir verir, saha çizilir. */
+function battleFrame() {
+  const B = ui.battle, b = B.b, now = performance.now();
+  const dt = Math.min(0.1, (now - B.last) / 1000);
+  B.last = now;
+  if (!B.paused && !b.over) {
+    const shots = b.shots.length, engaged = b.units.filter((u) => u.engaged).length;
+    let left = dt * B.speed;
+    while (left > 1e-6 && !b.over) {
+      const d = Math.min(0.05, left);
+      if (b.t >= B.aiAt) {
+        aiOrders(b, "def");
+        if (B.auto) aiOrders(b, "att", true);
+        B.aiAt = b.t + 0.6;
+      }
+      stepBattle(b, d);
+      left -= d;
+    }
+    // Sesler: ok yağmuru ve çarpışma (arada bir), sonunda zafer ya da yenilgi.
+    if (b.shots.length > shots && now - (B.volleyAt ?? 0) > 1400) { B.volleyAt = now; sound.volley(); }
+    if (b.units.filter((u) => u.engaged).length > engaged && now - (B.clashAt ?? 0) > 900) { B.clashAt = now; sound.clash(); }
+    if (b.over) (b.over.winner === "att" ? sound.victory : sound.defeat)();
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  boxes = [];
+  drawTactics(ctx, cam, B, T(), ui.lang, boxes, now);
+  redraw();
+}
+
+/** Taktik savaşta bir birliğin adı ("Lejyoner", "Okçu"). */
+function unitLabel(u, owner) {
+  const s = u.type === "elite" ? T().eliteOf[owner]?.[0] ?? T().elite : T()[u.type];
+  return s[0].toLocaleUpperCase() + s.slice(1);
+}
+
+/** Sol tık: önce düğmeler; sahada kendi birliğini seç (Shift: ekle / çıkar), boşa tıklamak seçimi kaldırır. */
+function battleClick(p, add) {
+  for (let i = boxes.length - 1; i >= 0; i--) {
+    const bx = boxes[i];
+    if (p.x >= bx.x && p.x <= bx.x + bx.w && p.y >= bx.y && p.y <= bx.y + bx.h) {
+      if (bx.act) { sound.click(); dispatch({ ...bx.act, add }); }
+      return;
+    }
+  }
+  const B = ui.battle, u = unitAt(B.b, toField(cam, p.x, p.y), "att");
+  if (u && !u.routed) {
+    if (add) { if (B.sel.has(u.id)) B.sel.delete(u.id); else B.sel.add(u.id); } else B.sel = new Set([u.id]);
+  } else if (!add) B.sel = new Set();
+}
+
+/** Sürükleyerek seçim kutusu: içindeki kendi birlikleri. */
+function battleBox(d, add) {
+  const B = ui.battle, a = toField(cam, Math.min(d.x0, d.x1), Math.min(d.y0, d.y1)), c = toField(cam, Math.max(d.x0, d.x1), Math.max(d.y0, d.y1));
+  const ids = B.b.units.filter((u) => u.side === "att" && !u.dead && !u.gone && !u.routed && u.x >= a.x && u.x <= c.x && u.y >= a.y && u.y <= c.y).map((u) => u.id);
+  B.sel = new Set([...(add ? B.sel : []), ...ids]);
+}
+
+/** Sağ tık: seçili birlikler düşmana saldırır ya da oraya yürür (birlikte seçilenler dizilişini korur). */
+function battleOrder(p) {
+  const B = ui.battle, b = B.b;
+  const sel = b.units.filter((u) => B.sel.has(u.id) && !u.dead && !u.gone && !u.routed);
+  if (!sel.length) return;
+  const fp = toField(cam, p.x, p.y);
+  const foe = unitAt(b, fp, "def");
+  if (foe) tacCommand(b, sel.map((u) => u.id), { unit: foe.id });
+  else {
+    const cx = sel.reduce((n, u) => n + u.x, 0) / sel.length, cy = sel.reduce((n, u) => n + u.y, 0) / sel.length;
+    for (const u of sel) tacCommand(b, [u.id], { x: fp.x + (u.x - cx), y: fp.y + (u.y - cy) });
+  }
+  sound.click();
 }
 
 /** Aynı bilgisayarda sıra başkasına geçer: seçimler unutulur, ekran kapanır, kaydedilir. */
@@ -264,7 +346,8 @@ function settle() {
     if (pending.kind === "battle") {
       // Savaş haritada oynar (pencere değil); sesler sahneyle aynı anda (oklar, çarpışma, sonuç).
       const ev = pending.ev;
-      ui.fight = { ev, t0: performance.now() };
+      ui.fight = { ev, t0: performance.now() - (ev.tactical ? SCENE_MS - 250 : 0) };
+      if (ev.tactical) { pending = null; redraw(); return; }
       if (!ev.drowned && ((ev.before.att.arch ?? 0) + (ev.before.def.arch ?? 0)) > 0) setTimeout(sound.volley, 250);
       setTimeout(sound.clash, ev.drowned ? 1500 : 1450);
       setTimeout(ev.won ? sound.victory : sound.defeat, SCENE_MS - 300);
@@ -484,7 +567,9 @@ function unitOf(of) {
   const [k, id] = [of.slice(0, 1), of.slice(2)];
   return k === "p" ? game.places[id] ?? null : armyById(game, Number(id));
 }
-const sigOf = (u) => ["inf", "arch", "cav", "siege", "ships", "trireme", "quinq"].map((k) => u[k] ?? 0).join(",");
+// Kart seçiminin imzası ui.js'teki ile aynı olmalı (elle yazılmış bir liste özel birliği bilmiyordu:
+// seçim hep sıfırlanıyor, Dışarı çık kapalı kalıyordu).
+const sigOf = cardSig;
 
 const T = () => TEXT[ui.lang];
 
@@ -1006,6 +1091,67 @@ function dispatch(act) {
       lift(game, act.army);
       save();
       break;
+    case "battleStart": {
+      // Saldırı penceresinden taktik savaşa: iki taraf otomatik savaştakiyle aynı sayılarla sahaya.
+      if (m?.kind !== "attack") break;
+      const a = armyById(game, m.army), t = m.target ? armyById(game, m.target) : null;
+      if (!a || (m.target && !t)) break;
+      coachDone("attack");
+      coachDone("preview");
+      if (m.target) coachDone("strike");
+      const sd = t ? fieldSides(game, a, t) : sides(game, a, me, m.id);
+      const defOwner = t ? t.owner : game.places[m.id].owner;
+      const place = PLACES.find((p) => p.id === (t ? nearestPlace(t) : m.id)).name[ui.lang];
+      const enemy = t ? (t.bandit ? T().bandits : t.camp ? T().barbCamp : t.horde ? T().horde : t.barbarian ? T().barbarians : civName(t.owner, ui.lang)) : civName(defOwner, ui.lang, T().free);
+      ui.battle = {
+        b: setupBattle(sd.att, sd.def, t ? null : sd.walls, ((game.turn * 7919 + a.id * 131) % 99991) + 1),
+        m: { ...m }, sel: new Set(), speed: 1, paused: true, auto: false, last: performance.now(), aiAt: 0, drag: null,
+        owners: { att: me, def: defOwner }, names: { att: civName(me, ui.lang), def: enemy }, title: fill(T().tacTitle, place),
+      };
+      ui.battle.unitName = (u) => unitLabel(u, ui.battle.owners[u.side]);
+      ui.modal = null;
+      ui.tip = null;
+      ui.screen = "battle";
+      sound.war();
+      break;
+    }
+    case "tacPause":
+      if (ui.battle && !ui.battle.b.over) ui.battle.paused = !ui.battle.paused;
+      break;
+    case "tacSpeed":
+      if (ui.battle) ui.battle.speed = ui.battle.speed >= 4 ? 1 : ui.battle.speed * 2;
+      break;
+    case "tacAuto":
+      if (ui.battle) { ui.battle.auto = !ui.battle.auto; if (ui.battle.auto) ui.battle.paused = false; }
+      break;
+    case "tacRetreat":
+      // Geri çekil: savaş kaybedilir, sahada kalanlar kaçar (geri çekilen ordu olurlar).
+      if (ui.battle && !ui.battle.b.over) { ui.battle.b.over = { winner: "def", retreat: true }; sound.defeat(); }
+      break;
+    case "tacPick":
+      if (ui.battle) {
+        if (act.add) { if (ui.battle.sel.has(act.id)) ui.battle.sel.delete(act.id); else ui.battle.sel.add(act.id); }
+        else ui.battle.sel = new Set([act.id]);
+      }
+      break;
+    case "tacEnd": {
+      // Savaş bitti: sonucu kuralların saldırısına ver, haritaya dön (sonuç şeridi orada).
+      const B = ui.battle;
+      if (!B?.b.over) break;
+      const res = outcome(B.b), mm = B.m;
+      ui.battle = null;
+      ui.screen = "game";
+      const [ev, trace] = traced(() => (mm.target ? strike(game, mm.army, mm.target, null, res) : attack(game, mm.army, mm.id, null, res)));
+      if (ev) ev.tactical = true;
+      record(game, [ev]);
+      anim.timeline(trace, anim.clock(), () => true, me);
+      pending = ev ? { kind: "battle", ev } : null;
+      ui.sel = ev?.won ? { kind: "army", id: mm.army } : null;
+      ui.army = ev?.won ? mm.army : null;
+      checkOver(game);
+      save();
+      break;
+    }
     case "attack": {
       if (m?.kind !== "attack") break;
       // Ordu kapıya kadar yürür, kılıçlar çarpışır, sonra sonuç penceresi.
@@ -1130,6 +1276,7 @@ function tapMap(x, y) {
 
 /** Sağ tık: seçili kendi ordusunu oraya yürüt ya da (menzildeyse) saldırt. */
 function rightTap(x, y) {
+  if (ui.screen === "battle" && ui.battle) return battleOrder({ x, y });
   if (ui.modal || ui.screen !== "game" || !ownArmy()) return;
   if (boxes.some((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)) return;
   command(targetAt(x, y));
@@ -1275,7 +1422,8 @@ function nearest(x, y) {
   return best;
 }
 
-function tap(x, y) {
+function tap(x, y, add = false) {
+  if (ui.screen === "battle" && ui.battle) return battleClick({ x, y }, add);
   // Tur arası gösterisi sürerken ilk dokunuş hızlandırır, ikincisi bitirir. (Tek dokunuşla
   // bitince ordular yerlerine sıçrıyordu: "ışınlanıyor".)
   if (blocking && anim.busy()) {
@@ -1397,6 +1545,16 @@ function hoverAt(p) {
 canvas.addEventListener("pointerleave", () => { pointer.x = pointer.y = -1; hoverAt({ x: -1, y: -1 }); });
 
 window.addEventListener("pointermove", (e) => {
+  if (ui.screen === "battle" && ui.battle) {
+    const p = at(e);
+    pointer.x = p.x;
+    pointer.y = p.y;
+    if (pointers.has(e.pointerId) && gesture && !gesture.pinch && gesture.button === 0) {
+      gesture.moved = Math.max(gesture.moved, Math.hypot(p.x - gesture.startX, p.y - gesture.startY));
+      if (gesture.moved > 6) ui.battle.drag = { x0: gesture.startX, y0: gesture.startY, x1: p.x, y1: p.y };
+    }
+    return;
+  }
   if (e.pointerType === "mouse" && !pointers.size) hoverAt(at(e));
   else if (e.pointerType === "mouse") { pointer.x = at(e).x; pointer.y = at(e).y; }
   if (!pointers.has(e.pointerId)) return;
@@ -1423,6 +1581,20 @@ window.addEventListener("pointermove", (e) => {
 });
 
 const release = (e) => {
+  if (ui.screen === "battle" && ui.battle && pointers.has(e.pointerId)) {
+    const p = at(e), g = gesture;
+    pointers.delete(e.pointerId);
+    pointer.down = false;
+    gesture = null;
+    if (e.type === "pointerup" && g?.button === 2) battleOrder(p);
+    else if (e.type === "pointerup" && g?.button === 0) {
+      if (ui.battle.drag) battleBox(ui.battle.drag, e.shiftKey);
+      else battleClick(p, e.shiftKey || e.ctrlKey);
+    }
+    if (ui.battle) ui.battle.drag = null;
+    redraw();
+    return;
+  }
   if (e.button === 0 || e.type === "pointercancel") { pointer.down = false; redraw(); }
   if (!pointers.has(e.pointerId)) return;
   const p = pointers.get(e.pointerId);
@@ -1441,7 +1613,7 @@ window.addEventListener("pointercancel", release);
 
 window.addEventListener("wheel", (e) => {
   e.preventDefault();
-  if (ui.modal) return;
+  if (ui.modal || ui.screen === "battle") return;
   const p = at(e);
   zoomAt(cam, Math.exp(-e.deltaY * 0.0015), p.x, p.y);
   if (ui.tip || ui.preview) { ui.tip = null; hoverKey = ""; }
@@ -1460,7 +1632,9 @@ window.addEventListener("keydown", (e) => {
     ArrowRight: () => panBy(cam, -step, 0),
     ArrowUp: () => panBy(cam, 0, step),
     ArrowDown: () => panBy(cam, 0, -step),
-    Escape: () => { if (ui.modal) dispatch({ do: "close" }); else if (ui.aim) ui.aim = null; else { ui.sel = null; ui.army = null; } },
+    // Taktik savaş: Boşluk duraklatır / sürdürür.
+    " ": () => { if (ui.screen === "battle") dispatch({ do: "tacPause" }); },
+    Escape: () => { if (ui.screen === "battle" && ui.battle) { ui.battle.sel = new Set(); return; } if (ui.modal) dispatch({ do: "close" }); else if (ui.aim) ui.aim = null; else { ui.sel = null; ui.army = null; } },
     // Başlangıç ekranında oklar medeniyetler arasında gezer.
     ...(ui.screen === "start" && !ui.modal ? {
       ArrowLeft: () => stepCiv(-1), ArrowRight: () => stepCiv(1), ArrowUp: () => stepCiv(-1), ArrowDown: () => stepCiv(1),

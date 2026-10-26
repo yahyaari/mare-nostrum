@@ -381,7 +381,7 @@ export const shipsAt = (state, id) => fleetOf(fleetAt(state, id));
  * Bir yerleşime saldırı. Dönen olay: { type: "battle", ... }. Kazanırsa yer saldıranın olur, ordu
  * içeri girer; kaybederse ordu yok olur ve savunanların kayıpları garnizona ve ordulara oranla düşer.
  */
-export function attack(state, armyId, id, luck = null) {
+export function attack(state, armyId, id, luck = null, result = null) {
   const army = armyById(state, armyId);
   if (!canAttack(state, army, id)) return null;
   // Saldırı kuşatmayı bitirir (kazansa da kaybetse de).
@@ -415,7 +415,8 @@ export function attack(state, armyId, id, luck = null) {
   }
   const sd = sides(state, army, army.owner, id);
   const def = sd.def, walls = sd.walls, defGen = def.gen;
-  const r = fight(sd.att, def, walls, luck ?? rollLuck(state));
+  // Taktik savaş (tactics.js) bittiyse onun sonucu; yoksa otomatik savaş.
+  const r = result ?? fight(sd.att, def, walls, luck ?? rollLuck(state));
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
     won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },
@@ -447,8 +448,9 @@ export function attack(state, armyId, id, luck = null) {
     }
     // Saldıran, savaş yakınsa askerinin bir kısmıyla geri çekilir (durduğu yerde, kapının önünde
     // kalır); ezildiyse ordusu ve generali yok olur. Savunmayı tutan general tecrübe kazandı.
+    // Taktik savaşta geri çekilen, sahadan kaçabilenlerdir.
     const keep = N.retreat.keep * Math.max(0, Math.min(1, r.attPow / Math.max(1e-6, r.defPow)));
-    const left = Object.fromEntries(UNITS.map((k) => [k, Math.floor((ev.before.att[k] ?? 0) * keep)]));
+    const left = r.escaped ?? Object.fromEntries(UNITS.map((k) => [k, Math.floor((ev.before.att[k] ?? 0) * keep)]));
     const fled = men(left) >= N.retreat.min;
     if (fled) {
       for (const k of UNITS) army[k] = left[k];
@@ -494,7 +496,7 @@ export function forecastField(state, army, b) {
 }
 
 /** Meydan muharebesi. Dönen olay: { type: "battle", field: true, place: en yakın yer, at: { x, y }, ... }. */
-export function strike(state, armyId, targetId, luck = null) {
+export function strike(state, armyId, targetId, luck = null, result = null) {
   const army = armyById(state, armyId), b = armyById(state, targetId);
   if (!canStrike(state, army, b)) return null;
   delete army.besieging;
@@ -516,7 +518,8 @@ export function strike(state, armyId, targetId, luck = null) {
     ev.after = { att: won ? pickUnits(army) : pickUnits({}), def: won ? pickUnits({}) : pickUnits(b) };
   } else {
     const sd = fieldSides(state, army, b);
-    const r = fight(sd.att, sd.def, null, luck ?? rollLuck(state));
+    const r = result ?? fight(sd.att, sd.def, null, luck ?? rollLuck(state));
+    ev.escaped = r.escaped ?? null;
     won = r.attWins;
     ev.power = won ? r.defPow / Math.max(1e-6, r.attPow) : r.attPow / Math.max(1e-6, r.defPow);
     for (const k of UNITS) (won ? army : b)[k] = (won ? r.att : r.def)[k];
@@ -530,7 +533,8 @@ export function strike(state, armyId, targetId, luck = null) {
   const [winner, loser] = won ? [army, b] : [b, army];
   // Karada yenilen geri çekilebilir (denizde yenilen filo askerleriyle batar).
   // Kamp çekilmez: dağıtılır.
-  const fled = !ev.naval && !loser.camp && retreat(state, loser, winner, won ? ev.before.def : ev.before.att, ev.power);
+  const fled = !ev.naval && !loser.camp && retreat(state, loser, winner, won ? ev.before.def : ev.before.att, ev.power, ev.escaped);
+  delete ev.escaped;
   if (fled) ev.retreat = { army: loser.id, owner: loser.owner, men: men(loser) };
   if (fled && loser === army) trace.fled = true;
   countWin(state, winner.owner);
@@ -567,10 +571,11 @@ const pickUnits = (u) => Object.fromEntries(UNITS.map((k) => [k, u[k] ?? 0]));
  * uzak, karadan yürünebilir bir kareye (en çok `dist` birim). Pek az asker kalırsa ya da gidecek
  * yer yoksa dağılır. `ratio` 0..1: savaş ne kadar yakındı. Dönen: çekildi mi.
  */
-function retreat(state, loser, winner, before, ratio) {
+function retreat(state, loser, winner, before, ratio, escaped = null) {
   const R = N.retreat;
   const keep = R.keep * Math.max(0, Math.min(1, ratio ?? 0));
-  const left = Object.fromEntries(UNITS.map((k) => [k, Math.floor((before[k] ?? 0) * keep)]));
+  // Taktik savaşta: sahadan kaçabilenler.
+  const left = escaped ?? Object.fromEntries(UNITS.map((k) => [k, Math.floor((before[k] ?? 0) * keep)]));
   if (men(left) < R.min) return false;
   const from = cellOf(loser.x, loser.y);
   const enter = enterFor(state, { ...loser, ...left }, "land");

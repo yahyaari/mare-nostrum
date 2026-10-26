@@ -420,7 +420,7 @@ const UNIT_TIP = { inf: "tipInf", arch: "tipArch", cav: "tipCav", siege: "tipSie
 // biraz kalkık. Seçim ui.cards'ta: { of: "p:rome" | "a:12", sig, picks: Set(kart sırası), page }.
 // `sig` askerlerin sayısı: biri değişince (asker basıldı, ordu çıktı) eski seçim düşer.
 
-const cardSig = (u) => [...UNITS, ...SHIPS].map((k) => u[k] ?? 0).join(",");
+export const cardSig = (u) => [...UNITS, ...SHIPS].map((k) => u[k] ?? 0).join(",");
 
 /** Bu garnizonun ya da ordunun seçili kartları (başka bir şeyinkiyse ya da sayılar değiştiyse boş). */
 export const picksOf = (ui, of, u) => (ui.cards?.of === of && ui.cards.sig === cardSig(u) ? ui.cards.picks : new Set());
@@ -1470,7 +1470,7 @@ export const FIGHT_MS = SCENE_MS + RIBBON_MS;
 function drawFight(ctx, cam, game, ui, boxes, T) {
   const e = ui.fight.ev;
   const t = performance.now() - ui.fight.t0;
-  if (t < SCENE_MS + 400) fightScene(ctx, cam, game, e, t);
+  if (t < SCENE_MS + 400 && !e.tactical) fightScene(ctx, cam, game, e, t);
   if (t > SCENE_MS - 250) fightRibbon(ctx, cam, ui, boxes, T, e, t - SCENE_MS + 250);
 }
 
@@ -1945,15 +1945,16 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   }
   text(ctx, b && sea ? T.seaFieldHint : fill(T.expect, e.lost, e.killed), r.x + r.w / 2, y, { size: 13, italic: true, color: b && sea ? INK.warn : INK.soft, align: "center" });
   hint.forEach((l, i) => text(ctx, l, x, y + 22 + i * 17, { size: 12, italic: true, color: INK.warn }));
-  if (!sg) {
-    twoButtons(ctx, boxes, r, { label: T.attack, act: { do: "attack" } }, { label: T.cancel, act: { do: "close" } });
-    return;
-  }
-  // Üç düğme: saldır, kuşat, vazgeç.
-  const bw = (r.w - 56) / 3, by = r.y + r.h - 62;
-  button(ctx, boxes, { x: r.x + 20, y: by, w: bw, h: 44, size: 15, main: true, label: T.attack, act: { do: "attack" } });
-  button(ctx, boxes, { x: r.x + 28 + bw, y: by, w: bw, h: 44, size: 15, label: T.besiege, act: { do: "besiege" } });
-  button(ctx, boxes, { x: r.x + 36 + 2 * bw, y: by, w: bw, h: 44, size: 15, label: T.cancel, act: { do: "close" } });
+  // Düğmeler: Sonucu gör (otomatik savaş), Savaş (taktik savaş; yalnız karada ve savunan varsa), Kuşat, Vazgeç.
+  const tactical = !sea && men(theirs) > 0;
+  const btns = [
+    { label: tactical ? T.seeResult : T.attack, main: true, act: { do: "attack" }, tip: [T.seeResult, T.seeResultTip] },
+    ...(tactical ? [{ label: T.fightIt, main: true, act: { do: "battleStart" }, tip: [T.fightIt, T.fightItTip] }] : []),
+    ...(sg ? [{ label: T.besiege, act: { do: "besiege" } }] : []),
+    { label: T.cancel, act: { do: "close" } },
+  ];
+  const bw = (r.w - 40 - 8 * (btns.length - 1)) / btns.length, by = r.y + r.h - 62;
+  btns.forEach((o, i) => button(ctx, boxes, { x: r.x + 20 + i * (bw + 8), y: by, w: bw, h: 44, size: btns.length > 3 ? 14 : 15, ...o }));
 }
 
 /**

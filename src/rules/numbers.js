@@ -65,6 +65,18 @@ export const N = {
   // Dinlenme (bölüm 6c, refill.js): kendi toprağında yürümeyen ordunun ve garnizonun her yarım bölüğü
   // turda `men` asker kazanır, yerin nüfusundan (en az `keep` kişi kalır).
   refill: { men: 3, keep: 20 },
+  // Taktik savaş (bölüm 29, tactics.js). Saha `w` x `h` birim; birlik büyüklükleri (`per`); hızlar (birim/sn);
+  // değme payı (`reach`); göğüs göğüse: adam başı güç x `melee` asker/sn; hücum: bölük başı N.charge x
+  // `charge` (okçu dışına x`chargeOther`); ok: `range` menzil, `every` sn'de bir, bölük başı N.volley x
+  // `kill`, `flight` sn uçar; surun ardındaki savunan düşman `hold` birime gelene kadar bekler;
+  // `time` sn sonunda savunan kazanır. Moral 100 (general +10): kaybedilen her %1 x `loss`, kuşatılınca
+  // sn'de `flank`, hücum yiyince `charge`, ok yiyince `arrow`, dövüşmeyen sn'de `recover` toparlanır;
+  // `rout`un altında ya da askerin `floor` payı kalınca bozulur; bozulan yakındaki dostlardan `nearby` götürür.
+  tactics: {
+    w: 100, h: 60, wallX: 76, per: { inf: 40, arch: 30, cav: 30, siege: 20, elite: 30 }, speed: { inf: 3.5, cav: 8, siege: 2 },
+    reach: 1.2, melee: 0.012, charge: 0.6, chargeOther: 0.35, volley: { range: 26, every: 2.5, kill: 0.15, flight: 0.8 },
+    hold: 14, time: 180, morale: { loss: 1.15, flank: 3, rout: 15, charge: 12, arrow: 1, recover: 1, nearby: 6, floor: 0.15 },
+  },
   // Ticaret yolları (bölüm 28, trade.js): karadan `reach`, iki liman arasında `seaReach` birime kadar;
   // turluk para (iki uca da) `base` + uzaklık x `perDist`, yabancı yerle x`foreign`, en çok `max`. Şehir
   // başına yol: pazar 1, liman ticareti 1, pazar `marketMore`. seviyede bir daha.
