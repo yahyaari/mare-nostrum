@@ -3,7 +3,7 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **23.10.2026** (zafer yolları, canlı savaşlar, öğretici, araştırma, liderler, harika yarışı, aynı bilgisayarda oyuncular, şehir binaları, geri çekilme ve dağlar, oyun sonu özeti).
+> Son güncelleme: **26.10.2026** (barbarlar, bina / asker / gemi kartları). Önceki: **23.10.2026** (zafer yolları, canlı savaşlar, öğretici, araştırma, liderler, harika yarışı, aynı bilgisayarda oyuncular, şehir binaları, geri çekilme ve dağlar, oyun sonu özeti).
 
 ## SON EKLENENLER (23.10) - önce bunu oku
 
@@ -68,7 +68,10 @@ iyileşiyor". Sordum: ne yapacağını bilmedi, kararları önemsiz geldi - öze
 bir buton" sıkıcı; Total War'daki gibi görselli, seviyesi köşede bina kartları. Çözüm olarak sadece
 barbar kamplarını seçti.
 10. **Bina kartları** (2326da2): kurallar.md bölüm 12; `src/view/buildings.js`.
-11. **Barbarlar** (bu adım): kurallar.md bölüm 26; `src/rules/barbarians.js`. Kayıt 18.
+11. **Barbarlar** (f730dfd): kurallar.md bölüm 26; `src/rules/barbarians.js`. Kayıt 18.
+12. **Asker ve gemi kartları** (bu adım; kullanıcı bina kartlarını beğendi, "asker basma işini de böyle
+    yapmamız lazım"): kurallar.md bölüm 12. `ui.js` `recruitBlock` / `troopCard` / `troopArt`;
+    sütunlar 300/230 yerine 265/265. `fit` artık `min` alıyor (küçük yazılar 8'e kadar küçülür).
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 

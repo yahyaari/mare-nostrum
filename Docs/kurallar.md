@@ -498,6 +498,12 @@ oyundan çıkar.
   asma kilit ve nedeni, bittiyse EN ÜST. Soldaki şehir resminde yapılar görünür: tarla şeritleri,
   sanayinin bacaları, kışlanın çadırları, tapınak, pazar. Bir yükseltme bitince şehrin üstünden
   kazancıyla yükselir ("Tarla 2 · +4 buğday").
+- **Asker ve gemi kartları** (kullanıcı 26.10, bina kartlarından sonra: "asker basma işini de böyle
+  yapmamız lazım"): Şehir sekmesinin sağında *Asker bas* - piyade, okçu, süvari, kuşatma birer kart:
+  resmi (`troopArt`, ordu kartındakiyle aynı), sağ üst köşede şehirdeki bölük sayısı, adı, işi
+  ("Hattı tutar", "Okçuyu biçer"), alt alta fiyatı, en altta *+10*. Basılabilen kartın çerçevesi
+  altın; kilitliyse asma kilit ve kısaca nedeni (teknoloji adı, "Kışla 3"). Liman sekmesinde aynısı
+  gemiler için: kadırga, trireme, kinkerem, köşede buradaki gemi sayısı, düğme *+1*.
 - **Şehre tıklayınca:** panel **ekranın altında ortada** açılır (Total War gibi; kullanıcı 22.10:
   "solda istemiyorum"): şehir (nüfus, garnizon, üretim, sadakat, Ordu çıkar) | sekmeler: Şehir
   (yükseltmeler, asker bas), Liman (liman yapıları, gemi yap), Garnizon (askerler kart kart). Panel açıkken alttaki menü gizlenir;

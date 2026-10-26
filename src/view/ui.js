@@ -371,7 +371,7 @@ function lines(ctx, s, x, y, w, o, max = 2, step = 16) {
 /** Sığmazsa küçülen, yine sığmazsa kısalan tek satır. */
 function fit(ctx, s, x, y, w, o) {
   let size = o.size ?? 13;
-  if (measure(ctx, s, { ...o, size }) > w) size = Math.max(10, size - 1.5);
+  if (measure(ctx, s, { ...o, size }) > w) size = Math.max(o.min ?? 10, size - 1.5);
   while (s.length > 4 && measure(ctx, s, { ...o, size }) > w) s = s.slice(0, -2) + "…";
   return text(ctx, s, x, y, { ...o, size });
 }
@@ -423,30 +423,8 @@ function unitCard(ctx, boxes, T, c, owner, x, y, w, h, on, act) {
   ctx.fill();
   // Resim: sahibinin renginde gök, ufukta açılır; altında toprak (gemide deniz).
   const ix = x + 3, iy = top + 3, iw = w - 6, ih = h - strip - 5;
-  const ground = iy + ih * 0.8;
-  ctx.save();
-  roundRect(ctx, ix, iy, iw, ih, 2);
-  ctx.clip();
   const boat = SHIPS.includes(c.type);
-  const sky = ctx.createLinearGradient(0, iy, 0, ground);
-  sky.addColorStop(0, shade(colorOf(owner), -0.35));
-  sky.addColorStop(1, shade(colorOf(owner), 0.45));
-  ctx.fillStyle = sky;
-  ctx.fillRect(ix, iy, iw, ih);
-  ctx.fillStyle = boat ? "#55777e" : "#9c8559";
-  ctx.fillRect(ix, ground, iw, iy + ih - ground);
-  const cx = ix + iw / 2;
-  // Gemiler: kadırga yalın, trireme mahmuzlu ve büyük, kinkerem en büyüğü ve küpeştesinde askerler.
-  if (boat) galley(ctx, owner, cx, ground + 1 * k, (c.type === "quinq" ? 0.95 : c.type === "trireme" ? 0.86 : 0.74) * k, { troops: c.type === "quinq" });
-  else if (c.type === "cav") trooper(ctx, "cav", owner, cx - 4 * k, ground + 4 * k, -1, 1.2 * k);
-  else if (c.type === "siege") trooper(ctx, "siege", owner, cx - 3 * k, ground + 3 * k, -1, 1.4 * k);
-  else {
-    // Üç asker: arkada iki, önde bir.
-    trooper(ctx, c.type, owner, cx - 11 * k, ground - 1 * k, -1, 1.1 * k);
-    trooper(ctx, c.type, owner, cx + 10 * k, ground - 1 * k, -1, 1.1 * k);
-    trooper(ctx, c.type, owner, cx - 1 * k, ground + 5 * k, -1, 1.3 * k);
-  }
-  ctx.restore();
+  troopArt(ctx, c.type, owner, ix, iy, iw, ih, k);
   // Alt şerit: kaç kişi, ve gücü (yarım bölük yarım çubuk).
   const sy = top + h - strip;
   if (boat) text(ctx, T.shipNames[c.type], x + w / 2, sy + strip / 2 + 1, { bold: true, size: Math.max(9, 10 * k), color: CREAM, align: "center", base: "middle" });
@@ -545,7 +523,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const tabs = ["city", ...(p.port ? ["port"] : []), "buildings", ...(p.kind === "castle" ? [] : ["wonders"]), "garrison"];
   const tab = tabs.includes(ui.cardTab) ? ui.cardTab : "city";
   const wonder = wondersAt(game, id)[0] ?? null;
-  const A = 214, B = 300, C = 230, BC = B + GAP + C;
+  const A = 214, B = 265, C = 265, BC = B + GAP + C;
   const body = A + GAP + BC + PAD;
   // Görsel, garnizon ve içeridekiler soldaki kartta (sideCard); burada ne yapılacağı.
   const r = cardRect(cam, PAD + body, 252 + (wonder ? 18 : 0));
@@ -633,7 +611,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
     const xc = x + B + GAP;
     vrule(ctx, xc - GAP / 2, top + 4, y + H - 14);
     if (tab === "port") fleetBlock(ctx, game, boxes, T, id, xc, y + 32, C, H - 32);
-    else recruitBlock(ctx, game, boxes, T, id, xc, y + 32, C);
+    else recruitBlock(ctx, game, boxes, T, id, xc, y + 32, C, y + H - 12 - (y + 32 + 44));
   }
   closeX(ctx, boxes, r);
   return r;
@@ -753,7 +731,7 @@ function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
   text(ctx, String(u.now), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
   // Ad ve şu an ne getirdiği.
   fit(ctx, what === "level" ? T.cityCard : T[what], x + w / 2, y + ih + 19, w - 8, { bold: true, size: 12, color: CREAM, align: "center" });
-  fit(ctx, nowFx(game, id, what, T), x + w / 2, y + ih + 35, w - 6, { size: 11, color: u.now > 0 ? GOLD_LIGHT : "rgba(243,231,201,0.5)", align: "center" });
+  fit(ctx, nowFx(game, id, what, T), x + w / 2, y + ih + 35, w - 6, { size: 11, min: 8.5, color: u.now > 0 ? GOLD_LIGHT : "rgba(243,231,201,0.5)", align: "center" });
   // Çerçeve: yükseltilebilirse altın.
   roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 4);
   ctx.strokeStyle = can ? (hot ? GOLD_LIGHT : GOLD) : GOLD_DARK;
@@ -779,7 +757,7 @@ function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
     const why = u.why === "needLevel" ? fill(T.lockLevel, u.now + 1) : u.why.startsWith("tech_") ? T.techs[u.why.slice(5)][0] : whyText(u.why, T);
     boxes.push({ x: ax, y: ay, w: aw, h: 30, act: null, tip: [...tip, [whyText(u.why, T), "bad"]] });
     lock(ctx, x + w / 2, ay + 4);
-    fit(ctx, why, x + w / 2, ay + 27, aw, { size: 9.5, color: "rgba(243,231,201,0.6)", align: "center" });
+    fit(ctx, why, x + w / 2, ay + 27, aw, { size: 9.5, min: 8, color: "rgba(243,231,201,0.6)", align: "center" });
   } else {
     button(ctx, boxes, {
       x: ax, y: ay, w: aw, h: 28, label: "", off: !!u.why, act: { do: "upgrade", id, what },
@@ -835,25 +813,110 @@ function nowFx(game, id, what, T) {
   }
 }
 
-/** Asker bas: dört tür, iki sıra; kapalı düğmenin altında maliyet yerine neden kapalı olduğu. */
-function recruitBlock(ctx, game, boxes, T, id, x, y, w) {
+/**
+ * Bir birliğin resmi (birlik kartı ve asker basma kartı): sahibinin renginde gök, toprak (gemide
+ * deniz); piyade ve okçu üç asker, süvari bir atlı, kuşatma makinesi; gemiler türüne göre.
+ */
+function troopArt(ctx, type, owner, ix, iy, iw, ih, k) {
+  const ground = iy + ih * 0.8;
+  ctx.save();
+  roundRect(ctx, ix, iy, iw, ih, 2);
+  ctx.clip();
+  const boat = SHIPS.includes(type);
+  const sky = ctx.createLinearGradient(0, iy, 0, ground);
+  sky.addColorStop(0, shade(colorOf(owner), -0.35));
+  sky.addColorStop(1, shade(colorOf(owner), 0.45));
+  ctx.fillStyle = sky;
+  ctx.fillRect(ix, iy, iw, ih);
+  ctx.fillStyle = boat ? "#55777e" : "#9c8559";
+  ctx.fillRect(ix, ground, iw, iy + ih - ground);
+  const cx = ix + iw / 2;
+  // Gemiler: kadırga yalın, trireme mahmuzlu ve büyük, kinkerem en büyüğü ve küpeştesinde askerler.
+  if (boat) galley(ctx, owner, cx, ground + 1 * k, (type === "quinq" ? 0.95 : type === "trireme" ? 0.86 : 0.74) * k, { troops: type === "quinq" });
+  else if (type === "cav") trooper(ctx, "cav", owner, cx - 4 * k, ground + 4 * k, -1, 1.2 * k);
+  else if (type === "siege") trooper(ctx, "siege", owner, cx - 3 * k, ground + 3 * k, -1, 1.4 * k);
+  else {
+    // Üç asker: arkada iki, önde bir.
+    trooper(ctx, type, owner, cx - 11 * k, ground - 1 * k, -1, 1.1 * k);
+    trooper(ctx, type, owner, cx + 10 * k, ground - 1 * k, -1, 1.1 * k);
+    trooper(ctx, type, owner, cx - 1 * k, ground + 5 * k, -1, 1.3 * k);
+  }
+  ctx.restore();
+}
+
+/**
+ * Asker bas (kullanıcı 26.10: "asker basma işini de böyle yapmamız lazım" - bina kartları gibi):
+ * dört tür, her biri bir kart - resmi, sağ üst köşede bu şehirde kaç bölüğü olduğu, adı ve işi,
+ * maliyeti, en altta +10 (kilitliyse asma kilit ve neden). Üstte bu tur kaç hak kaldığı.
+ */
+function recruitBlock(ctx, game, boxes, T, id, x, y, w, h) {
   const ri = recruitInfo(game, id, "inf");
   text(ctx, T.recruit, x, y + 32, { bold: true, size: 14 });
   const why = ri.why && ri.why !== "done" ? whyText(ri.why, T) : fill(T.recruitLeft, ri.left);
   fit(ctx, why, x + 90, y + 32, w - 90, { italic: true, size: 12, color: ri.why && ri.why !== "done" ? INK.bad : INK.soft });
-  const bw = (w - 8) / 2;
+  const gap = 6, cw = (w - gap * 3) / 4;
+  const pl = game.places[id];
   UNITS.forEach((type, i) => {
     const info = recruitInfo(game, id, type);
-    const locked = info.why && info.why.startsWith("need");
-    button(ctx, boxes, {
-      x: x + (i % 2) * (bw + 8), y: y + 44 + Math.floor(i / 2) * 54, w: bw, h: 48, label: T["add" + type[0].toUpperCase() + type.slice(1)], size: 13, off: !!info.why,
-      act: { do: "recruit", id, type },
-      tip: [T[type][0].toUpperCase() + T[type].slice(1), T[UNIT_TIP[type]], info.why ? [whyText(info.why, T), "bad"] : null],
-      sub: (cx2, cy2, color) => (locked
-        ? text(ctx, whyText(info.why, T), cx2, cy2 + 2, { size: 11, italic: true, color, align: "center" })
-        : costLine(ctx, recruitCost(game.player, type), cx2, cy2 + 2, color)),
+    const name = T.unitShort[type];
+    troopCard(ctx, boxes, T, {
+      x: x + i * (cw + gap), y: y + 44, w: cw, h, type, owner: pl.owner, name, have: Math.ceil((pl[type] ?? 0) / N.company),
+      cost: recruitCost(game.player, type), why: info.why, plus: "+" + N.company, act: { do: "recruit", id, type },
+      tip: [name, T[UNIT_TIP[type]], info.why ? [whyText(info.why, T), "bad"] : null],
     });
   });
+}
+
+/** Asker ya da gemi kartı: resim, sağ üst köşede sayı, ad, işi, maliyet, en altta düğme. */
+function troopCard(ctx, boxes, T, o) {
+  const { x, y, w, h, type, owner, why } = o;
+  const can = !why;
+  const hot = over(x, y, w, h);
+  ctx.save();
+  ctx.fillStyle = "rgba(25,18,10,0.3)";
+  roundRect(ctx, x + 1.5, y + 2.5, w, h, 4);
+  ctx.fill();
+  roundRect(ctx, x, y, w, h, 4);
+  ctx.fillStyle = DARK;
+  ctx.fill();
+  // Resim, alttaki satırlara (ad, iş, maliyetler, düğme) yer kaldıkça büyük.
+  const parts = ["money", "weapons", "food"].filter((k) => (o.cost[k] ?? 0) > 0);
+  const ih = Math.round(Math.max(36, Math.min(w * 1.05, h - (16 + 14 + parts.length * 13 + 32 + 12))));
+  troopArt(ctx, type, owner, x + 3, y + 3, w - 6, ih, Math.min(w / 56, ih / 52));
+  // Sağ üst köşe: bu şehirde kaç tane.
+  const rx = x + w - 11, ry = y + 11;
+  ctx.beginPath();
+  ctx.arc(rx, ry, 9.5, 0, TAU);
+  ctx.fillStyle = o.have > 0 ? GOLD : "#6b6258";
+  ctx.fill();
+  ctx.strokeStyle = DARK;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  text(ctx, String(o.have), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
+  fit(ctx, o.name, x + w / 2, y + ih + 18, w - 6, { bold: true, size: 12, color: CREAM, align: "center" });
+  fit(ctx, T.role[type], x + w / 2, y + ih + 32, w - 6, { size: 10, italic: true, color: "rgba(243,231,201,0.7)", align: "center" });
+  // Maliyet: alt alta, simgeli.
+  parts.forEach((k, i) => {
+    const v = Math.round(o.cost[k] * 10) / 10;
+    const cw = 11 + 3 + measure(ctx, String(v), { size: 11, bold: true });
+    amount(ctx, k, v, x + w / 2 - cw / 2, y + ih + 47 + i * 13, { size: 11, bold: true, color: can ? GOLD_LIGHT : "rgba(243,231,201,0.45)" });
+  });
+  roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 4);
+  ctx.strokeStyle = can ? (hot ? GOLD_LIGHT : GOLD) : GOLD_DARK;
+  ctx.lineWidth = can ? 1.8 : 1.1;
+  ctx.stroke();
+  ctx.restore();
+  const ax = x + 4, aw = w - 8, ay = y + h - 32;
+  const locked = why && (why.startsWith("need") || why.startsWith("tech_") || why === "notPort");
+  if (locked) {
+    lock(ctx, x + w / 2, ay + 4);
+    const short = why.startsWith("tech_") ? T.techs[why.slice(5)][0] : whyText(why, T);
+    fit(ctx, short, x + w / 2, ay + 27, aw, { size: 9.5, min: 8, color: "rgba(243,231,201,0.6)", align: "center" });
+    boxes.push({ x: ax, y: ay, w: aw, h: 30, act: null, tip: o.tip });
+  } else {
+    button(ctx, boxes, { x: ax, y: ay, w: aw, h: 28, label: o.plus, size: 13, off: !!why, act: o.act, tip: o.tip });
+  }
+  boxes.push({ x, y, w, h: h - 34, act: null, tip: o.tip });
 }
 
 /** Bir gemi türünün sayıları: kaç asker taşır, savaşta gücü. */
@@ -871,16 +934,14 @@ function fleetBlock(ctx, game, boxes, T, id, x, y, w, H) {
   fit(ctx, shut ? T.blockaded.toLocaleUpperCase() : T.openSea, x + hw + 10, y + 32, w - hw - 10, { italic: true, bold: shut, size: 12, color: shut ? INK.bad : INK.good });
   const left = shipInfo(game, id).left;
   fit(ctx, fill(T.shipsLeft, left), x, y + 50, w, { italic: true, size: 12, color: INK.soft });
+  // Üç gemi türü, her biri bir kart (asker basma kartları gibi).
+  const gap = 6, cw = (w - gap * 2) / 3, top = y + 58, ch = H - 58 - 12;
   SHIPS.forEach((type, i) => {
     const si = shipInfo(game, id, type);
-    const locked = si.why && si.why.startsWith("need");
-    button(ctx, boxes, {
-      x, y: y + 60 + i * 50, w, h: 44, label: `+ ${T.shipNames[type]}  ·  ${pl[type]}`, size: 13, off: !!si.why,
-      act: { do: "buildShip", id, type },
+    troopCard(ctx, boxes, T, {
+      x: x + i * (cw + gap), y: top, w: cw, h: ch, type, owner: pl.owner, name: T.shipNames[type], have: pl[type] ?? 0,
+      cost: si.cost, why: si.why, plus: "+1", act: { do: "buildShip", id, type },
       tip: [T.shipNames[type], shipLine(type, T), T.shipTips[type], si.why ? [whyText(si.why, T), "bad"] : null],
-      sub: (cx2, cy2, color) => (locked
-        ? text(ctx, whyText(si.why, T), cx2, cy2 + 2, { size: 11, italic: true, color, align: "center" })
-        : costLine(ctx, si.cost, cx2, cy2 + 2, color)),
     });
   });
 }
