@@ -15,6 +15,7 @@ import { toScreen } from "./camera.js";
 import { INK, SERIF, TAU, colorOf } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_LIGHT, TITLE, banner, castleModel, chevrons, cityModel, fleet, goalMark, plaque, roundRect, shield, ship, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
+import { field, forge, stall, temple, tent as campTent } from "./buildings.js";
 import { clear, drawClouds, drawSnow, paintCompass, paintFog, paintGround, paintLabels } from "./atlas.js";
 import { regions } from "./regions.js";
 import { TREES } from "../data/trees.js";
@@ -179,7 +180,7 @@ if (TERRAIN) {
  */
 const FY = 0.7;
 
-export function drawVignette(ctx, id, owner, r, level = 2, zMax = 2.4) {
+export function drawVignette(ctx, id, owner, r, level = 2, zMax = 2.4, works = null) {
   const p = byIdPlace[id], m = POS[id];
   ctx.save();
   ctx.beginPath();
@@ -202,6 +203,17 @@ export function drawVignette(ctx, id, owner, r, level = 2, zMax = 2.4) {
   const cx = r.x + r.w / 2, cy = r.y + r.h * FY;
   const f = flagSize(p, owner, z * 0.62);
   banner(ctx, owner, cx, cy - 3 * z, f.w, f.h, f.pole, { gold: p.capital && !!owner });
+  // Yapılar şehrin çevresinde (kullanıcı 26.10: "yükseltmeler bir şey yapıyormuşum gibi
+  // hissettirmedi"): solda tarla şeritleri, sağda sanayinin bacaları, önde kışlanın çadırları,
+  // arkada tapınak, yanında pazar. Seviye arttıkça çoğalır.
+  if (works) {
+    const s = z * 0.42;
+    for (let i = 0; i < Math.min(5, works.farms ?? 0); i++) field(ctx, cx - 30 * z + (i % 2) * 3 * z, cy + 4 * z + i * 1.6 * z, 16 * z, i);
+    if ((works.temple ?? 0) > 0) temple(ctx, cx - 16 * z, cy - 6 * z, s * 0.9);
+    if ((works.industry ?? 0) > 0) forge(ctx, cx + 22 * z, cy + 3 * z, s, Math.min(4, works.industry));
+    if ((works.market ?? 0) > 0) stall(ctx, cx + 11 * z, cy + 7 * z, s * 1.1, owner);
+    for (let i = 0; i < Math.min(4, works.barracks ?? 0); i++) campTent(ctx, cx - 8 * z + i * 4 * z, cy + 10 * z - (i % 2) * z, 3.4 * z, owner);
+  }
   if (p.kind === "castle") castleModel(ctx, cx, cy + 2 * z, z * 1.1, level);
   else cityModel(ctx, cx, cy + 2 * z, z, p.capital, level);
   // Üstte ve altta solma: üst koyu, alt kâğıda.

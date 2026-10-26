@@ -23,7 +23,7 @@ import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
 import { banditsOf } from "../rules/bandits.js";
 import { dealLeft, dealOf, moodLevel, moodOf, persona } from "../rules/leaders.js";
 import { portrait } from "./leaders.js";
-import { TECHS, canResearch, costFor, knows, scienceOf, techById, turnsLeft as techTurns } from "../rules/research.js";
+import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait } from "../rules/numbers.js";
 import {
   BUILDINGS, PORT_UPGRADES, UPGRADES, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
@@ -48,6 +48,7 @@ import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
 import { SCENE_MS, drawBattle, trooper } from "./battle.js";
 import { explain, fight, nextRankXp, veteranMul, veteranRank } from "../rules/combat.js";
 import { drawMinimap, drawVignette, placeOnScreen } from "./draw.js";
+import { buildingArt } from "./buildings.js";
 import { toScreen } from "./camera.js";
 import { SIZE } from "../geo.js";
 
@@ -609,7 +610,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   else if (tab === "buildings") {
     // Yapılar: dört bina solda (yükseltme satırları gibi), sağda bu şehirdeki etkileri.
     buildersRow(ctx, game, boxes, T, id, x, top, B);
-    BUILDINGS.forEach((what, i) => upgradeRow(ctx, game, boxes, T, id, what, x, x + B, top + 26 + i * 40));
+    buildingCards(ctx, game, boxes, T, id, BUILDINGS, x, top + 26, B, y + H - 12 - (top + 26));
     const xc = x + B + GAP;
     vrule(ctx, xc - GAP / 2, top + 4, y + H - 14);
     let ly = top + 16;
@@ -627,7 +628,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
     gridHead(ctx, boxes, T, pl, of, T.garrison, x, top, BC, g, true);
   } else {
     buildersRow(ctx, game, boxes, T, id, x, top, B);
-    (tab === "port" ? PORT_UPGRADES : UPGRADES).forEach((what, i) => upgradeRow(ctx, game, boxes, T, id, what, x, x + B, top + 26 + i * 40));
+    buildingCards(ctx, game, boxes, T, id, tab === "port" ? PORT_UPGRADES : UPGRADES, x, top + 26, B, y + H - 12 - (top + 26));
     // Asker bas ya da gemi yap.
     const xc = x + B + GAP;
     vrule(ctx, xc - GAP / 2, top + 4, y + H - 14);
@@ -706,42 +707,132 @@ const turnsText = (n, T) => (n === 1 ? T.turnsOne : fill(T.turnsN, n));
  * Bir yükseltme satırı: ad, seviye, etkisi ve süresi ya da neden olmadığı, fiyatlı düğme.
  * İnşa ediliyorsa: kalan tur, tur tur dolan çubuk, İptal.
  */
-function upgradeRow(ctx, game, boxes, T, id, what, x, right, ry) {
-  const u = upgradeInfo(game, id, what);
-  const bw = 88;
-  const b = u.building;
-  if (b) {
-    const nw = text(ctx, `${T[what]}  ${u.now} → ${u.now + 1}`, x, ry + 15, { bold: true, size: 13 });
-    fit(ctx, b.left === 1 ? T.buildLeftOne : fill(T.buildLeft, b.left), x + nw + 8, ry + 15, right - x - bw - nw - 16, { italic: true, bold: true, size: 12, color: INK.warn });
-    const pw = right - x - bw - 10;
-    ctx.fillStyle = "rgba(90,70,40,0.18)";
-    ctx.fillRect(x, ry + 23, pw, 7);
-    ctx.fillStyle = INK.warn;
-    ctx.fillRect(x, ry + 23, (pw * (b.total - b.left)) / b.total, 7);
-    ctx.strokeStyle = "#5a4630";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, ry + 23.5, pw - 1, 6);
-    ctx.beginPath();
-    for (let k = 1; k < b.total; k++) { const tx = Math.round(x + (pw * k) / b.total) + 0.5; ctx.moveTo(tx, ry + 23); ctx.lineTo(tx, ry + 30); }
-    ctx.stroke();
-    button(ctx, boxes, { x: right - bw, y: ry + 3, w: bw, h: 30, label: T.cancelBuild, size: 12, act: { do: "cancelBuild", id, what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)] });
-    return;
+/**
+ * Bina kartları (kullanıcı 26.10: "Total War'da görsel vardı, sağ üst köşesinde seviyesi
+ * yazıyordu"): her yapı bir kart - üstte resmi (seviyesi arttıkça sahne zenginleşir, view/
+ * buildings.js), sağ üst köşede seviye rozeti, altında adı ve şu an ne getirdiği, en altta
+ * Yükselt düğmesi (fiyatıyla) ya da sürüyorsa ilerleme, kilitliyse neden, bittiyse EN ÜST.
+ */
+function buildingCards(ctx, game, boxes, T, id, list, x, y, w, h) {
+  const gap = 6, cw = (w - gap * (list.length - 1)) / list.length;
+  list.forEach((what, i) => buildingCard(ctx, game, boxes, T, id, what, x + i * (cw + gap), y, cw, h));
+}
+
+function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
+  const u = upgradeInfo(game, id, what), pl = game.places[id];
+  const can = !u.why;
+  const hot = over(x, y, w, h);
+  ctx.save();
+  ctx.fillStyle = "rgba(25,18,10,0.3)";
+  roundRect(ctx, x + 1.5, y + 2.5, w, h, 4);
+  ctx.fill();
+  roundRect(ctx, x, y, w, h, 4);
+  ctx.fillStyle = DARK;
+  ctx.fill();
+  // Resim; inşaat sürüyorsa üstü kararır, ortada çekiç.
+  const ih = Math.round(Math.min(h * 0.5, w * 1.1));
+  ctx.save();
+  roundRect(ctx, x + 3, y + 3, w - 6, ih, 2);
+  ctx.clip();
+  buildingArt(ctx, what, x + 3, y + 3, w - 6, ih, u.now, pl.owner);
+  if (u.building) {
+    ctx.fillStyle = "rgba(20,14,8,0.45)";
+    ctx.fillRect(x + 3, y + 3, w - 6, ih);
+    hammer(ctx, x + w / 2, y + 3 + ih / 2, CREAM);
   }
-  const done = u.why === "max" || u.why === "needLevel";
-  text(ctx, `${T[what]}  ${u.now}${done ? "" : " → " + (u.now + 1)}`, x, ry + 15, { bold: true, size: 13 });
-  const note = u.why === "max" ? T.whyMax : u.why === "needLevel" ? fill(T.whyNeedLevel, u.now + 1)
-    : u.why === "done" ? T.whyJustTaken : u.why === "busy" ? T.whyBusy
-    : `${effect(game, id, what, T)} · ${turnsText(u.turns, T)}`;
-  fit(ctx, note, x, ry + 31, right - x - (done ? 0 : bw + 8), { italic: true, size: 12, color: u.why && u.why !== "money" ? INK.faint : INK.soft });
-  if (done) return;
-  const bx = right - bw, by = ry + 3;
-  button(ctx, boxes, {
-    x: bx, y: by, w: bw, h: 32, label: "", off: !!u.why, act: { do: "upgrade", id, what },
-    tip: [T[what], T.tipUpgrade[what], fill(T.takesTurns, turnsText(u.turns, T)), u.why ? [u.why === "done" ? T.whyJustTaken : whyText(u.why, T), "bad"] : null],
-  });
-  const c = u.why ? INK.faint : INK.ink;
-  const w = 16 + measure(ctx, String(u.cost), { bold: true, size: 13 });
-  amount(ctx, "money", u.cost, bx + bw / 2 - w / 2, by + 21, { size: 13, bold: true, color: c });
+  ctx.restore();
+  // Seviye rozeti: sağ üst köşede.
+  const rx = x + w - 11, ry = y + 11;
+  ctx.beginPath();
+  ctx.arc(rx, ry, 9.5, 0, TAU);
+  ctx.fillStyle = u.now > 0 ? GOLD : "#6b6258";
+  ctx.fill();
+  ctx.strokeStyle = DARK;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  text(ctx, String(u.now), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
+  // Ad ve şu an ne getirdiği.
+  fit(ctx, what === "level" ? T.cityCard : T[what], x + w / 2, y + ih + 19, w - 8, { bold: true, size: 12, color: CREAM, align: "center" });
+  fit(ctx, nowFx(game, id, what, T), x + w / 2, y + ih + 35, w - 6, { size: 11, color: u.now > 0 ? GOLD_LIGHT : "rgba(243,231,201,0.5)", align: "center" });
+  // Çerçeve: yükseltilebilirse altın.
+  roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 4);
+  ctx.strokeStyle = can ? (hot ? GOLD_LIGHT : GOLD) : GOLD_DARK;
+  ctx.lineWidth = can ? 1.8 : 1.1;
+  ctx.stroke();
+  ctx.restore();
+  // Alt: eylem.
+  const ax = x + 4, aw = w - 8, ay = y + h - 32;
+  const next = u.why === "max" ? null : fill(T.nextLevel, effect(game, id, what, T));
+  const tip = [`${T[what]} · ${fill(T.levelOf, u.now)}`, T.tipUpgrade[what], next, u.why === "max" ? null : fill(T.takesTurns, turnsText(u.turns, T))];
+  if (u.building) {
+    const b = u.building;
+    ctx.fillStyle = "rgba(243,231,201,0.18)";
+    ctx.fillRect(ax, ay + 4, aw, 6);
+    ctx.fillStyle = GOLD;
+    ctx.fillRect(ax, ay + 4, (aw * (b.total - b.left)) / b.total, 6);
+    text(ctx, b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left), x + w / 2, ay + 24, { size: 11, bold: true, color: GOLD_LIGHT, align: "center" });
+    boxes.push({ x: ax, y: ay, w: aw, h: 28, act: { do: "cancelBuild", id, what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)] });
+  } else if (u.why === "max") {
+    text(ctx, T.maxShort, x + w / 2, ay + 19, { bold: true, size: 11, color: GOLD, align: "center" });
+  } else if (u.why === "needLevel" || u.why === "notPort" || u.why?.startsWith("tech_")) {
+    // Kart dar: kısa neden (teknolojinin adı); uzun cümle ipucunda.
+    const why = u.why === "needLevel" ? fill(T.lockLevel, u.now + 1) : u.why.startsWith("tech_") ? T.techs[u.why.slice(5)][0] : whyText(u.why, T);
+    boxes.push({ x: ax, y: ay, w: aw, h: 30, act: null, tip: [...tip, [whyText(u.why, T), "bad"]] });
+    lock(ctx, x + w / 2, ay + 4);
+    fit(ctx, why, x + w / 2, ay + 27, aw, { size: 9.5, color: "rgba(243,231,201,0.6)", align: "center" });
+  } else {
+    button(ctx, boxes, {
+      x: ax, y: ay, w: aw, h: 28, label: "", off: !!u.why, act: { do: "upgrade", id, what },
+      tip: [...tip, u.why ? [u.why === "done" ? T.whyJustTaken : whyText(u.why, T), "bad"] : null],
+    });
+    const c = u.why ? INK.faint : INK.ink;
+    const cw = 10 + 4 + 13 + 3 + measure(ctx, String(u.cost), { bold: true, size: 12 });
+    const sx = x + w / 2 - cw / 2;
+    text(ctx, "▲", sx, ay + 19, { bold: true, size: 11, color: u.why ? INK.faint : INK.good });
+    amount(ctx, "money", u.cost, sx + 14, ay + 19, { size: 12, bold: true, color: c });
+  }
+  // Kartın üstüne gelince: ne işe yarar, sıradaki seviye ne getirir.
+  boxes.push({ x, y, w, h: h - 34, act: null, tip });
+}
+
+/** Bir yükseltmenin bir seviyesinin getirdiği, yazıyla (main.js: bitince şehrin üstünden yükselir). */
+export const gainText = (game, id, what, lang) => effect(game, id, what, TEXT[lang]);
+
+/** Küçük asma kilit (kilitli bina kartında). */
+function lock(ctx, cx, y) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(243,231,201,0.6)";
+  ctx.fillStyle = "rgba(243,231,201,0.6)";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(cx, y + 5, 3, Math.PI, TAU);
+  ctx.stroke();
+  ctx.fillRect(cx - 4.5, y + 5, 9, 7);
+  ctx.restore();
+}
+
+/** Bir yapının şu an ne getirdiği (kartın altındaki satır). */
+function nowFx(game, id, what, T) {
+  const pl = game.places[id], p = byId[id], c = pl.owner;
+  const castle = p.kind === "castle" ? N.castleOutput : 1;
+  const r1 = (n) => String(Math.round(n * 10) / 10);
+  // Henüz yapılmamış yapı bir şey getirmiyor.
+  if (!pl[what] && !["level", "fishery"].includes(what)) return "—";
+  switch (what) {
+    case "level": return fill(T.fxPop, Math.round(popCap(pl, p.kind)));
+    case "farms": return fill(T.fxFood, r1(pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") * techMul(game, c, "wheat")));
+    case "industry": return fill(T.fxWeapons, r1(pl.industry * castle * trait(c, "weapons") * techMul(game, c, "weapons")));
+    case "barracks": return fill(T.fxCompanies, pl.barracks);
+    case "fishery": return fill(T.fxFood, r1((N.fish + pl.fishery * N.port.fishPerLevel) * castle * trait(c, "fish") * techMul(game, c, "fish")));
+    case "shipyard": return fill(T.fxShips, pl.shipyard);
+    case "trade": return fill(T.fxMoney, r1(pl.trade * N.port.tradePerLevel * castle * trait(c, "money")));
+    case "fort": return fill(T.fxFort, Math.round((1 + pl.fort * N.port.fortPerLevel) * 100) / 100);
+    case "temple": return fill(T.fxLoyalty, pl.temple * N.buildings.temple);
+    case "market": return fill(T.fxMoneyPct, Math.round(pl.market * N.buildings.market * 100));
+    case "school": return fill(T.fxScience, pl.school * N.buildings.school);
+    case "baths": return fill(T.fxGrowth, Math.round(pl.baths * N.buildings.baths * 100));
+    default: return "";
+  }
 }
 
 /** Asker bas: dört tür, iki sıra; kapalı düğmenin altında maliyet yerine neden kapalı olduğu. */
@@ -1026,7 +1117,7 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
 
   // Görsel: yerin kendi arazisinde maketi; içi biliniyorsa önünde garnizonu kadar asker.
   const vr = { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: VH };
-  drawVignette(ctx, id, pl.owner, vr, pl.level, 2.6);
+  drawVignette(ctx, id, pl.owner, vr, pl.level, 2.6, f.works);
   if (f.garrison) {
     const g = f.garrison, total = men(g);
     const n = Math.min(6, Math.ceil(total / 30));

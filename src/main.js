@@ -37,7 +37,7 @@ import { SCENE_MS } from "./view/battle.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { CARD_H, FIGHT_MS, MODAL_MS, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
+import { CARD_H, FIGHT_MS, MODAL_MS, gainText, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
 import { TOP, chipRise } from "./view/hud.js";
 import { SIZE, project } from "./geo.js";
 import { trait } from "./rules/numbers.js";
@@ -699,7 +699,8 @@ function dispatch(act) {
       });
       // Biten inşaatlar: kamera döndükten sonra şehrin üstünden yükselir.
       game.events.filter((e) => e.type === "built" && e.civ === me).forEach((e, i) => {
-        anim.rise(e.place, `${T()[e.what]} ${e.level}`, INK.good, showEnd - anim.clock() + i * 250);
+        // Ne kazandırdığı da: "Tarla 2 · +4 buğday" (kullanıcı 26.10: yükseltme bir şey yapıyormuşum gibi hissettirmedi).
+        anim.rise(e.place, `${T()[e.what] ?? ""} ${e.level} · ${gainText(game, e.place, e.what, ui.lang)}`, INK.good, showEnd - anim.clock() + i * 250);
         anim.pulse(e.place, INK.good, showEnd - anim.clock() + i * 250);
       });
       ["money", "weapons", "food"].forEach((k, i) => {

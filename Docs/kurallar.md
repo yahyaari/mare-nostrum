@@ -489,6 +489,15 @@ oyundan çıkar.
 ## 12. Ekran
 
 - **Üst bant:** Tur sayısı, para, silah, yiyecek (her birinin yanında turluk + / −).
+- **Bina kartları** (kullanıcı 26.10: "tarla 1->2 yazıyor yanında bir buton, sıkıcı; Total War'da görsel
+  vardı, sağ üst köşede seviyesi"): şehir, liman ve yapılar sekmelerinde her yapı bir kart - üstte
+  resmi (`src/view/buildings.js`: evler, ekin şeritleri, dumanlı ocak, çitli kışla, tekneler, kızak,
+  amforalar, kule, tapınak, pazar tenteleri, okul, hamam; seviye arttıkça sahne zenginleşir), sağ
+  üst köşede seviye rozeti, altında adı ve şu an ne getirdiği ("+16 yiyecek"), en altta Yükselt
+  (fiyatıyla; yükseltilebilen kartın çerçevesi altın), sürüyorsa ilerleme ve kalan tur, kilitliyse
+  asma kilit ve nedeni, bittiyse EN ÜST. Soldaki şehir resminde yapılar görünür: tarla şeritleri,
+  sanayinin bacaları, kışlanın çadırları, tapınak, pazar. Bir yükseltme bitince şehrin üstünden
+  kazancıyla yükselir ("Tarla 2 · +4 buğday").
 - **Şehre tıklayınca:** panel **ekranın altında ortada** açılır (Total War gibi; kullanıcı 22.10:
   "solda istemiyorum"): şehir (nüfus, garnizon, üretim, sadakat, Ordu çıkar) | sekmeler: Şehir
   (yükseltmeler, asker bas), Liman (liman yapıları, gemi yap), Garnizon (askerler kart kart). Panel açıkken alttaki menü gizlenir;
