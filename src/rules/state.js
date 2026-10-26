@@ -11,8 +11,9 @@ import { buildableById, holds } from "./wonders.js";
 import { POS, cellOf, dist, isLand } from "./map.js";
 import { TECHS, freeTech, grant, knows, techMul, unlocked, unlockerOf } from "./research.js";
 import { dealMoney } from "./leaders.js";
+import { spawnCamps } from "./barbarians.js";
 
-export const VERSION = 17;
+export const VERSION = 18;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -64,8 +65,9 @@ export function migrate(s) {
     // Serbest yürüyüş: ordular durdukları yerleşimin içinde, tam hareketle; eski yol (yerleşim
     // listesi) silinir - oyuncu yeniden gönderir.
     for (const a of s.armies) {
+      // Sahada duran (yerleşimde olmayan) ordu zaten yerinde: barbar kampları ve testlerin taklit kayıtları.
       const m = POS[a.at];
-      a.x = m.x; a.y = m.y;
+      if (m) { a.x = m.x; a.y = m.y; }
       a.mp = N.march.mp * trait(a.owner, "moves");
       a.route = [];
       delete a.moves;
@@ -124,6 +126,11 @@ export function migrate(s) {
     for (const p of Object.values(s.places)) { p.temple ??= 0; p.market ??= 0; p.school ??= 0; p.baths ??= 0; }
     s.version = 17;
   }
+  if (s.version === 17) {
+    // Barbarlar: eski oyuna da kamplar kurulur (boş yer kaldıysa).
+    if (!s.barbarians) spawnCamps(s);
+    s.version = 18;
+  }
   return s;
 }
 
@@ -165,7 +172,7 @@ export function newGame(player, seed = 1, level = "normal") {
     if (p.port) place.ships = N.navy.start[free ? (p.big ? "freeBig" : "free") : p.capital ? "capital" : "port"];
     places[p.id] = place;
   }
-  return {
+  const state = {
     players,
     built: {},
     version: VERSION, turn: 1, player, level, rng: seed | 0 || 1,
@@ -184,6 +191,9 @@ export function newGame(player, seed = 1, level = "normal") {
     mrng: Math.imul(seed | 0 || 1, 0x9e3779b1) | 0 || 7,
     events: [], over: null,
   };
+  // Barbar kampları (barbarians.js): ilk turlardan savaşılacak düşman.
+  spawnCamps(state);
+  return state;
 }
 
 /** Bir medeniyetin başlangıç askeri (bütün yerlerinin garnizonu, küçüklerin fazlası dahil). */

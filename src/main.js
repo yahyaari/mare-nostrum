@@ -308,7 +308,8 @@ function mapView() {
     // Yerleşimin dışındaki ordu bulunduğu yerde: denizdeyse filo, kuşatıyorsa kampında.
     float: a.at ? null : { x: a.x, y: a.y },
     sea: !a.at && !isLand(cellOf(a.x, a.y)),
-    camp: !!a.besieging || !!a.bandit,
+    camp: !!a.besieging || !!a.bandit || !!a.camp,
+    barb: !!a.camp,
   }));
   view.sieges = Object.fromEntries(game.armies.filter((a) => a.besieging).map((a) => [a.besieging, a.owner]));
   // İnşa edilen harikaların yerleri (haritada işaret).

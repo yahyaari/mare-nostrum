@@ -61,7 +61,16 @@ harikaları inşa etme yarışı, aynı bilgisayarda arkadaşlarla) ve küçükl
    çekilir, generali yaşar; dağlar yol dışında iki kat yavaş, dağda savunan x1.25.
 9. **Oyun sonu özeti** (bu adım): kurallar.md 21b. Harita tekrarı, skor grafiği, sıralama, sayılar.
 
-Önerilen listenin hepsi bitti. **Sırada:** kullanıcı oynayıp söyleyecek.
+Önerilen listenin hepsi bitti.
+
+**26.10 kullanıcı oynadı:** "oyun başta beni tutamıyor, ne olduğunu anlayamıyorum; savaşlar başlayınca
+iyileşiyor". Sordum: ne yapacağını bilmedi, kararları önemsiz geldi - özellikle "tarla 1->2 ve yanında
+bir buton" sıkıcı; Total War'daki gibi görselli, seviyesi köşede bina kartları. Çözüm olarak sadece
+barbar kamplarını seçti.
+10. **Bina kartları** (2326da2): kurallar.md bölüm 12; `src/view/buildings.js`.
+11. **Barbarlar** (bu adım): kurallar.md bölüm 26; `src/rules/barbarians.js`. Kayıt 18.
+
+**Sırada:** kullanıcı oynayıp söyleyecek.
 
 ## ÖNCEKİLER (22.10 akşam)
 

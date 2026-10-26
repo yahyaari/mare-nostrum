@@ -302,7 +302,7 @@ function recruitAll(state, civ) {
  */
 function threat(state, civ, id) {
   let n = 0;
-  for (const a of state.armies) if (!a.at && relation(state, civ, a.owner) === "war" && dist(a, POS[id]) <= N.reach.threat) n += men(a);
+  for (const a of state.armies) if (!a.at && (relation(state, civ, a.owner) === "war" || a.raider) && dist(a, POS[id]) <= N.reach.threat) n += men(a);
   for (const [o, pl] of Object.entries(state.places)) {
     if (o === id || !pl.owner || relation(state, civ, pl.owner) !== "war") continue;
     if (dist(POS[o], POS[id]) <= N.reach.threat) n += (men(pl) + armiesAt(state, o).reduce((k, a) => k + men(a), 0)) * 0.5;
@@ -338,7 +338,8 @@ const farthest = (a) => a.mp / Math.min(N.march.road, N.march.sea);
 function bestStrike(state, civ, a) {
   const R = farthest(a) + N.reach.strike;
   const places = Object.keys(state.places).filter((id) => hostile(access(state, civ, id)) && dist(a, POS[id]) <= R);
-  const foes = state.armies.filter((b) => !b.at && relation(state, civ, b.owner) === "war" && dist(a, b) <= R);
+  // Savaştığı medeniyetlerin orduları ve barbarlar (kamplar ve akıncılar; öğreticinin haydutları değil).
+  const foes = state.armies.filter((b) => !b.at && (relation(state, civ, b.owner) === "war" || b.barbarian) && dist(a, b) <= R);
   if (!places.length && !foes.length) return null;
   const f = reachOf(state, a);
   // Hedefin çevresine (yabancı yerleşimin, N.reach.hold) ancak ona saldırmak için girilir: bedel
@@ -362,7 +363,7 @@ function bestStrike(state, civ, a) {
     // Kendi yerini kuşatan ordu: riskli de olsa vurulur.
     const saving = b.besieging && state.places[b.besieging].owner === civ;
     if (o !== "easy" && !(saving && o === "risky")) continue;
-    const s = men(b) * 0.3 + (saving ? 40 : 10);
+    const s = men(b) * 0.3 + (saving ? 40 : 10) + (b.camp ? 20 : 0);
     if (s > score) { best = { kind: "army", id: b.id }; score = s; }
   }
   return best;

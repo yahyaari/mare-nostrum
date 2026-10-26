@@ -250,7 +250,8 @@ export function menace(state, id) {
   const owner = state.places[id].owner;
   if (!owner) return 0;
   let n = 0;
-  for (const a of state.armies) if (relation(state, owner, a.owner) === "war" && !a.at && dist(a, POS[id]) <= N.reach.threat) n += men(a);
+  // Barbar akıncıları da tehdit (kimseyle savaşta değiller ama saldırırlar).
+  for (const a of state.armies) if ((relation(state, owner, a.owner) === "war" || a.raider) && !a.at && dist(a, POS[id]) <= N.reach.threat) n += men(a);
   return n;
 }
 
@@ -501,7 +502,7 @@ export function strike(state, armyId, targetId, luck = null) {
   const at = { x: b.x, y: b.y };
   const ev = {
     type: "battle", field: true, turn: state.turn, attacker: army.owner, defender: b.owner, place: nearestPlace(at), at,
-    before: { att: pickUnits(army), def: pickUnits(b) }, naval: null, bandits: !!b.bandit,
+    before: { att: pickUnits(army), def: pickUnits(b) }, naval: null, bandits: !!b.bandit, barbarians: !!b.barbarian, camp: !!b.camp,
   };
   let won;
   if (!isLand(cellOf(b.x, b.y))) {
@@ -528,7 +529,8 @@ export function strike(state, armyId, targetId, luck = null) {
   army.route = [];
   const [winner, loser] = won ? [army, b] : [b, army];
   // Karada yenilen geri çekilebilir (denizde yenilen filo askerleriyle batar).
-  const fled = !ev.naval && retreat(state, loser, winner, won ? ev.before.def : ev.before.att, ev.power);
+  // Kamp çekilmez: dağıtılır.
+  const fled = !ev.naval && !loser.camp && retreat(state, loser, winner, won ? ev.before.def : ev.before.att, ev.power);
   if (fled) ev.retreat = { army: loser.id, owner: loser.owner, men: men(loser) };
   if (fled && loser === army) trace.fled = true;
   countWin(state, winner.owner);
@@ -546,6 +548,12 @@ export function strike(state, armyId, targetId, luck = null) {
   if (loser.bandit && winner.owner) {
     state.civs[winner.owner].money += N.bandits.loot;
     ev.loot = N.bandits.loot;
+  }
+  // Barbar kampını ya da akıncıları dağıtan da (barbarians.js).
+  if (loser.barbarian && winner.owner && !fled) {
+    const loot = loser.camp ? N.barbarians.loot : N.barbarians.raiderLoot;
+    state.civs[winner.owner].money += loot;
+    ev.loot = loot;
   }
   if (!fled) state.armies = state.armies.filter((x) => x !== loser);
   return ev;

@@ -807,6 +807,77 @@ section("Harikaları inşa etme yarışı (bölüm 18b)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Barbarlar (bölüm 26)");
+
+{
+  const BA = await import("../src/rules/barbarians.js");
+  const { TEXT } = await import("../src/text.js");
+  const s = S.newGame("rome", 7);
+  const camps = BA.campsOf(s);
+  check("oyun başında barbar kampları var", camps.length >= N.barbarians.camps && camps.every((a) => a.owner === null && a.camp && a.barbarian && !a.at));
+  const caps = PLACES.filter((p) => p.capital);
+  check("her başkentin yakınında bir kamp", caps.every((p) => camps.some((a) => MAP.dist(a, POS[p.id]) >= N.barbarians.minDist && MAP.dist(a, POS[p.id]) <= N.barbarians.nearMax)), caps.filter((p) => !camps.some((a) => MAP.dist(a, POS[p.id]) <= N.barbarians.nearMax)).map((p) => p.id).join());
+  check("kamplar karada, yerleşimlerin dibinde değil", camps.every((a) => MAP.isLand(MAP.cellOf(a.x, a.y)) && PLACES.every((p) => MAP.dist(a, POS[p.id]) >= N.reach.hold + 0.5)));
+  check("barbarlar herkese düşman, savaş ilan etmeden", M.isFoe(s, "rome", null) && M.isFoe(s, "parthia", null));
+  for (const lang of ["en", "tr"]) check(`${lang}: barbar yazıları`, ["barbarians", "barbCamp", "campWon", "evRaidOut", "evRaidTook", "evRaidHeld", "campQ", "barbQ", "tipCamp"].every((k) => TEXT[lang][k]));
+
+  // Kampı dağıtan ganimet alır; kamp çekilmez.
+  const camp = camps.find((a) => MAP.dist(a, POS.rome) <= N.barbarians.nearMax);
+  const a = raise(s, "rome", { inf: 200 });
+  Object.assign(a, { at: null, x: camp.x + 0.3, y: camp.y, mp: 4 });
+  const m0 = s.civs.rome.money;
+  const ev = M.strike(s, a.id, camp.id, [1, 1]);
+  check("kampı dağıtan 40 para ganimet alır, kamp yok olur", ev?.won && ev.camp && ev.loot === N.barbarians.loot && s.civs.rome.money === m0 + N.barbarians.loot && !S.armyById(s, camp.id));
+
+  // Kamp büyür ve akın eder; akıncı yağmalar ya da püskürtülür.
+  const t = S.newGame("rome", 7);
+  t.turn = N.barbarians.from + 1;
+  const c = BA.campsOf(t)[0];
+  const n0 = c.inf;
+  BA.tickBarbarians(t, []);
+  check("kamp her tur büyür", c.inf === Math.min(N.barbarians.cap, n0 + N.barbarians.grow) || t.armies.some((x) => x.raider));
+  // Zayıf bir yere akın: Ariminum'un garnizonunu boşalt, kampı oraya yakın koy.
+  const r = S.newGame("rome", 7);
+  r.turn = 20;
+  r.armies = r.armies.filter((x) => !x.camp);
+  r.places.ariminum.inf = 0; r.places.ariminum.arch = 0;
+  r.civs.rome.money = 100;
+  const pop0 = r.places.ariminum.pop;
+  const raider = { id: r.nextArmy++, owner: null, barbarian: true, raider: true, target: "ariminum", at: null, ...before({}, "ariminum"), inf: 40, arch: 0, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, mp: 4, route: [], general: null, xp: 0 };
+  r.armies.push(raider);
+  r.barbarians = { lastCamp: r.turn };
+  check("akıncılar yakındaki yere tehdit", M.menace(r, "ariminum") > 0);
+  const evs = [];
+  BA.tickBarbarians(r, evs);
+  const sack = evs.find((e) => e.type === "battle" && e.barbarians);
+  check("akın yağmalar: nüfusun dörtte biri ve 25 para gider, yer sahibinde kalır", sack?.won && sack.sacked && r.places.ariminum.owner === "rome" && r.places.ariminum.pop === pop0 - Math.round(pop0 * N.barbarians.sackPop) && r.civs.rome.money === 100 - N.barbarians.sackMoney, JSON.stringify(sack?.sacked));
+  check("akıncılar yağmadan sonra dağılır", !r.armies.includes(raider));
+  // Güçlü garnizona akın püskürtülür.
+  const h = S.newGame("rome", 7);
+  h.turn = 20;
+  h.armies = h.armies.filter((x) => !x.camp);
+  h.places.ariminum.inf = 120;
+  const r2 = { id: h.nextArmy++, owner: null, barbarian: true, raider: true, target: "ariminum", at: null, ...before({}, "ariminum"), inf: 20, arch: 0, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, mp: 4, route: [], general: null, xp: 0 };
+  h.armies.push(r2);
+  h.barbarians = { lastCamp: h.turn };
+  const evs2 = [];
+  BA.tickBarbarians(h, evs2);
+  check("güçlü garnizon akını püskürtür, sayılır", evs2.some((e) => e.type === "battle" && e.barbarians && !e.won) && h.wins.rome === 1 && !h.armies.includes(r2));
+
+  // Öğreticinin haydutları barbarlarla karışmaz.
+  const BD = await import("../src/rules/bandits.js");
+  const u = S.newGame("rome", 7);
+  check("barbar kampı öğreticinin haydutu sayılmaz", BD.banditsOf(u) === null);
+  // Eski kayıt: kamplar kurulur.
+  const old = S.newGame("rome", 7);
+  old.armies = old.armies.filter((x) => !x.camp);
+  delete old.barbarians;
+  old.version = 17;
+  S.migrate(old);
+  check("eski kayıt: barbar kampları kurulur", old.version === S.VERSION && BA.campsOf(old).length > 0 && old.barbarians);
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Dağlar ve geri çekilme (bölüm 7, 22b)");
 
 {
@@ -1194,6 +1265,8 @@ section("Olaylar ve teklifler (bölüm 13)");
   // Eski kayıt (sürüm 1) yeni biçime gelir.
   const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
   old.version = 1;
+  // 1. sürümde sahada ordu, barbar yoktu.
+  old.armies = []; delete old.barbarians;
   for (const p of Object.values(old.places)) { delete p.loyalty; delete p.games; }
   delete old.inbox; delete old.truce; delete old.offered;
   const mig = S.migrate(old);
@@ -1471,7 +1544,7 @@ section("Birlik kartları: her bölük bir kart");
   a.general = { name: "Scipio", level: 1, xp: 0, traits: [] };
   a.mp = 1;
   const b = S.detach(s, a.id, { inf: 10, arch: 10 });
-  check("ayrılan kartlar yeni ordu: aynı yerde, aynı hareketle", b && b.at === "rome" && b.x === a.x && b.inf === 10 && b.arch === 10 && b.mp === 1 && s.armies.length === 2);
+  check("ayrılan kartlar yeni ordu: aynı yerde, aynı hareketle", b && b.at === "rome" && b.x === a.x && b.inf === 10 && b.arch === 10 && b.mp === 1 && S.armiesOf(s, "rome").length === 2);
   check("kalan ordu ve generali yerinde", a.inf === 10 && a.arch === 0 && a.general?.name === "Scipio" && !b.general);
   check("hepsi ayrılmaz", S.detach(s, a.id, { inf: 10 }) === null && a.inf === 10);
   check("hiçbiri ayrılmaz", S.detach(s, b.id, {}) === null);
@@ -1566,9 +1639,11 @@ section("Gemi türleri: kadırga, trireme, kinkerem");
   const old = JSON.parse(JSON.stringify(S.newGame("rome", 7)));
   old.version = 8;
   for (const p of Object.values(old.places)) { delete p.trireme; delete p.quinq; }
-  old.armies.push({ id: 1, owner: "rome", at: "rome", inf: 10, arch: 0, cav: 0, siege: 0, ships: 2, moves: 1, route: [], general: null });
+  old.armies = [{ id: 1, owner: "rome", at: "rome", inf: 10, arch: 0, cav: 0, siege: 0, ships: 2, moves: 1, route: [], general: null }];
+  delete old.barbarians;
   S.migrate(old);
-  check("8. sürüm kayıt yükseltiliyor: eski gemiler kadırga", old.version === S.VERSION && old.places.tarentum.ships === 1 && old.places.tarentum.trireme === 0 && old.armies[0].quinq === 0 && old.armies[0].ships === 2);
+  const oa = old.armies.find((a) => a.owner === "rome");
+  check("8. sürüm kayıt yükseltiliyor: eski gemiler kadırga", old.version === S.VERSION && old.places.tarentum.ships === 1 && old.places.tarentum.trireme === 0 && oa.quinq === 0 && oa.ships === 2);
 
   // Bilgisayar: tersanesi 2 olan, gemisiz, karşısında alınacak yer olmayan liman savaş gemisi yapar.
   const { aiTurn: ai0 } = await import("../src/rules/ai.js");
@@ -2435,7 +2510,7 @@ section("Bot: oyun boyunca değişmezler");
         if (MAP.placeAtCell(c)) bad.push(`t${s.turn} ordu ${a.id} yerleşimin karesinde ama içinde değil: ${MAP.placeAtCell(c)}`);
       }
       if (!(a.mp >= -1e-9) || a.route.some((c) => !Number.isInteger(c))) bad.push(`t${s.turn} ordu ${a.id} hareketi bozuk ${a.mp}`);
-      if (!s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);
+      if (a.owner && !s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);
       const g = a.general;
       if (g && !(g.level >= 1 && g.level <= 5 && g.xp >= 0 && g.traits.every((t) => GN.TRAITS.includes(t)) && g.traits.length <= 2)) {
         bad.push(`t${s.turn} bozuk general ${JSON.stringify(g)}`);

@@ -139,6 +139,14 @@ export const N = {
   // şehrin parası +market, okul +school bilim, hamam nüfus artışı +baths. Seviye şehir seviyesine
   // kadar; pazar Sikke, okul Yazı, hamam Mühendislik ister.
   buildings: { temple: 2, market: 0.1, school: 1, baths: 0.1, needs: { market: "currency", school: "writing", baths: "engineering" } },
+  // Barbarlar (bölüm 26, barbarians.js): oyun başında `camps` kamp (her başkentin `minDist`-`nearMax`
+  // yakınında bir tane), kamplar arası en az `spacing`; kamp `start` piyadeyle başlar, turda `grow`
+  // büyür (en çok `cap`); `from`. turdan sonra `raidMin` askeri olan kamp her tur 1/`raidEvery`
+  // ihtimalle `reach` içindeki bir yerleşime akıncı yollar. Kampı dağıtan `loot`, akıncıyı
+  // `raiderLoot` para alır. `spawnEvery` turda bir yeni kamp, en çok `max`.
+  barbarians: { camps: 7, max: 10, start: 24, grow: 1, cap: 70, from: 5, raidEvery: 6, raidMin: 30, reach: 5, loot: 40, raiderLoot: 15, spawnEvery: 12, minDist: 2.6, nearMax: 4.5, spacing: 3,
+    // Yağma: nüfusun payı, kasadan para, sadakat.
+    sackPop: 0.25, sackMoney: 25, sackLoyalty: 15 },
   // Öğretici haydutlar (bandits.js): başkentten near-far uzakta (dist'e en yakın), dağıtana ganimet.
   bandits: { inf: 10, arch: 10, loot: 40, dist: 1.4, near: 1.1, far: 1.9 },
   // Skor: her yerleşim, seviyesinin her basamağı, başkent; her `popPer` nüfus; her harika; her

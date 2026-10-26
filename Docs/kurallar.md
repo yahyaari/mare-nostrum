@@ -903,3 +903,34 @@ sırayla (hotseat).
   medeniyet fetihle kazanır; Harikalar ve Skor zaferi herkes için aynı. Oyun sonu penceresi
   kazananın adını yazar.
 - Öğretici (ipucu balonları, haydutlar) birkaç oyuncuda yok. Kayıt 16 (eski oyun tek oyuncu).
+
+---
+
+## 26. Barbarlar
+
+Kullanıcı 26.10: "oyun başta beni tutamıyor, ne olduğunu anlayamıyorum; savaşlar başladıktan sonra
+iyileşiyor". Sordum: çözümlerden "Barbar kampları"nı seçti (Civilization'daki gibi ilk turlardan
+savaşılacak düşman). `src/rules/barbarians.js`.
+
+- **Kamplar:** oyun başında 7 kamp - her başkentin 2.6-4.5 birim yakınında bir tane (herkesin ilk
+  hedefi), gerisi haritanın boş yerlerinde. Kamplar arası en az 3 birim, hiçbir yerleşimin dibinde
+  değil, sahibi olan yerleşimlerden en az 2.6 uzak. 24 piyade ve 8 okçuyla başlar, turda 1 piyade
+  büyür (en çok 70). Her 12 turda bir yeni kamp kurulur (en çok 10). Haritada çadırlar ve kamp
+  ateşi; sis içindeyse görünmez.
+- **Akın:** 5. turdan sonra en az 30 askeri olan kamp her tur 1/6 ihtimalle askerinin yarısıyla
+  5 birim içindeki, umutsuz olmadığı en yakın yerleşime akıncı yollar ("Barbarlar Ariminum üstüne
+  yürüyor"). Akıncılar yürür, menzile girince saldırır. Kazanırlarsa **yağmalar**: garnizon ölür,
+  nüfusun dörtte biri ve kasadan 25 para gider, süren inşaat yıkılır, sadakat 15 düşer; yer sahibinde
+  kalır, akıncılar dağılır. Kaybederlerse dağılırlar (savunan bir savaş kazanmış sayılır).
+  Akıncılar şehrin tehdit uyarısına girer. (İlk denemede yerleşimi alıyorlardı: 14 bot oyununda 33
+  şehir, yeni oyuncu 10. turda şehrini kaybedebiliyordu.)
+- **Ganimet:** kampı dağıtan 40, akıncıları sahada yenen 15 para alır. Kamp çekilmez, dağılır.
+- Barbarlar herkese düşman (savaş ilanı gerekmez), kimseyi öfkelendirmez. Bilgisayar yakınındaki
+  kampları ve akıncıları temizler (kampa ek öncelik).
+- Bot oyunlarında (14 oyun, 100 tur): ilk akın ortanca 10. turda; oyun başına ~10 akın, ~2.5 yağma;
+  kampların çoğu bilgisayarlarca dağıtılır.
+- Eski kayıtlara da kamplar kurulur (kayıt 18).
+- Denge (70 oyun, zaferler kapalı): ilk düşüş aynı (46); 150. turda ayakta kalan 315 -> 295. Akınlar
+  tamamen kapalıyken de 295: düşüş akınlardan değil, kamplar oyunları başka bir gidişata sokuyor
+  (ve 70 oyunun gürültüsü +-10). Yağmayı yumuşatmak (nüfusun %15'i, akın 1/8) 291, akını seyrekleştirmek
+  302 okudu - gürültü içinde; erken hareket için varsayılanlar kaldı.

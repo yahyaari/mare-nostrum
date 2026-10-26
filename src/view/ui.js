@@ -54,7 +54,7 @@ import { SIZE } from "../geo.js";
 
 const placeName = (id, lang) => byId[id].name[lang];
 /** Bir ordunun sahibinin adı: haydutların sahibi yok (rules/bandits.js). */
-const ownerName = (a, T, lang) => (a.bandit ? T.bandits : civName(a.owner, lang, T.free));
+const ownerName = (a, T, lang) => (a.bandit ? T.bandits : a.camp ? T.barbCamp : a.barbarian ? T.barbarians : civName(a.owner, lang, T.free));
 
 /** Pencere açılırken süzülerek gelsin: bu kadar milisaniye. */
 export const MODAL_MS = 180;
@@ -967,7 +967,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   const of = "a:" + a.id;
 
   shield(ctx, a.owner, x, y + 15, 17);
-  text(ctx, a.bandit ? T.bandits : `${T.army} · ${civName(a.owner, ui.lang)}`, x + 24, y + 32, { title: true, bold: true, size: 17 });
+  text(ctx, a.bandit || a.barbarian ? ownerName(a, T, ui.lang) : `${T.army} · ${civName(a.owner, ui.lang)}`, x + 24, y + 32, { title: true, bold: true, size: 17 });
   let ly = y + 56;
   if (g) {
     // General: yıldızlar seviyesi kadar, adı, ve yetenekleri.
@@ -1352,7 +1352,7 @@ function fightRibbon(ctx, cam, ui, boxes, T, e, t) {
   const back = (who) => (e.retreat?.owner === who ? e.retreat.men : 0);
   const lost = men(e.before.att) - men(e.after.att) - back(e.attacker), killed = men(e.before.def) - men(e.after.def) - back(e.defender);
   const fled = e.retreat && e.retreat.owner === e.attacker && !e.won;
-  const head = e.bandits && e.won ? T.banditsWon : e.field ? (e.won ? T.fieldWon : fled ? T.fieldLostFled : T.fieldLost) : e.won ? T.won : fled ? T.lostFled : T.lost;
+  const head = e.bandits && e.won ? T.banditsWon : e.camp && e.won ? T.campWon : e.field ? (e.won ? T.fieldWon : fled ? T.fieldLostFled : T.fieldLost) : e.won ? T.won : fled ? T.lostFled : T.lost;
   const lines = [[e.drowned ? T.drowned : fill(T.fightLine, lost, killed), e.drowned ? "bad" : null]];
   if (!e.drowned && e.naval?.won && e.naval.sunk) lines.push([fill(T.navalWin, e.naval.sunk), "good"]);
   if (e.loot) lines.push([fill(T.lootLine, e.loot), "good"]);
@@ -1483,7 +1483,8 @@ function moveBar(ctx, boxes, T, a, x, y, w) {
 /** Haritada bir ordunun ipucu. */
 export function armyTip(game, a, lang) {
   const T = TEXT[lang];
-  const out = [a.bandit ? T.bandits : `${T.army} · ${civName(a.owner, lang)}`, troops(T, a)];
+  const out = [a.bandit || a.barbarian ? ownerName(a, T, lang) : `${T.army} · ${civName(a.owner, lang)}`, troops(T, a)];
+  if (a.camp) out.push([T.tipCamp, "warn"]);
   if (a.general) out.push(`★ ${fill(T.general, a.general.name)} · ${fill(T.rank, a.general.level)}`);
   const rk = veteranRank(a.xp);
   if (rk) out.push([`${T.ranks[rk]} · +${fill(T.pct, Math.round((veteranMul(a.xp) - 1) * 100))}`, "warn"]);
@@ -1672,7 +1673,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     e = forecastField(game, a, b);
     sd = fieldSides(game, a, b);
     sea = !!e.sea;
-    title = b.bandit ? T.banditsQ : fill(T.fieldQ, ownerName(b, T, ui.lang));
+    title = b.bandit ? T.banditsQ : b.camp ? T.campQ : b.barbarian ? T.barbQ : fill(T.fieldQ, ownerName(b, T, ui.lang));
     sub = fill(sea ? T.atSea : T.inField, placeName(nearestPlace(b), ui.lang));
     theirs = b; theirOwner = b.owner; theirGen = b.general; theirXp = b.xp ?? 0;
   } else {
@@ -1724,7 +1725,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     if (power !== null) text(ctx, fill(T.powerN, Math.round(power)), bx + cw - 10, by + 26, { bold: true, size: 13, align: "right", color: INK.soft });
   };
   side(x, me, a, T.yours, a.general, a.xp ?? 0, pow?.attPow ?? null, false);
-  side(x + cw + 16, theirOwner, theirs, b ? (b.bandit ? T.bandits : T.theirs) : T.defenders, theirGen, theirXp, pow?.defPow ?? null, true);
+  side(x + cw + 16, theirOwner, theirs, b ? (b.bandit || b.barbarian ? ownerName(b, T, ui.lang) : T.theirs) : T.defenders, theirGen, theirXp, pow?.defPow ?? null, true);
 
   // Güç çubuğu ve tahmin.
   let y = r.y + 206;
@@ -1947,11 +1948,14 @@ export function eventLines(game, lang) {
     else if (e.type === "battle" && mine && e.field) {
       const [w, l] = e.won ? [e.attacker, e.defender] : [e.defender, e.attacker];
       out.push([fill(T.evField, name(w), name(l), placeName(e.place, lang)), w === me ? "good" : "bad"]);
-    } else if (e.type === "battle" && mine) {
+    } else if (e.type === "battle" && mine && !e.barbarians) {
       const where = placeName(e.place, lang);
       if (e.won) out.push([fill(T.evTook, name(e.attacker), where), e.attacker === me ? "good" : "bad"]);
       else if (!e.drowned) out.push([fill(T.evHeld, name(e.defender), where, name(e.attacker)), e.defender === me ? "good" : "bad"]);
     }
+    if (e.type === "raidOut" && e.owner === me) out.push([fill(T.evRaidOut, placeName(e.target, lang), e.men), "bad"]);
+    if (e.type === "campNew") out.push([T.evCampNew, null]);
+    if (e.type === "battle" && e.barbarians && !e.field && e.defender === me) out.push(e.won ? [fill(T.evRaidTook, placeName(e.place, lang), e.sacked?.pop ?? 0, e.sacked?.money ?? 0), "bad"] : [fill(T.evRaidHeld, placeName(e.place, lang)), "good"]);
     if (e.type === "wonderBuilt") out.push([fill(T.evWonderBuilt, name(e.civ), T.wonders[e.wonder][0], placeName(e.place, lang)), e.civ === me ? "good" : "bad"]);
     if (e.type === "wonderMissed" && e.civ === me) out.push([fill(T.evWonderMissed, T.wonders[e.wonder][0], e.refund), "bad"]);
     if (e.type === "dealEnded") out.push([fill(T.evDealEnded, name(e.civ)), null]);

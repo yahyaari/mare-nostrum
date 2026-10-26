@@ -21,6 +21,7 @@ import { tickSieges } from "./siege.js";
 import { record, snapshot } from "./chronicle.js";
 import { isWinter } from "./season.js";
 import { techMul, tickResearch } from "./research.js";
+import { tickBarbarians } from "./barbarians.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -70,6 +71,8 @@ export function endTurn(state) {
   for (const c of CIVS) {
     if (!isHuman(state, c.id) && state.civs[c.id].alive) aiTurn(state, c.id, events);
   }
+  // Barbarlar: kamplar büyür, akıncılar yürür ve saldırır.
+  tickBarbarians(state, events);
   // Kuşatmalar bir tur ilerler (üretimden önce: kuşatılan yer bu tur bir şey üretmez).
   tickSieges(state, events);
   // Tarafsızın toprağında duran ordular o medeniyeti öfkelendirir.

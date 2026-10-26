@@ -842,6 +842,8 @@ function drawPlaces(ctx, cam, view, L) {
       if (t.camp) {
         tent(ctx, -10, h - 3, 11, army.owner);
         tent(ctx, 1, h - 9, 9, army.owner);
+        // Barbar kampı: çadırların önünde titreyen bir kamp ateşi (bağımsız ordudan ayırt edilsin).
+        if (army.barb) campfire(ctx, -3, h + 1);
       }
       // Karadaki ordunun gemileri varsa (limanda değil): ayağının altında küçük bir tekne.
       const boat = army.ships > 0;
@@ -863,6 +865,34 @@ function drawPlaces(ctx, cam, view, L) {
 
 // Filonun kutusu (zt = 1'de): öndeki kadırganın su hattı (ax, ay), etiket `tag`tan sonra.
 const FLEET = { ax: 30, ay: 43, h: 50, tag: 57, k: 1.15 };
+
+/** Kamp ateşi: iki odun, üstünde titreyen alev. (x, y) zeminin ortası. */
+function campfire(ctx, x, y) {
+  const f = 0.85 + 0.15 * Math.sin(performance.now() / 120);
+  ctx.save();
+  ctx.strokeStyle = "#4a3320";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y);
+  ctx.lineTo(x + 4, y - 2);
+  ctx.moveTo(x - 4, y - 2);
+  ctx.lineTo(x + 4, y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - 3, y - 1);
+  ctx.quadraticCurveTo(x - 2, y - 7 * f, x, y - 10 * f);
+  ctx.quadraticCurveTo(x + 2, y - 7 * f, x + 3, y - 1);
+  ctx.closePath();
+  ctx.fillStyle = "#f08a2a";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x - 1.4, y - 1);
+  ctx.quadraticCurveTo(x, y - 6 * f, x + 1.4, y - 1);
+  ctx.closePath();
+  ctx.fillStyle = "#ffd36a";
+  ctx.fill();
+  ctx.restore();
+}
 
 /** Kamp çadırı: krem bez, sahibinin renginde şerit, koyu kapı. (x, y) zeminin ortası. */
 function tent(ctx, x, y, s, owner) {
