@@ -493,17 +493,20 @@ oyundan çıkar.
   vardı, sağ üst köşede seviyesi"): şehir, liman ve yapılar sekmelerinde her yapı bir kart - üstte
   resmi (`src/view/buildings.js`: evler, ekin şeritleri, dumanlı ocak, çitli kışla, tekneler, kızak,
   amforalar, kule, tapınak, pazar tenteleri, okul, hamam; seviye arttıkça sahne zenginleşir), sağ
-  üst köşede seviye rozeti, altında adı ve şu an ne getirdiği ("+16 yiyecek"), en altta Yükselt
-  (fiyatıyla; yükseltilebilen kartın çerçevesi altın), sürüyorsa ilerleme ve kalan tur, kilitliyse
-  asma kilit ve nedeni, bittiyse EN ÜST. Soldaki şehir resminde yapılar görünür: tarla şeritleri,
+  üst köşede seviye rozeti, altında adı ve şu an ne getirdiği ("+16 yiyecek"). **Kartın kendisi
+  düğme** (kullanıcı 26.10: "kartın altında para ve buton olmasın, görselin kendisi buton olsun"):
+  karta basınca yükselir; fiyat resmin alt kenarındaki koyu şeritte; üstüne gelince kart kalkar,
+  ortada ▲ belirir; yükseltilebilen kartın çerçevesi altın, olmayan soluk. Sürüyorsa resmin üstünde
+  çekiç, şeritte kalan tur ve ilerleme, sol üst köşede ✕ (iptal); kilitliyse asma kilit resmin
+  ortasında, nedeni adın altında; bittiyse şeritte EN ÜST. Soldaki şehir resminde yapılar görünür: tarla şeritleri,
   sanayinin bacaları, kışlanın çadırları, tapınak, pazar. Bir yükseltme bitince şehrin üstünden
   kazancıyla yükselir ("Tarla 2 · +4 buğday").
 - **Asker ve gemi kartları** (kullanıcı 26.10, bina kartlarından sonra: "asker basma işini de böyle
   yapmamız lazım"): **Asker bas** sekmesinde (kullanıcı aynı gün: "ilk sekme çok kalabalık, liman gibi
   ayrı sekme olsun"; Şehir sekmesinde artık yalnız dört yükseltme kartı, geniş) piyade, okçu, süvari, kuşatma birer kart:
   resmi (`troopArt`, ordu kartındakiyle aynı), sağ üst köşede şehirdeki bölük sayısı, adı, işi
-  ("Hattı tutar", "Okçuyu biçer"), alt alta fiyatı, en altta *+10*. Basılabilen kartın çerçevesi
-  altın; kilitliyse asma kilit ve kısaca nedeni (teknoloji adı, "Kışla 3"). Liman sekmesinde aynısı
+  ("Hattı tutar", "Okçuyu biçer"), fiyatı resmin altındaki şeritte; karta basınca *+10* (üstüne
+  gelince ortada +10 belirir). Basılabilen kartın çerçevesi altın; kilitliyse asma kilit ve kısaca nedeni (teknoloji adı, "Kışla 3"). Liman sekmesinde aynısı
   gemiler için: kadırga, trireme, kinkerem, köşede buradaki gemi sayısı, düğme *+1*.
 - **Eksik olan kırmızı:** bina kartında para yetmiyorsa fiyat kırmızı; asker ve gemi kartında kasada
   yetmeyen kalem (para, silah, yiyecek) kırmızı.
@@ -922,11 +925,12 @@ Kullanıcı 26.10: "oyun başta beni tutamıyor, ne olduğunu anlayamıyorum; sa
 iyileşiyor". Sordum: çözümlerden "Barbar kampları"nı seçti (Civilization'daki gibi ilk turlardan
 savaşılacak düşman). `src/rules/barbarians.js`.
 
-- **Kamplar:** oyun başında 7 kamp - her başkentin 2.6-4.5 birim yakınında bir tane (herkesin ilk
-  hedefi), gerisi haritanın boş yerlerinde. Kamplar arası en az 3 birim, hiçbir yerleşimin dibinde
+- **Kamplar:** oyun başında 7 kamp - her başkentin 2.6-4.5 birim yakınında, başkentten karadan
+  yürünerek varılan bir yerde bir tane (herkesin ilk hedefi, `home`; Kartaca'nınki önce Sardinya'ya
+  düşüyordu), gerisi haritanın boş yerlerinde. Kamplar arası en az 3 birim, hiçbir yerleşimin dibinde
   değil, sahibi olan yerleşimlerden en az 2.6 uzak. 24 piyade ve 8 okçuyla başlar, turda 1 piyade
   büyür (en çok 70). Her 12 turda bir yeni kamp kurulur (en çok 10). Haritada çadırlar ve kamp
-  ateşi; sis içindeyse görünmez.
+  ateşi; yerleşimler gibi sisde de görünür (kıpırdamazlar; akıncıları sis gizler).
 - **Akın:** 5. turdan sonra en az 30 askeri olan kamp her tur 1/6 ihtimalle askerinin yarısıyla
   5 birim içindeki, umutsuz olmadığı en yakın yerleşime akıncı yollar ("Barbarlar Ariminum üstüne
   yürüyor"). Akıncılar yürür, menzile girince saldırır. Kazanırlarsa **yağmalar**: garnizon ölür,
@@ -940,8 +944,9 @@ savaşılacak düşman). `src/rules/barbarians.js`.
 - Bot oyunlarında (14 oyun, 100 tur): ilk akın ortanca 10. turda; oyun başına ~10 akın, ~2.5 yağma;
   kampların çoğu bilgisayarlarca dağıtılır.
 - Eski kayıtlara da kamplar kurulur (kayıt 18).
-- **İpucu balonları:** öğreticideki haydutlar dağılınca balon başkente en yakın görünen kampı gösterir
-  (sıradaki hedef: "ordunla üstüne sağ tıkla, 40 para ganimet"). Görünen akıncılar oyuncunun bir yerine
+- **İpucu balonları:** öğreticideki haydutlar dağılınca kamera oyuncunun ev kampına kayar, balon onu
+  gösterir (sıradaki hedef: "ordunla üstüne sağ tıkla, 40 para ganimet"). Haritanın güney kenarındaki
+  yerler alttaki panelin arkasında kalmasın diye kamera oyunda alttan panel kadar taşabilir. Görünen akıncılar oyuncunun bir yerine
   yürürken ayrı bir balon uyarır ("o şehirde asker bas ya da ordunla önlerini kes").
 - Denge (70 oyun, zaferler kapalı): ilk düşüş aynı (46); 150. turda ayakta kalan 315 -> 295. Akınlar
   tamamen kapalıyken de 295: düşüş akınlardan değil, kamplar oyunları başka bir gidişata sokuyor

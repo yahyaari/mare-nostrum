@@ -57,6 +57,7 @@ try {
   await step("ganimet");
   // Öğreticiden sonra sıradaki hedef: başkentin yanındaki barbar kampı.
   await press(`(a) => a.do === "coach" && a.id === "loot"`);
+  await wait(700); // kamera kampa kayar
   const next = await step("barbar_kampi");
   if (next !== "camp") console.log("HATA: kamp balonu çıkmadı");
   const left = await ev(`return M.game.armies.some((a) => a.bandit)`);

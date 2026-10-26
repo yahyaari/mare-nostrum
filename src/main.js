@@ -37,7 +37,7 @@ import { SCENE_MS } from "./view/battle.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
-import { CARD_H, FIGHT_MS, MODAL_MS, gainText, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
+import { CARD_H, FIGHT_MS, MODAL_MS, campNear, gainText, SIDE_W, armyTip, drawUI, eventLines, goLine, missionText, picksOf, placeTip, startLayout } from "./view/ui.js";
 import { TOP, chipRise } from "./view/hud.js";
 import { SIZE, project } from "./geo.js";
 import { trait } from "./rules/numbers.js";
@@ -343,6 +343,9 @@ function toast(text) {
   redraw();
 }
 
+/** Oyunda kamera alttan panel kadar taşabilir (camera.js clamp). */
+const GAME_PAD = { bottom: 270 };
+
 function lookAtHome() {
   const home = placesOf(game, game.player).find((id) => PLACES.find((p) => p.id === id).capital) ?? placesOf(game, game.player)[0];
   if (!home) return;
@@ -496,7 +499,7 @@ function dispatch(act) {
         saveCoach();
       }
       ui.screen = "game";
-      cam.pad = null;
+      cam.pad = GAME_PAD;
       ui.sel = null;
       ui.army = null;
       ui.news = null;
@@ -509,7 +512,7 @@ function dispatch(act) {
       game = load();
       if (!game) { ui.saved = null; break; }
       ui.screen = "game";
-      cam.pad = null;
+      cam.pad = GAME_PAD;
       ui.sel = null;
       ui.army = null;
       ui.modal = humansOf(game).length > 1 ? { kind: "handoff" } : next();
@@ -551,9 +554,13 @@ function dispatch(act) {
       if (act.modal === "report") { ui.news = null; coachDone("news"); }
       if (act.modal === "diplo") coachDone("diplo");
       break;
-    case "coach":
+    case "coach": {
       coachDone(act.id);
+      // Öğretici bitti: kamera sıradaki hedefe, başkentin yanındaki barbar kampına kayar.
+      const c = act.id === "loot" ? campNear(game) : null;
+      if (c) glide(c.x, c.y, cam.scale, 700);
       break;
+    }
     case "research": {
       if (!choose(game, game.player, act.tech)) break;
       sound.click();
@@ -1423,7 +1430,7 @@ if (document.fonts) {
 window.MareNostrum = {
   cam, ui, dispatch, redraw, tap, rightTap, anim,
   get game() { return game; },
-  set game(g) { game = g; ui.screen = g ? "game" : "start"; if (g) cam.pad = null; redraw(); },
+  set game(g) { game = g; ui.screen = g ? "game" : "start"; if (g) cam.pad = GAME_PAD; redraw(); },
   /** Kayma bitene kadar çizer; araç beklemek isterse. */
   get gliding() { return !!glideTo; },
   look(id, zoom = 1) {

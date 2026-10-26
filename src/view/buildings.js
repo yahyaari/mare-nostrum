@@ -42,7 +42,7 @@ export function buildingArt(ctx, what, x, y, w, h, level, owner) {
     }
   }
   // Kart dar (70 piksel): sahne iri çizilsin, kenarlar taşabilir. Geniş kartta boy sınırlar.
-  const s = Math.min(w / 48, h / 56), cx = x + w / 2, n = Math.max(0, level);
+  const s = Math.min(w / 40, h / 56), cx = x + w / 2, n = Math.max(0, level);
   SCENE[what]?.(ctx, cx, ground, s, n, owner, w);
   ctx.restore();
 }

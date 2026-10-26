@@ -32,10 +32,10 @@ export function clamp(cam) {
   const hw = cam.w / 2 / cam.scale, hh = cam.h / 2 / cam.scale;
   // `pad`: ekranın bir paneli örttüğü kenarları (piksel). Haritanın kenarı o panelin arkasına
   // kadar gelebilir - başlangıç ekranında kenardaki medeniyet (Partlar) açık alanın ortasına
-  // gelsin diye.
-  const p = cam.pad ?? {}, l = (p.left ?? 0) / cam.scale, r = (p.right ?? 0) / cam.scale;
+  // gelsin diye. Oyunda alttaki panel: güney kenarındaki yerler (Mısır'ın kampı) panelin üstüne gelebilsin.
+  const p = cam.pad ?? {}, l = (p.left ?? 0) / cam.scale, r = (p.right ?? 0) / cam.scale, b = (p.bottom ?? 0) / cam.scale;
   cam.x = SIZE.x <= hw * 2 ? SIZE.x / 2 : Math.max(hw - l, Math.min(SIZE.x - hw + r, cam.x));
-  cam.y = SIZE.y <= hh * 2 ? SIZE.y / 2 : Math.max(hh, Math.min(SIZE.y - hh, cam.y));
+  cam.y = SIZE.y <= hh * 2 ? SIZE.y / 2 : Math.max(hh, Math.min(SIZE.y - hh + b, cam.y));
 }
 
 export const toScreen = (cam, x, y) => ({

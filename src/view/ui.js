@@ -700,8 +700,8 @@ const turnsText = (n, T) => (n === 1 ? T.turnsOne : fill(T.turnsN, n));
 /**
  * Bina kartları (kullanıcı 26.10: "Total War'da görsel vardı, sağ üst köşesinde seviyesi
  * yazıyordu"): her yapı bir kart - üstte resmi (seviyesi arttıkça sahne zenginleşir, view/
- * buildings.js), sağ üst köşede seviye rozeti, altında adı ve şu an ne getirdiği, en altta
- * Yükselt düğmesi (fiyatıyla) ya da sürüyorsa ilerleme, kilitliyse neden, bittiyse EN ÜST.
+ * buildings.js), sağ üst köşede seviye rozeti, altında adı ve şu an ne getirdiği; kartın kendisi
+ * Yükselt düğmesi (actionCard: fiyat resmin altında, sürüyorsa ilerleme, kilitliyse neden).
  */
 function buildingCards(ctx, game, boxes, T, id, list, x, y, w, h) {
   const gap = 6, cw = (w - gap * (list.length - 1)) / list.length;
@@ -710,79 +710,145 @@ function buildingCards(ctx, game, boxes, T, id, list, x, y, w, h) {
 
 function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
   const u = upgradeInfo(game, id, what), pl = game.places[id];
-  const can = !u.why;
-  const hot = over(x, y, w, h);
+  const next = u.why === "max" ? null : fill(T.nextLevel, effect(game, id, what, T));
+  const tip = [`${T[what]} · ${fill(T.levelOf, u.now)}`, T.tipUpgrade[what], next, u.why === "max" ? null : fill(T.takesTurns, turnsText(u.turns, T))];
+  const locked = u.why === "needLevel" || u.why === "notPort" || !!u.why?.startsWith("tech_");
+  // Kart dar: kısa neden (teknolojinin adı); uzun cümle ipucunda.
+  const why = !locked ? null : u.why === "needLevel" ? fill(T.lockLevel, u.now + 1) : u.why.startsWith("tech_") ? T.techs[u.why.slice(5)][0] : whyText(u.why, T);
+  const b = u.building;
+  actionCard(ctx, boxes, {
+    x, y, w, h, act: { do: "upgrade", id, what }, label: "▲",
+    art: (ix, iy, iw, ih) => buildingArt(ctx, what, ix, iy, iw, ih, u.now, pl.owner),
+    badge: u.now, name: what === "level" ? T.cityCard : T[what],
+    sub: why ?? nowFx(game, id, what, T), subColor: u.now > 0 ? GOLD_LIGHT : "rgba(243,231,201,0.5)",
+    state: b ? "busy" : u.why === "max" ? "max" : locked ? "locked" : u.why ? "off" : "ready",
+    cost: { money: u.cost }, purse: game.civs[pl.owner], maxText: T.maxShort,
+    busy: b && { part: (b.total - b.left) / b.total, text: b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left), act: { do: "cancelBuild", id, what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)] },
+    tip: [...tip, u.why && u.why !== "max" ? [u.why === "done" ? T.whyJustTaken : whyText(u.why, T), "bad"] : null],
+  });
+}
+
+/**
+ * Kartın kendisi düğme (kullanıcı 26.10: "kartın altında para ve buton olmasın, görselin kendisi
+ * buton olsun"): resmin her yerine basılır. Fiyat resmin alt kenarında koyu bir şeritte (kasada
+ * yetmeyen kalem kırmızı); üstüne gelince kart kalkar, ortada ▲ ya da +10 belirir. Sağ üst köşede
+ * rozet (seviye ya da sayı), altta ad ve bir satır (şu an getirdiği, işi ya da kilit nedeni).
+ * Hâller: ready, off (para yok, hak bitti: kart soluk), locked (kilit resmin ortasında), busy
+ * (inşaat: çekiç, ilerleme, sol üst köşede iptal), max (EN ÜST şeridi).
+ */
+function actionCard(ctx, boxes, o) {
+  const { x, w, h, state } = o;
+  const ready = state === "ready";
+  const hot = over(x, o.y, w, h);
+  const y = o.y + (ready && hot && !pointer.down ? -2 : 0);
   ctx.save();
   ctx.fillStyle = "rgba(25,18,10,0.3)";
-  roundRect(ctx, x + 1.5, y + 2.5, w, h, 4);
+  roundRect(ctx, x + 1.5, o.y + 2.5, w, h, 4);
   ctx.fill();
+  if (ready && hot) {
+    ctx.shadowColor = "rgba(255,200,90,0.6)";
+    ctx.shadowBlur = 12;
+  }
   roundRect(ctx, x, y, w, h, 4);
   ctx.fillStyle = DARK;
   ctx.fill();
-  // Resim; inşaat sürüyorsa üstü kararır, ortada çekiç.
-  const ih = Math.round(Math.min(h * 0.5, w * 1.1));
+  ctx.shadowBlur = 0;
+  // Resim kartın büyük kısmı; altında ad ve bir satır.
+  const ix = x + 3, iy = y + 3, iw = w - 6, ih = h - 6 - 36;
+  const sh = 19, sy = iy + ih - sh, mid = iy + (ih - sh) / 2;
   ctx.save();
-  roundRect(ctx, x + 3, y + 3, w - 6, ih, 2);
+  roundRect(ctx, ix, iy, iw, ih, 2);
   ctx.clip();
-  buildingArt(ctx, what, x + 3, y + 3, w - 6, ih, u.now, pl.owner);
-  if (u.building) {
-    ctx.fillStyle = "rgba(20,14,8,0.45)";
-    ctx.fillRect(x + 3, y + 3, w - 6, ih);
-    hammer(ctx, x + w / 2, y + 3 + ih / 2, CREAM);
+  o.art(ix, iy, iw, ih);
+  const dim = { off: 0.3, locked: 0.55, busy: 0.45 }[state] ?? 0;
+  if (dim) {
+    ctx.fillStyle = `rgba(20,14,8,${dim})`;
+    ctx.fillRect(ix, iy, iw, ih);
+  }
+  // Alt şerit: fiyat, inşaat ilerlemesi ya da EN ÜST.
+  const band = ctx.createLinearGradient(0, sy - 6, 0, iy + ih);
+  band.addColorStop(0, "rgba(20,14,8,0)");
+  band.addColorStop(0.35, "rgba(20,14,8,0.72)");
+  band.addColorStop(1, "rgba(20,14,8,0.88)");
+  ctx.fillStyle = band;
+  ctx.fillRect(ix, sy - 6, iw, sh + 6);
+  if (state === "busy") {
+    text(ctx, o.busy.text, ix + iw / 2, sy + 9, { bold: true, size: 10.5, color: GOLD_LIGHT, align: "center" });
+    ctx.fillStyle = "rgba(243,231,201,0.2)";
+    ctx.fillRect(ix + 6, sy + 12, iw - 12, 4);
+    ctx.fillStyle = GOLD;
+    ctx.fillRect(ix + 6, sy + 12, (iw - 12) * o.busy.part, 4);
+    ctx.save();
+    ctx.translate(ix + iw / 2, mid);
+    ctx.scale(2.2, 2.2);
+    hammer(ctx, 0, 0, CREAM);
+    ctx.restore();
+  } else if (state === "max") {
+    text(ctx, o.maxText, ix + iw / 2, sy + 14, { bold: true, size: 11, color: GOLD, align: "center" });
+  } else {
+    const parts = Object.entries(o.cost).filter(([, v]) => (v ?? 0) > 0).map(([k, v]) => [k, Math.round(v * 10) / 10]);
+    let size = 11, gap = 9;
+    const width = () => parts.reduce((t, [, v]) => t + 11 + 3 + measure(ctx, String(v), { size, bold: true }), 0) + gap * (parts.length - 1);
+    if (width() > iw - 6) { size = 10; gap = 4; }
+    let cx = ix + iw / 2 - width() / 2;
+    for (const [k, v] of parts) {
+      const short = (o.purse?.[k] ?? Infinity) < v;
+      const color = short ? "#f08a70" : ready ? GOLD_LIGHT : "rgba(243,231,201,0.6)";
+      cx += amount(ctx, k, v, cx, sy + 14, { size, bold: true, color }) + gap;
+    }
+  }
+  if (state === "locked") {
+    ctx.save();
+    ctx.translate(ix + iw / 2, mid);
+    ctx.scale(2.2, 2.2);
+    lock(ctx, 0, -6);
+    ctx.restore();
+  }
+  // Üstüne gelince: ortada ▲ ya da +10.
+  if (ready && hot) {
+    ctx.beginPath();
+    ctx.arc(ix + iw / 2, mid, 16, 0, TAU);
+    ctx.fillStyle = "rgba(20,14,8,0.6)";
+    ctx.fill();
+    ctx.strokeStyle = GOLD_LIGHT;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    text(ctx, o.label, ix + iw / 2, mid + 5, { bold: true, size: 14, color: GOLD_LIGHT, align: "center" });
   }
   ctx.restore();
-  // Seviye rozeti: sağ üst köşede.
+  // Sağ üst köşe: seviye ya da sayı.
   const rx = x + w - 11, ry = y + 11;
   ctx.beginPath();
   ctx.arc(rx, ry, 9.5, 0, TAU);
-  ctx.fillStyle = u.now > 0 ? GOLD : "#6b6258";
+  ctx.fillStyle = o.badge > 0 ? GOLD : "#6b6258";
   ctx.fill();
   ctx.strokeStyle = DARK;
   ctx.lineWidth = 1.6;
   ctx.stroke();
-  text(ctx, String(u.now), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
-  // Ad ve şu an ne getirdiği.
-  fit(ctx, what === "level" ? T.cityCard : T[what], x + w / 2, y + ih + 19, w - 3, { bold: true, size: 12, min: 7.5, color: CREAM, align: "center" });
-  fit(ctx, nowFx(game, id, what, T), x + w / 2, y + ih + 35, w - 6, { size: 11, min: 8.5, color: u.now > 0 ? GOLD_LIGHT : "rgba(243,231,201,0.5)", align: "center" });
-  // Çerçeve: yükseltilebilirse altın.
+  text(ctx, String(o.badge), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
+  // Ad ve altındaki satır (kilitliyse neden).
+  fit(ctx, o.name, x + w / 2, iy + ih + 16, w - 3, { bold: true, size: 12, min: 7.5, color: CREAM, align: "center" });
+  const sub = state === "locked" ? { color: "#e9a58f", italic: false } : { color: o.subColor, italic: !!o.subItalic };
+  fit(ctx, o.sub, x + w / 2, iy + ih + 30, w - 4, { size: 10.5, min: 8, ...sub, align: "center" });
   roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 4);
-  ctx.strokeStyle = can ? (hot ? GOLD_LIGHT : GOLD) : GOLD_DARK;
-  ctx.lineWidth = can ? 1.8 : 1.1;
+  ctx.strokeStyle = ready ? (hot ? GOLD_LIGHT : GOLD) : GOLD_DARK;
+  ctx.lineWidth = ready ? (hot ? 2.2 : 1.8) : 1.1;
   ctx.stroke();
   ctx.restore();
-  // Alt: eylem.
-  const ax = x + 4, aw = w - 8, ay = y + h - 32;
-  const next = u.why === "max" ? null : fill(T.nextLevel, effect(game, id, what, T));
-  const tip = [`${T[what]} · ${fill(T.levelOf, u.now)}`, T.tipUpgrade[what], next, u.why === "max" ? null : fill(T.takesTurns, turnsText(u.turns, T))];
-  if (u.building) {
-    const b = u.building;
-    ctx.fillStyle = "rgba(243,231,201,0.18)";
-    ctx.fillRect(ax, ay + 4, aw, 6);
-    ctx.fillStyle = GOLD;
-    ctx.fillRect(ax, ay + 4, (aw * (b.total - b.left)) / b.total, 6);
-    text(ctx, b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left), x + w / 2, ay + 24, { size: 11, bold: true, color: GOLD_LIGHT, align: "center" });
-    boxes.push({ x: ax, y: ay, w: aw, h: 28, act: { do: "cancelBuild", id, what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)] });
-  } else if (u.why === "max") {
-    text(ctx, T.maxShort, x + w / 2, ay + 19, { bold: true, size: 11, color: GOLD, align: "center" });
-  } else if (u.why === "needLevel" || u.why === "notPort" || u.why?.startsWith("tech_")) {
-    // Kart dar: kısa neden (teknolojinin adı); uzun cümle ipucunda.
-    const why = u.why === "needLevel" ? fill(T.lockLevel, u.now + 1) : u.why.startsWith("tech_") ? T.techs[u.why.slice(5)][0] : whyText(u.why, T);
-    boxes.push({ x: ax, y: ay, w: aw, h: 30, act: null, tip: [...tip, [whyText(u.why, T), "bad"]] });
-    lock(ctx, x + w / 2, ay + 4);
-    fit(ctx, why, x + w / 2, ay + 27, aw, { size: 9.5, min: 8, color: "rgba(243,231,201,0.6)", align: "center" });
-  } else {
-    button(ctx, boxes, {
-      x: ax, y: ay, w: aw, h: 28, label: "", off: !!u.why, act: { do: "upgrade", id, what },
-      tip: [...tip, u.why ? [u.why === "done" ? T.whyJustTaken : whyText(u.why, T), "bad"] : null],
-    });
-    const c = u.why === "money" ? INK.bad : u.why ? INK.faint : INK.ink;
-    const cw = 10 + 4 + 13 + 3 + measure(ctx, String(u.cost), { bold: true, size: 12 });
-    const sx = x + w / 2 - cw / 2;
-    text(ctx, "▲", sx, ay + 19, { bold: true, size: 11, color: u.why ? INK.faint : INK.good });
-    amount(ctx, "money", u.cost, sx + 14, ay + 19, { size: 12, bold: true, color: c });
+  boxes.push({ x, y: o.y, w, h, act: ready ? o.act : null, tip: o.tip, want: o.act });
+  // İnşaat sürüyorsa sol üst köşede iptal.
+  if (state === "busy") {
+    const bx = x + 11, by = y + 11, chot = over(bx - 9, by - 9, 18, 18);
+    ctx.beginPath();
+    ctx.arc(bx, by, 9, 0, TAU);
+    ctx.fillStyle = chot ? "#8a2f20" : "rgba(20,14,8,0.75)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(243,231,201,0.7)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    text(ctx, "✕", bx, by + 4, { bold: true, size: 11, color: CREAM, align: "center" });
+    boxes.push({ x: bx - 9, y: by - 9, w: 18, h: 18, act: o.busy.act, tip: o.busy.tip });
   }
-  // Kartın üstüne gelince: ne işe yarar, sıradaki seviye ne getirir.
-  boxes.push({ x, y, w, h: h - 34, act: null, tip });
 }
 
 /** Bir yükseltmenin bir seviyesinin getirdiği, yazıyla (main.js: bitince şehrin üstünden yükselir). */
@@ -865,7 +931,7 @@ function troopArt(ctx, type, owner, ix, iy, iw, ih, k) {
 /**
  * Asker bas (kullanıcı 26.10: "asker basma işini de böyle yapmamız lazım" - bina kartları gibi):
  * dört tür, her biri bir kart - resmi, sağ üst köşede bu şehirde kaç bölüğü olduğu, adı ve işi,
- * maliyeti, en altta +10 (kilitliyse asma kilit ve neden). Üstte bu tur kaç hak kaldığı.
+ * maliyeti; karta basınca +10 (kilitliyse asma kilit ve neden). Üstte bu tur kaç hak kaldığı.
  */
 function recruitBlock(ctx, game, boxes, T, id, x, y, w, h) {
   const ri = recruitInfo(game, id, "inf");
@@ -880,67 +946,22 @@ function recruitBlock(ctx, game, boxes, T, id, x, y, w, h) {
     const name = T.unitShort[type];
     troopCard(ctx, boxes, T, {
       x: x + i * (cw + gap), y: y + 26, w: cw, h, type, owner: pl.owner, name, have: Math.ceil((pl[type] ?? 0) / N.company),
-      cost: recruitCost(game.player, type), have_: game.civs[game.player], why: info.why, plus: "+" + N.company, act: { do: "recruit", id, type },
+      cost: recruitCost(game.player, type), purse: game.civs[game.player], why: info.why, plus: "+" + N.company, act: { do: "recruit", id, type },
       tip: [name, T[UNIT_TIP[type]], info.why ? [whyText(info.why, T), "bad"] : null],
     });
   });
 }
 
-/** Asker ya da gemi kartı: resim, sağ üst köşede sayı, ad, işi, maliyet, en altta düğme. */
+/** Asker ya da gemi kartı: resim (kartın kendisi düğme), köşede sayı, ad ve işi, resmin altında fiyat. */
 function troopCard(ctx, boxes, T, o) {
-  const { x, y, w, h, type, owner, why } = o;
-  const can = !why;
-  const hot = over(x, y, w, h);
-  ctx.save();
-  ctx.fillStyle = "rgba(25,18,10,0.3)";
-  roundRect(ctx, x + 1.5, y + 2.5, w, h, 4);
-  ctx.fill();
-  roundRect(ctx, x, y, w, h, 4);
-  ctx.fillStyle = DARK;
-  ctx.fill();
-  // Resim, alttaki satırlara (ad, iş, maliyetler, düğme) yer kaldıkça büyük.
-  const parts = ["money", "weapons", "food"].filter((k) => (o.cost[k] ?? 0) > 0);
-  const row = w >= 100, costH = row ? 13 : parts.length * 13;
-  const ih = Math.round(Math.max(36, Math.min(w * 1.05, h - (16 + 14 + costH + 32 + 12))));
-  troopArt(ctx, type, owner, x + 3, y + 3, w - 6, ih, Math.min(w / 56, ih / 52));
-  // Sağ üst köşe: bu şehirde kaç tane.
-  const rx = x + w - 11, ry = y + 11;
-  ctx.beginPath();
-  ctx.arc(rx, ry, 9.5, 0, TAU);
-  ctx.fillStyle = o.have > 0 ? GOLD : "#6b6258";
-  ctx.fill();
-  ctx.strokeStyle = DARK;
-  ctx.lineWidth = 1.6;
-  ctx.stroke();
-  text(ctx, String(o.have), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
-  fit(ctx, o.name, x + w / 2, y + ih + 18, w - 6, { bold: true, size: 12, color: CREAM, align: "center" });
-  fit(ctx, T.role[type], x + w / 2, y + ih + 32, w - 6, { size: 10, italic: true, color: "rgba(243,231,201,0.7)", align: "center" });
-  // Maliyet, simgeli: dar kartta alt alta, genişte yan yana.
-  // Kasada yetmeyen kalem kırmızı.
-  const costStyle = { size: 11, bold: true, color: can ? GOLD_LIGHT : "rgba(243,231,201,0.45)" };
-  const styleOf = (k) => (o.have_?.[k] ?? Infinity) < o.cost[k] ? { ...costStyle, color: "#f08a70" } : costStyle;
-  const vals = parts.map((k) => [k, Math.round(o.cost[k] * 10) / 10]);
-  const widths = vals.map(([, v]) => 11 + 3 + measure(ctx, String(v), costStyle));
-  if (row) {
-    let cx = x + w / 2 - (widths.reduce((a, b) => a + b, 0) + 10 * (vals.length - 1)) / 2;
-    vals.forEach(([k, v], i) => { amount(ctx, k, v, cx, y + ih + 48, styleOf(k)); cx += widths[i] + 10; });
-  } else vals.forEach(([k, v], i) => amount(ctx, k, v, x + w / 2 - widths[i] / 2, y + ih + 47 + i * 13, styleOf(k)));
-  roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 4);
-  ctx.strokeStyle = can ? (hot ? GOLD_LIGHT : GOLD) : GOLD_DARK;
-  ctx.lineWidth = can ? 1.8 : 1.1;
-  ctx.stroke();
-  ctx.restore();
-  const ax = x + 4, aw = w - 8, ay = y + h - 32;
-  const locked = why && (why.startsWith("need") || why.startsWith("tech_") || why === "notPort");
-  if (locked) {
-    lock(ctx, x + w / 2, ay + 4);
-    const short = why.startsWith("tech_") ? T.techs[why.slice(5)][0] : whyText(why, T);
-    fit(ctx, short, x + w / 2, ay + 27, aw, { size: 9.5, min: 8, color: "rgba(243,231,201,0.6)", align: "center" });
-    boxes.push({ x: ax, y: ay, w: aw, h: 30, act: null, tip: o.tip });
-  } else {
-    button(ctx, boxes, { x: ax, y: ay, w: aw, h: 28, label: o.plus, size: 13, off: !!why, act: o.act, tip: o.tip });
-  }
-  boxes.push({ x, y, w, h: h - 34, act: null, tip: o.tip });
+  const { why } = o;
+  const locked = !!why && (why.startsWith("need") || why.startsWith("tech_") || why === "notPort");
+  actionCard(ctx, boxes, {
+    ...o, label: o.plus,
+    art: (ix, iy, iw, ih) => troopArt(ctx, o.type, o.owner, ix, iy, iw, ih, Math.min(iw / 58, ih / 62)),
+    badge: o.have, sub: locked ? (why.startsWith("tech_") ? T.techs[why.slice(5)][0] : whyText(why, T)) : T.role[o.type],
+    subColor: "rgba(243,231,201,0.7)", subItalic: true, state: locked ? "locked" : why ? "off" : "ready",
+  });
 }
 
 /** Bir gemi türünün sayıları: kaç asker taşır, savaşta gücü. */
@@ -964,7 +985,7 @@ function fleetBlock(ctx, game, boxes, T, id, x, y, w, H) {
     const si = shipInfo(game, id, type);
     troopCard(ctx, boxes, T, {
       x: x + i * (cw + gap), y: top, w: cw, h: ch, type, owner: pl.owner, name: T.shipNames[type], have: pl[type] ?? 0,
-      cost: si.cost, have_: game.civs[game.player], why: si.why, plus: "+1", act: { do: "buildShip", id, type },
+      cost: si.cost, purse: game.civs[game.player], why: si.why, plus: "+1", act: { do: "buildShip", id, type },
       tip: [T.shipNames[type], shipLine(type, T), T.shipTips[type], si.why ? [whyText(si.why, T), "bad"] : null],
     });
   });
@@ -1617,10 +1638,14 @@ const armySpot = (cam, a) => {
 // çık -> haydutlara yürü -> saldır -> savaş penceresi -> ganimet. Şehri büyütmek haydutlardan sonra.
 const garrisonOf = (g, ui) => (ownPlace(g, ui) && men(g.places[ui.sel.id]) >= 40 ? ui.sel.id : null);
 const picked = (ui, id) => ui.cards?.of === "p:" + id && ui.cards.picks.size > 0;
-/** Görünen, başkente en yakın barbar kampı (öğreticiden sonraki ilk hedef). */
-const campNear = (g) => {
-  const e = eyes(g, g.player), cap = POS[capitalOf(g)];
-  return campsOf(g).filter((c) => seen(e, c)).sort((a, b) => (cap ? dist(a, cap) - dist(b, cap) : 0))[0] ?? null;
+/**
+ * Öğreticiden sonraki ilk hedef: oyuncunun ev kampı (başkentin yanında, karadan varılır), o yoksa
+ * başkente en yakın kamp. Kamplar sisde de görünür.
+ */
+export const campNear = (g) => {
+  const cap = POS[capitalOf(g)];
+  const camps = campsOf(g);
+  return camps.find((c) => c.home === g.player) ?? camps.sort((a, b) => (cap ? dist(a, cap) - dist(b, cap) : 0))[0] ?? null;
 };
 /** Oyuncunun bir yerine yürüyen, görünen barbar akıncıları. */
 const raiderOn = (g) => {

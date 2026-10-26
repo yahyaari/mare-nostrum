@@ -748,8 +748,9 @@ function drawPlaces(ctx, cam, view, L) {
     x: sx - FLEET.ax * zt, y: sy - FLEET.ay * zt, w: (FLEET.tag + tagW(a)) * zt, h: FLEET.h * zt, army: a, label: label(a), fleet: true, ...extra,
   });
   for (const a of view.armies ?? []) {
-    // Sisin içindeki yabancı ordu görünmez (yürürken de: bulunduğu nokta açık mı).
-    if (view.fog && a.owner !== view.me && !(a.float ? clear(a.float, view.eyes ?? []) : view.seen.has(a.at))) continue;
+    // Sisin içindeki yabancı ordu görünmez (yürürken de: bulunduğu nokta açık mı). Barbar kampları
+    // yerleşimler gibi hep görünür: kıpırdamazlar, herkesin ilk hedefi (akıncıları sis gizler).
+    if (view.fog && a.owner !== view.me && !a.barb && !(a.float ? clear(a.float, view.eyes ?? []) : view.seen.has(a.at))) continue;
     // Yerleşimin dışındaki ordu (sahada ya da animasyonla yürürken) bulunduğu yerde; aynı yerde
     // duran ordular yan yana. Kuşatan ordunun yanında kamp çadırları.
     if (a.float) {

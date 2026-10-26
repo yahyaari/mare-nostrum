@@ -18,7 +18,7 @@ import { N } from "./numbers.js";
 import { between, random } from "./rng.js";
 import { fight } from "./combat.js";
 import { countWin } from "./victory.js";
-import { H, POS, W, centre, dist, isLand, isRoad, placeAtCell } from "./map.js";
+import { H, PLACE_CELL, POS, W, centre, dist, field, isLand, isRoad, placeAtCell } from "./map.js";
 import { canAttack, forecast, order, sides } from "./moves.js";
 import { armiesAt, empty, men } from "./state.js";
 import { UNITS } from "./numbers.js";
@@ -65,12 +65,20 @@ function makeCamp(state, c) {
   return a;
 }
 
-/** Oyun başı: her başkentin yakınında bir kamp, gerisi rastgele (`camps` tanesine kadar). */
+/**
+ * Oyun başı: her başkentin yakınında bir kamp, gerisi rastgele (`camps` tanesine kadar). Başkentin
+ * kampı karadan yürünerek varılabilen bir yerde (Kartaca'nınki Sardinya'ya düşüyordu: ilk hedef için
+ * gemi gerekmesin); `home`: kimin ilk hedefi (öğretici balonu onu gösterir).
+ */
 export function spawnCamps(state) {
   const pick = (list) => list[Math.floor(random(state) * list.length)];
   for (const p of PLACES.filter((q) => q.capital)) {
-    const spots = freeSpots(state, POS[p.id]);
-    if (spots.length) makeCamp(state, pick(spots));
+    const at = POS[p.id];
+    const spots = freeSpots(state, at);
+    // Başkentten kara yoluyla: arama başkentin çevresindeki daireyle sınırlı.
+    const walk = field(PLACE_CELL[p.id], { enter: (c) => isLand(c) && dist(centre(c), at) <= B().nearMax + 1 });
+    const land = spots.filter((c) => walk.cost(c) < Infinity);
+    if (spots.length) makeCamp(state, pick(land.length ? land : spots)).home = state.places[p.id].owner;
   }
   for (let guard = 0; guard < 40 && state.armies.filter((a) => a.camp).length < B().camps; guard++) {
     const spots = freeSpots(state);

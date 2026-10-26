@@ -79,6 +79,11 @@ barbar kamplarını seçti.
     sekmesinde kalıyor): öğreticiden sonra balon en yakın barbar kampını gösterir, akın gelirken
     uyarı balonu (kurallar.md 26); eksik kaynak kırmızı (bölüm 12); gemi resimleri daha iri; uzun
     kart adları küçülerek sığar ("Liman kalesi"). `Tools/tutorial.mjs` kamp balonunu da bekler.
+14. **Kartın kendisi düğme** (bu adım; kullanıcı: "kartın altında para ve buton gözüküyor, görselin
+    kendisi buton olsun"): `ui.js actionCard` - bina, asker, gemi kartlarının ortak çizimi; fiyat resmin
+    alt şeridinde, üstüne gelince ▲ / +10, iptal sol üst köşede. Ayrıca: barbar kampları sisde de
+    görünür, başkentin kampı karadan varılır (`home`), öğretici bitince kamera ev kampına kayar,
+    kamera alttan panel kadar taşabilir (Mısır'ın kampı panelin altında kalıyordu).
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 
