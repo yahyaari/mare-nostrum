@@ -65,6 +65,10 @@ export const N = {
   // Dinlenme (bölüm 6c, refill.js): kendi toprağında yürümeyen ordunun ve garnizonun her yarım bölüğü
   // turda `men` asker kazanır, yerin nüfusundan (en az `keep` kişi kalır).
   refill: { men: 3, keep: 20 },
+  // Ticaret yolları (bölüm 28, trade.js): karadan `reach`, iki liman arasında `seaReach` birime kadar;
+  // turluk para (iki uca da) `base` + uzaklık x `perDist`, yabancı yerle x`foreign`, en çok `max`. Şehir
+  // başına yol: pazar 1, liman ticareti 1, pazar `marketMore`. seviyede bir daha.
+  trade: { reach: 9, seaReach: 18, base: 1, perDist: 0.2, foreign: 1.4, max: 5, marketMore: 5 },
   // Büyük krizler (bölüm 27, crises.js), `from`. turdan sonra.
   // İç savaş: en az `places` yeri olan medeniyete turda `chance` ihtimalle (aralarında en az `gap` tur);
   // başkentten en uzak yerlerin `share` kadarı garnizonlarıyla kopar, bağımsız olur - valilere şehir başına

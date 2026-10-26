@@ -23,6 +23,7 @@ import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
 import { banditsOf } from "../rules/bandits.js";
 import { campsOf } from "../rules/barbarians.js";
 import { restPlace } from "../rules/refill.js";
+import { candidates as tradeCandidates, flowing, routesFrom, slotsOf, valueOf, wayOf } from "../rules/trade.js";
 import { dealLeft, dealOf, moodLevel, moodOf, persona } from "../rules/leaders.js";
 import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turnsLeft as techTurns } from "../rules/research.js";
@@ -611,20 +612,12 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   const top = y + 50;
   if (tab === "wonders") wondersTab(ctx, game, ui, boxes, T, id, x, top, BC, y + H - 12 - top);
   else if (tab === "buildings") {
-    // Yapılar: dört bina solda (yükseltme satırları gibi), sağda bu şehirdeki etkileri.
+    // Yapılar: dört bina solda (kartlarında etkileri), sağda şehrin ticaret yolları (pazar yol açar).
     buildersRow(ctx, game, boxes, T, id, x, top, B);
     buildingCards(ctx, game, boxes, T, id, BUILDINGS, x, top + 26, B, y + H - 12 - (top + 26));
     const xc = x + B + GAP;
     vrule(ctx, xc - GAP / 2, top + 4, y + H - 14);
-    let ly = top + 16;
-    text(ctx, T.buildingsNow, xc, ly, { bold: true, size: 13 });
-    const B_ = N.buildings, rows = [
-      [pl.temple, fill(T.templeFx, pl.temple * B_.temple)], [pl.market, fill(T.marketFx, Math.round(pl.market * B_.market * 100))],
-      [pl.school, fill(T.schoolFx, pl.school * B_.school)], [pl.baths, fill(T.bathsFx, Math.round(pl.baths * B_.baths * 100))],
-    ].filter(([n]) => n > 0);
-    for (const [, s] of rows) { ly += 19; fit(ctx, "• " + s, xc, ly, C, { size: 12, color: INK.good }); }
-    if (!rows.length) { ly += 19; text(ctx, "—", xc, ly, { size: 12, color: INK.faint }); }
-    lines(ctx, T.buildingsHint, xc, ly + 26, C, { size: 11, italic: true, color: INK.soft }, 4, 14);
+    tradeBlock(ctx, game, boxes, T, ui, id, xc, top, C, y + H - 12 - top);
   }
   else if (tab === "garrison") {
     const g = cardGrid(ctx, boxes, T, ui, pl, pl.owner, of, { x, y: top + 26, w: BC, h: y + H - 12 - (top + 26), rest: !!restPlace(game, pl, id) }, true);
@@ -644,6 +637,38 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   }
   closeX(ctx, boxes, r);
   return r;
+}
+
+/**
+ * Ticaret yolları (trade.js): başlıkta kaç yol / kaç yuva; her yol bir satır - nereye, karadan mı
+ * denizden mi, turluk parası, kapatma; başkalarının bu şehre kurduğu yollar soluk. Altta Yol kur.
+ */
+function tradeBlock(ctx, game, boxes, T, ui, id, x, y, w, h) {
+  const slots = slotsOf(game, id), out = routesFrom(game, id);
+  const inn = (game.routes ?? []).filter((r) => r.to === id);
+  const tw = text(ctx, T.tradeRoutes, x, y + 15, { bold: true, size: 13 });
+  text(ctx, `${out.length} / ${slots}`, x + w, y + 15, { italic: true, size: 12, color: slots ? INK.soft : INK.faint, align: "right" });
+  boxes.push({ x, y, w: tw, h: 20, act: null, tip: [T.tradeRoutes, T.tradeTip] });
+  if (!slots && !inn.length) {
+    lines(ctx, T.tradeNone, x, y + 40, w, { size: 12, italic: true, color: INK.soft }, 5, 16);
+    return;
+  }
+  let ly = y + 26;
+  const row = (r, mine) => {
+    const other = mine ? r.to : r.from, on = flowing(game, r), v = valueOf(game, r.from, r.to);
+    const name = (r.way === "sea" ? "⛵ " : "⇢ ") + placeName(other, ui.lang);
+    const owner = game.places[other].owner;
+    fit(ctx, name, x, ly + 15, w - 96, { bold: mine, size: 13, color: mine ? INK.ink : INK.soft });
+    fit(ctx, owner && owner !== game.player ? civName(owner, ui.lang) : owner ? "" : T.free, x + 14, ly + 29, w - 110, { italic: true, size: 10.5, color: INK.soft });
+    amount(ctx, "money", on ? `+${v}` : T.tradeHalted, x + w - (mine ? 88 : 54), ly + 15, { size: 12, bold: true, color: on ? INK.good : INK.faint });
+    if (mine) button(ctx, boxes, { x: x + w - 26, y: ly + 3, w: 24, h: 22, label: "✕", size: 12, act: { do: "closeRoute", from: r.from, to: r.to }, tip: [T.tradeClose] });
+    boxes.push({ x, y: ly, w: w - 30, h: 32, act: null, tip: [placeName(other, ui.lang), fill(T.tradeLine, v), r.way === "sea" ? T.tradeSea : T.tradeLand] });
+    ly += 34;
+  };
+  for (const r of out) if (ly + 34 < y + h - 34) row(r, true);
+  for (const r of inn) if (ly + 34 < y + h - 34) row(r, false);
+  const free = out.length < slots;
+  if (slots) button(ctx, boxes, { x, y: y + h - 32, w, h: 30, label: T.tradeOpen, size: 13, main: free, off: !free, act: { do: "open", modal: "trade", id }, tip: [T.tradeOpen, T.tradeTip, free ? null : [T.tradeFull, "bad"]] });
 }
 
 /** Sadakat: değer, bu turki değişim, çubuk, Oyunlar düğmesi. */
@@ -1785,7 +1810,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const m = ui.modal;
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
-    menu: menuModal, slots: slotsModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
+    menu: menuModal, slots: slotsModal, trade: tradeModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
     armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
@@ -2109,6 +2134,7 @@ export function eventLines(game, lang) {
     if (e.type === "plagueEnd") out.push([fill(T.evPlagueEnd, e.places), null]);
     if (e.type === "hordeCame") out.push([fill(T.evHorde, e.men, placeName(e.place, lang), civName(e.civ, lang)), e.civ === me ? "bad" : "warn"]);
     if (e.type === "hordeGone") out.push([T.evHordeGone, null]);
+    if (e.type === "routeCut" && e.civ === me) out.push([fill(T.evRouteCut, placeName(e.from, lang), placeName(e.to, lang)), "bad"]);
     if (e.type === "battle" && e.barbarians && !e.field && e.defender === me) out.push(e.won ? [fill(T.evRaidTook, placeName(e.place, lang), e.sacked?.pop ?? 0, e.sacked?.money ?? 0), "bad"] : [fill(T.evRaidHeld, placeName(e.place, lang)), "good"]);
     if (e.type === "wonderBuilt") out.push([fill(T.evWonderBuilt, name(e.civ), T.wonders[e.wonder][0], placeName(e.place, lang)), e.civ === me ? "good" : "bad"]);
     if (e.type === "wonderMissed" && e.civ === me) out.push([fill(T.evWonderMissed, T.wonders[e.wonder][0], e.refund), "bad"]);
@@ -2316,6 +2342,26 @@ function menuModal(ctx, cam, game, ui, boxes, T) {
     });
   });
   text(ctx, "Natural Earth · github.com/yahyaari/mare-nostrum", r.x + r.w / 2, r.y + r.h - 22, { size: 10, color: INK.faint, align: "center" });
+}
+
+/** Ticaret yolu kur: menzildeki yerler, kazancına göre (en çok 7); her biri Kur düğmesiyle. */
+function tradeModal(ctx, cam, game, ui, boxes, T, m) {
+  const id = m.id;
+  const list = tradeCandidates(game, id).slice(0, 7);
+  const r = modalFrame(ctx, cam, boxes, 96 + Math.max(1, list.length) * 46 + 66, 480);
+  text(ctx, fill(T.tradeTitle, placeName(id, ui.lang)), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 19, align: "center" });
+  fit(ctx, fill(T.tradeSlots, routesFrom(game, id).length, slotsOf(game, id)), r.x + r.w / 2, r.y + 62, r.w - 40, { italic: true, size: 12, color: INK.soft, align: "center" });
+  const x = r.x + 22, w = r.w - 44;
+  if (!list.length) text(ctx, T.tradeNoCand, r.x + r.w / 2, r.y + 100, { italic: true, size: 13, color: INK.soft, align: "center" });
+  list.forEach((c, i) => {
+    const y = r.y + 76 + i * 46;
+    const owner = game.places[c.to].owner;
+    fit(ctx, (c.way === "sea" ? "⛵ " : "⇢ ") + placeName(c.to, ui.lang), x, y + 18, w - 190, { bold: true, size: 14 });
+    fit(ctx, (owner === game.player ? T.tradeOwn : owner ? civName(owner, ui.lang) : T.free) + " · " + (c.way === "sea" ? T.tradeSea : T.tradeLand), x + 18, y + 34, w - 200, { italic: true, size: 11, color: INK.soft });
+    amount(ctx, "money", `+${c.value}`, x + w - 170, y + 24, { size: 14, bold: true, color: INK.good });
+    button(ctx, boxes, { x: x + w - 96, y: y + 6, w: 96, h: 32, label: T.tradeGo, main: true, size: 13, act: { do: "openRoute", from: id, to: c.to }, tip: [placeName(c.to, ui.lang), fill(T.tradeLine, c.value)] });
+  });
+  button(ctx, boxes, { x: r.x + r.w / 2 - 80, y: r.y + r.h - 52, w: 160, h: 36, label: T.closeBtn, size: 14, act: { do: "close" } });
 }
 
 /**

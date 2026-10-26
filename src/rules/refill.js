@@ -11,7 +11,7 @@ import { besieged, isHuman } from "./state.js";
 import { mpMax } from "./moves.js";
 
 /**
- * Bir garnizonun (\`id\`: yerleşimi) ya da ordunun dinlendiği yer - nüfusunu veren kendi yerleşimi;
+ * Bir garnizonun (`id`: yerleşimi) ya da ordunun dinlendiği yer - nüfusunu veren kendi yerleşimi;
  * dinlenmiyorsa null. Ordu: bu tur yürümemiş (hareketi dolu), kuşatmıyor, kendi toprağında.
  */
 export function restPlace(state, u, id = null) {

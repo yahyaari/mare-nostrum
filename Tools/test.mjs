@@ -1061,6 +1061,59 @@ section("Büyük krizler (bölüm 27)");
   check("göç ömrü dolunca dağılır", !h.armies.includes(horde) && hg.some((e) => e.type === "hordeGone"));
 }
 
+section("Ticaret yolları (bölüm 28)");
+
+{
+  const TR = await import("../src/rules/trade.js");
+  const { TEXT } = await import("../src/text.js");
+  for (const lang of ["en", "tr"]) check(`${lang}: ticaret yazıları`, ["tradeRoutes", "tradeTip", "tradeNone", "tradeOpen", "tradeFull", "tradeTitle", "tradeSlots", "tradeGo", "tradeOwn", "tradeLand", "tradeSea", "tradeLine", "tradeHalted", "tradeClose", "tradeNoCand", "tradeOpened", "evRouteCut"].every((k) => TEXT[lang][k]));
+  const s = S.newGame("rome", 7);
+  check("pazarı ya da liman ticareti olmayan şehirde yol yok", TR.slotsOf(s, "rome") === 0 && TR.whyNot(s, "rome", "tarentum") === "slots");
+  s.places.rome.market = 1;
+  check("pazar bir yol açar, liman ticareti bir daha, 5. seviye pazar bir üçüncüsünü", TR.slotsOf(s, "rome") === 1 && (s.places.rome.trade = 1, TR.slotsOf(s, "rome") === 2) && (s.places.rome.market = N.trade.marketMore, TR.slotsOf(s, "rome") === 3));
+  s.places.rome.market = 1; s.places.rome.trade = 0;
+  const c = TR.candidates(s, "rome");
+  check("adaylar menzilde ve kazancına göre sıralı", c.length > 0 && c.every((x, i) => !i || c[i - 1].value >= x.value) && c.every((x) => TR.wayOf("rome", x.to)));
+  check("uzak ve kara/deniz yolu olmayan yer aday değil", !c.some((x) => x.to === "ecbatana"));
+  const best = c[0];
+  const m0 = S.budget(s, "rome").money;
+  check("yol kurulur, kuranın turluk parasına eklenir", !!TR.openRoute(s, "rome", best.to) && Math.abs(S.budget(s, "rome").money - (m0 + best.value)) < 1e-6);
+  check("yuvası dolunca ikinci yol kurulmaz", TR.openRoute(s, "rome", c[1].to) === null && TR.whyNot(s, "rome", c[1].to) === "slots");
+  check("yabancı yerle ticaret daha kazançlı", TR.valueOf(s, "rome", "massalia") >= TR.valueOf(s, "rome", "tarentum"));
+  // Yabancı ortak yarısını alır.
+  const t = S.newGame("rome", 7);
+  t.places.rome.market = 1;
+  const p0 = S.budget(t, "carthage").money;
+  TR.openRoute(t, "rome", "carthage");
+  check("yabancı ortak yolun yarısını alır", S.budget(t, "carthage").money - p0 === Math.floor(TR.valueOf(t, "rome", "carthage") / 2));
+  // Savaş koparır; savaştaki yere kurulamaz.
+  const D = await import("../src/rules/diplomacy.js");
+  D.declareWar(t, "rome", "carthage");
+  const ev = [];
+  TR.tickTrade(t, ev);
+  check("savaş ticaret yolunu koparır, oyuncuya haber", !(t.routes ?? []).length && ev.some((e) => e.type === "routeCut" && e.civ === "rome"));
+  check("savaştaki yere yol kurulmaz", TR.whyNot(t, "rome", "carthage") === "war" && !TR.candidates(t, "rome").some((x) => x.to === "carthage"));
+  // Kuşatma ya da abluka parayı durdurur.
+  const u = S.newGame("rome", 7);
+  u.places.rome.market = 1;
+  const r = TR.openRoute(u, "rome", "tarentum");
+  u.armies.push({ id: 991, owner: "carthage", besieging: "tarentum", at: null, x: 0, y: 0, inf: 10, arch: 0, cav: 0, siege: 0, elite: 0, ships: 0, trireme: 0, quinq: 0, mp: 0, route: [] });
+  check("kuşatılan uçta yol para getirmez", !TR.flowing(u, r) && TR.tradeIncome(u, "rome") === 0);
+  // Şehir el değiştirince yol düşer.
+  const v = S.newGame("rome", 7);
+  v.places.tarentum.market = 1;
+  TR.openRoute(v, "tarentum", "rome");
+  M.capture(v, "tarentum", "carthage");
+  TR.tickTrade(v, []);
+  check("şehir el değiştirince yolu düşer", !(v.routes ?? []).length);
+  // Bilgisayar da kurar.
+  const { aiTurn: AI6 } = await import("../src/rules/ai.js");
+  const w = S.newGame("rome", 7);
+  w.places.carthage.market = 1;
+  AI6(w, "carthage", []);
+  check("bilgisayar ticaret yolu kurar", TR.routesFrom(w, "carthage").length === 1);
+}
+
 // ---------------------------------------------------------------------------------------------
 section("Dağlar ve geri çekilme (bölüm 7, 22b)");
 

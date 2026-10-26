@@ -11,6 +11,7 @@ import { buildableById, holds } from "./wonders.js";
 import { POS, cellOf, dist, isLand } from "./map.js";
 import { TECHS, freeTech, grant, knows, techMul, unlocked, unlockerOf } from "./research.js";
 import { dealMoney } from "./leaders.js";
+import { tradeIncome } from "./trade.js";
 import { spawnCamps } from "./barbarians.js";
 
 export const VERSION = 19;
@@ -323,6 +324,8 @@ export function budget(state, civ) {
   }
   // Ticaret anlaşmaları (leaders.js).
   b.money += dealMoney(state, civ);
+  // Ticaret yolları (trade.js).
+  b.money += tradeIncome(state, civ);
   // İaşeci generalin ordusu yarı yiyecek yer.
   const fed = armiesOf(state, civ).reduce((n, a) => n + (a.general?.traits.includes("supply") ? men(a) / 2 : 0), 0);
   // Süvarinin atları da yer: süvari bölüğü iki bölük sayılır.

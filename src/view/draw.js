@@ -119,6 +119,9 @@ export function drawMap(ctx, cam, view, dpr) {
   // oraya gidecek yol): ince altın kesik.
   if (view.route?.pts.length > 1) strokeLine(ctx, view.route.pts, px, 6.6, 3.6, [9, 6], CREAM, "rgba(28,23,18,0.8)");
   if (view.preview?.pts.length > 1) strokeLine(ctx, view.preview.pts, px, 6, 3.2, [7, 5], GOLD_LIGHT, "rgba(28,23,18,0.7)");
+  // Ticaret yolları (trade.js): iki şehir arasında hafif kavisli kesik altın çizgi, üstünde gidip gelen
+  // kervan (denizde yelken). Ortağı olunan yolu daha soluk; para getirmeyen (kuşatma, abluka) gri.
+  for (const r of view.trade ?? []) tradeRoute(ctx, r, px, performance.now() / 1000);
   // Yürüyen orduların arkasındaki iz: geçtiği yollar ve şu anki yolun yürüdüğü kısmı, kendi
   // renginde. Ordu yolda yürüyor, bir yerden ötekine zıplamıyor - bunu gözle görülür kılan bu.
   for (const e of view.fx ?? []) if (e.kind === "trail") trail(ctx, e, px);
@@ -129,6 +132,56 @@ export function drawMap(ctx, cam, view, dpr) {
   const tokens = drawPlaces(ctx, cam, view, L);
   drawEffects(ctx, cam, view.fx ?? []);
   return tokens;
+}
+
+/** Bir ticaret yolu: denizden ya da karadan giden kesik çizgi, üstünde gidip gelen kervan ya da gemi. */
+function tradeRoute(ctx, r, px, now) {
+  const pts = r.pts;
+  const color = !r.on ? "rgba(150,140,120,0.8)" : r.mine ? GOLD_LIGHT : "rgba(236,212,154,0.7)";
+  ctx.save();
+  strokeLine(ctx, pts, px, 4, 2, [5, 5], color, "rgba(28,23,18,0.55)");
+  if (r.on) {
+    // Kervan: yol boyunca gidip gelir; uzun yolda daha uzun sürer ama hep birkaç saniyede bir.
+    const seg = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
+    const len = seg.reduce((s, x) => s + x, 0) || 1;
+    const ph = ((now / (3 + len * 0.4) + (pts[0].x * 0.13 + pts.at(-1).y * 0.07)) % 2 + 2) % 2;
+    let left = (ph < 1 ? ph : 2 - ph) * len, i = 0;
+    while (i < seg.length - 1 && left > seg[i]) left -= seg[i++];
+    const f = seg[i] ? left / seg[i] : 0;
+    const x = pts[i].x + (pts[i + 1].x - pts[i].x) * f, y = pts[i].y + (pts[i + 1].y - pts[i].y) * f;
+    ctx.lineWidth = px(1.2);
+    ctx.strokeStyle = "rgba(28,23,18,0.9)";
+    if (r.sea) {
+      ctx.fillStyle = CREAM;
+      ctx.beginPath();
+      ctx.moveTo(x - px(4), y + px(1));
+      ctx.lineTo(x + px(4), y + px(1));
+      ctx.lineTo(x + px(2.5), y + px(3.5));
+      ctx.lineTo(x - px(2.5), y + px(3.5));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, y + px(1));
+      ctx.lineTo(x, y - px(6));
+      ctx.lineTo(x + px(4), y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#8a6a45";
+      ctx.beginPath();
+      ctx.ellipse(x, y - px(2), px(4), px(2.6), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = GOLD;
+      ctx.beginPath();
+      ctx.arc(x, y - px(5), px(1.8), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 // Durağan katman ekrandan her yönde %30 büyük çizilir: kaydırırken sadece yeri değişir, ancak

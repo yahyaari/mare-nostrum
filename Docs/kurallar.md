@@ -1035,3 +1035,28 @@ oyunlarının bilinen sorunu, büyüyenin bir noktadan sonra rahatça kazanması
   yarısından çoğu kopmayla bitiyor); 70 oyunda ilk düşüş 48 (aynı), ayakta kalan toplam 332 -> 335.
   14 bot oyununda: oyun başına ~2.7 iç savaş, ~1.2 büyük salgın (her biri ~6 yere uğrar),
   ~1 büyük göç (her biri ~3 şehri yağmalar, 44 akından 37'si yağma).
+
+---
+
+## 28. Ticaret yolları
+
+Kullanıcının istediği "olmazsa olmazlar"ın beşincisi (26.10). `src/rules/trade.js`.
+
+- **Yuva:** pazarı olan şehir bir yol, limanında ticaret (Liman sekmesi) olan bir yol daha, 5. seviye pazar
+  bir üçüncüsünü kurar (en çok üç). İlk denemede her seviye bir yoldu: bilgisayar pazarı ve ticareti 5'e
+  çıkarınca şehir başına 10 yol, medeniyet başına turda 360 para ticaret çıktı.
+- **Nereye:** karadan 9 birim, iki liman arasında denizden 18 birim içindeki her yerleşime (kendi şehrin,
+  başka medeniyet, bağımsız); savaştaki medeniyetin yerine kurulmaz.
+- **Kazanç:** turda 1 + uzaklık x 0.2 para (yabancıyla x1.4, en çok 5) yolu kurana; yabancı ortak bunun
+  yarısını alır (Civilization gibi). Ekonominin ~%20'si (bot oyunlarında 40., 80., 120. turlarda ortanca);
+  ortak tam alırken %28'di.
+- **Kopma:** savaş çıkınca, kuranın şehri el değiştirince ya da yuvası artık yetmeyince yol düşer (oyuncuya
+  haber). Uçlardan biri kuşatılmışsa ya da deniz yolunda biri ablukadaysa o tur para gelmez ("durdu").
+- **Ekran:** şehrin Yapılar sekmesinin sağında *Ticaret yolları* (kaç yol / kaç yuva; her yol bir satır:
+  nereye, karadan mı denizden mi, turluk para, ✕ kapat; başkalarının bu şehre kurduğu yollar soluk) ve
+  *+ Ticaret yolu kur* - pencerede menzildeki en kazançlı yedi yer, her biri *Kur* ile. Haritada oyuncunun
+  yolları kesik altın çizgi, üstünde gidip gelen kervan ya da yelkenli; deniz yolu denizden (karaya da
+  girebilen ama karayı pahalı sayan bir arama: ızgarada boğazlar kapalı), kara yolu karadan.
+- Bilgisayar boş yuvası olan her şehrinde en kazançlı yolu kurar.
+- Denge (70 oyun, zaferler kapalı): ilk düşüş 48 -> 58, ayakta kalan toplam 335 -> 347 (ek para savunmayı
+  güçlendiriyor; her oyunda savaş çıkıyor, 25. turda bağımsızların çoğu alınıyor - test.mjs bakıyor).

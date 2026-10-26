@@ -24,6 +24,7 @@ import { techMul, tickResearch } from "./research.js";
 import { tickBarbarians } from "./barbarians.js";
 import { replenish } from "./refill.js";
 import { tickCrises } from "./crises.js";
+import { tickTrade } from "./trade.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -94,6 +95,8 @@ export function endTurn(state) {
     state.armies = state.armies.filter((a) => !empty(a));
     for (const h of humansOf(state)) if (lost[h]) events.push({ type: "winter", turn: state.turn, civ: h, lost: lost[h] });
   }
+  // Savaşın ya da el değiştirmenin kopardığı ticaret yolları düşer (üretimden önce).
+  tickTrade(state, events);
   // İnşaatlar bir tur ilerler (üretimden önce: biten tarla bu tur üretir).
   progressBuilds(state, events);
   economy(state, events);

@@ -17,6 +17,7 @@ import { POS, centre, dist } from "./map.js";
 import { BUILDABLE, wondersAt } from "./wonders.js";
 import { besiege, canBesiege } from "./siege.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
+import { candidates, openRoute, routesFrom, slotsOf } from "./trade.js";
 import { random } from "./rng.js";
 import { aiResearch, unlocked } from "./research.js";
 import { dealOf, moodOf, persona, warMoodMul } from "./leaders.js";
@@ -37,6 +38,16 @@ const MIX = {
   saka: { arch: 0.35, cav: 0.25, siege: 0.03 },
 };
 
+/** Boş ticaret yuvası olan her şehir en kazançlı yolu kurar (trade.js). */
+function tradeAll(state, civ) {
+  for (const id of placesOf(state, civ)) {
+    for (let guard = 0; guard < 4 && routesFrom(state, id).length < slotsOf(state, id); guard++) {
+      const best = candidates(state, id)[0];
+      if (!best || !openRoute(state, id, best.to)) break;
+    }
+  }
+}
+
 export function aiTurn(state, civ, events) {
   if (!state.civs[civ].alive) return;
   refresh(state, civ);
@@ -48,6 +59,7 @@ export function aiTurn(state, civ, events) {
   build(state, civ);
   buildWonders(state, civ);
   shipyard(state, civ);
+  tradeAll(state, civ);
   recruitAll(state, civ);
   military(state, civ, events);
 }

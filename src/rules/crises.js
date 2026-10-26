@@ -9,7 +9,7 @@
 //   - Büyük göç (Kimberler): en çok yeri olan medeniyetin sınırında büyük bir barbar ordusu belirir, şehir
 //     şehir yağmalayarak ilerler (barbarians.js akıncıları gibi), yenilene ya da dağılana kadar.
 //
-// Hepsi `N.crises.from`. turdan sonra. Durumları \`state.crises\` (yoksa ilk turda kurulur).
+// Hepsi `N.crises.from`. turdan sonra. Durumları `state.crises` (yoksa ilk turda kurulur).
 
 import { neighbours } from "./graph.js";
 import { POS, dist } from "./map.js";
@@ -22,7 +22,7 @@ import { landSpots } from "./barbarians.js";
 
 const C = () => N.crises;
 
-/** Tur sonu: krizler başlar, sürenler ilerler. Olaylar \`events\`e. */
+/** Tur sonu: krizler başlar, sürenler ilerler. Olaylar `events`e. */
 export function tickCrises(state, events) {
   if (state.turn < C().from) return;
   state.crises ??= { war: {}, plague: null, lastPlague: 0, lastHorde: 0 };
@@ -33,7 +33,7 @@ export function tickCrises(state, events) {
 
 // ---- iç savaş ----
 
-/** Ayaklanacak şehirler: başkent dışındakilerin başkentten en uzak \`share\` kadarı. */
+/** Ayaklanacak şehirler: başkent dışındakilerin başkentten en uzak `share` kadarı. */
 export function rebelsOf(state, civ) {
   const home = seat(state, civ);
   const n = Math.ceil(placesOf(state, civ).length * C().civilWar.share);
@@ -139,7 +139,7 @@ function horde(state, events) {
 
 /**
  * Göçün bir sonraki hedefi (barbarians.js bir yeri yağmaladıktan sonra): kurbanın en yakın yeri, o yoksa
- * herhangi birinin; \`next\` birimden uzak değil. Yoksa null (göç dağılır).
+ * herhangi birinin; `next` birimden uzak değil. Yoksa null (göç dağılır).
  */
 export function hordeTarget(state, a, skip = null) {
   const near = (ids) => ids.filter((id) => id !== skip && state.places[id].owner && dist(POS[id], a) <= C().horde.next).sort((p, q) => dist(POS[p], a) - dist(POS[q], a))[0];

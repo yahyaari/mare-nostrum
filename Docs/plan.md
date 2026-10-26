@@ -3,7 +3,7 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **26.10.2026** (barbarlar, bina / asker / gemi kartları). Önceki: **23.10.2026** (zafer yolları, canlı savaşlar, öğretici, araştırma, liderler, harika yarışı, aynı bilgisayarda oyuncular, şehir binaları, geri çekilme ve dağlar, oyun sonu özeti).
+> Son güncelleme: **26.10.2026** (barbarlar, kartlar, özel birlikler, dinlenme, kayıt yuvaları, krizler, ticaret). Önceki: **23.10.2026** (zafer yolları, canlı savaşlar, öğretici, araştırma, liderler, harika yarışı, aynı bilgisayarda oyuncular, şehir binaları, geri çekilme ve dağlar, oyun sonu özeti).
 
 ## SON EKLENENLER (23.10) - önce bunu oku
 
@@ -92,10 +92,12 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
 16. **Dinlenme**: kurallar.md 6c, `src/rules/refill.js`. Kartta yeşil ▲.
 17. **Kayıt yuvaları**: kurallar.md bölüm 12 (Ekran). Üç yuva + otomatik kayıt; menüde Kaydet / Yükle.
     (16 ve 17 aynı commit'te.)
-18. **Büyük krizler** (bu adım): kurallar.md bölüm 27, `src/rules/crises.js`. İç savaş (mektup), büyük salgın,
+18. **Büyük krizler** (a491bb7): kurallar.md bölüm 27, `src/rules/crises.js`. İç savaş (mektup), büyük salgın,
     Kimber göçü.
+19. **Ticaret yolları** (bu adım): kurallar.md bölüm 28, `src/rules/trade.js`. Önerilen beş işin sonuncusu.
 
-**Sırada:** kullanıcı oynayıp söyleyecek.
+**Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
+yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.
 
 ## ÖNCEKİLER (22.10 akşam)
 

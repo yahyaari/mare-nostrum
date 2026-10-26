@@ -10,7 +10,7 @@ import { roadBetween } from "./rules/graph.js";
 import {
   access, attack, canAttack, canStrike, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, strike, turnsFor,
 } from "./rules/moves.js";
-import { POS, cellOf, centre, dist, isLand, pathCost, regionOf, smooth, stepCost } from "./rules/map.js";
+import { PLACE_CELL, POS, cellOf, centre, dist, isLand, pathCost, regionOf, search, smooth, stepCost } from "./rules/map.js";
 import {
   VERSION, aliveHumans, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, humansOf, merge, men, migrate, muster, newGame, placesOf, recruit, startWonder, station, upgrade,
 } from "./rules/state.js";
@@ -31,6 +31,7 @@ import * as sound from "./view/sound.js";
 import { relation } from "./rules/state.js";
 import { eyes, seen as seenBy, sight } from "./rules/sight.js";
 import { plagueAt } from "./rules/crises.js";
+import { closeRoute, flowing, openRoute, routesFrom, routesOf, slotsOf, valueOf } from "./rules/trade.js";
 import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
 import { sendSpy } from "./rules/spies.js";
@@ -300,6 +301,24 @@ const ownArmy = () => {
   return a && a.owner === game.player ? a : null;
 };
 
+// Ticaret yolunun çizgisi: deniz yolu denizden, kara yolu karadan (map.js arama, düzleştirilmiş); bir
+// kere hesaplanır. Bulunamazsa düz çizgi.
+const tradePaths = new Map();
+function tradePath(from, to, sea) {
+  const k = `${from}|${to}|${sea ? 1 : 0}`;
+  if (!tradePaths.has(k)) {
+    const goal = PLACE_CELL[to];
+    // Limanın karesi denize bitişik olmayabilir (Roma: limanı Ostia): iki ucun yakınındaki karadan geçilir.
+    const port = (c) => dist(centre(c), POS[from]) < 1.2 || dist(centre(c), POS[to]) < 1.2;
+    // Deniz yolu karaya da girebilir ama pahalı: hep denizden gider, boğazlardaki kısa karayı (ızgarada
+    // İstanbul ve Çanakkale kapalı) geçer.
+    const opts = sea ? { extra: (c) => (isLand(c) && !port(c) ? 6 : 0) } : { enter: (c) => isLand(c) };
+    const p = search(PLACE_CELL[from], (c) => c === goal, opts, centre(goal));
+    tradePaths.set(k, p ? [POS[from], ...smooth(p.cells).slice(1, -1), POS[to]] : [POS[from], POS[to]]);
+  }
+  return tradePaths.get(k);
+}
+
 function mapView() {
   const view = { lang: ui.lang, owners: startOwners, selected: null, armies: [], marks: null, route: null };
   if (!game) {
@@ -337,6 +356,8 @@ function mapView() {
     barb: !!a.camp,
     horde: !!a.horde,
   }));
+  // Oyuncunun ticaret yolları (kendi kurdukları ve ortağı olduğu): haritada kesik altın çizgi, kervan.
+  view.trade = routesOf(game, game.player).map((r) => ({ pts: tradePath(r.from, r.to, r.way === "sea"), sea: r.way === "sea", mine: game.places[r.from].owner === game.player, on: flowing(game, r) }));
   view.plague = plagueAt(game);
   view.sieges = Object.fromEntries(game.armies.filter((a) => a.besieging).map((a) => [a.besieging, a.owner]));
   // İnşa edilen harikaların yerleri (haritada işaret).
@@ -540,6 +561,21 @@ function dispatch(act) {
       ui.slots = slotMeta();
       ui.modal = { kind: "slots", mode: act.mode, count: SLOTS };
       break;
+    case "openRoute": {
+      // Ticaret yolu (trade.js): kurulunca şehrin üstünden turluk parası yükselir.
+      const r = openRoute(game, act.from, act.to);
+      if (!r) break;
+      sound.click();
+      const v = valueOf(game, act.from, act.to);
+      anim.rise(act.from, `+${v} ◎`, INK.good);
+      toast(fill(T().tradeOpened, PLACES.find((p) => p.id === act.from).name[ui.lang], PLACES.find((p) => p.id === act.to).name[ui.lang], v));
+      if (routesFrom(game, act.from).length >= slotsOf(game, act.from)) ui.modal = null;
+      save();
+      break;
+    }
+    case "closeRoute":
+      if (closeRoute(game, act.from, act.to)) { sound.click(); save(); }
+      break;
     case "saveSlot":
       if (saveSlot(act.n)) {
         sound.click();
@@ -592,7 +628,7 @@ function dispatch(act) {
       ui.modal = { kind: "confirm", text: T().newGameQ, yes: { do: "newGame" } };
       break;
     case "open":
-      ui.modal = act.modal ? { kind: act.modal } : null;
+      ui.modal = act.modal ? { kind: act.modal, ...(act.id ? { id: act.id } : {}) } : null;
       if (act.modal === "report") { ui.news = null; coachDone("news"); }
       if (act.modal === "diplo") coachDone("diplo");
       break;
