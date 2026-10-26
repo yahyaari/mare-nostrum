@@ -32,6 +32,8 @@ try {
   await step("baskent");
   const cap = PLACES.find((p) => p.capital && p.owner === civ).id;
   await ev(`const p = M.where("${cap}"); M.tap(p.x, p.y); return 1`);
+  await step("asker_sekmesi");
+  await press(`(a) => a.do === "cardTab" && a.tab === "troops"`);
   await step("asker_bas");
   await press(`(a) => a.do === "recruit" && a.type === "inf"`);
   await step("garnizon_sekmesi");

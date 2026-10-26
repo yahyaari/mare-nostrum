@@ -72,6 +72,9 @@ barbar kamplarını seçti.
 12. **Asker ve gemi kartları** (bu adım; kullanıcı bina kartlarını beğendi, "asker basma işini de böyle
     yapmamız lazım"): kurallar.md bölüm 12. `ui.js` `recruitBlock` / `troopCard` / `troopArt`;
     sütunlar 300/230 yerine 265/265. `fit` artık `min` alıyor (küçük yazılar 8'e kadar küçülür).
+    Sonra kullanıcı: "ilk sekme çok kalabalık, liman gibi ayrı sekme olsun" - **Asker bas sekmesi**
+    (Şehir ile Liman arasında); Şehir sekmesinde dört geniş yükseltme kartı. Geniş asker kartında
+    beş asker / iki atlı, maliyet yan yana. Öğretici balonu sekmeyi gösterir.
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 

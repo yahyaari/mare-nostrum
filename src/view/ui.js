@@ -515,12 +515,12 @@ function gridHead(ctx, boxes, T, u, of, title, x, y, w, g, mine) {
 
 /**
  * Kendi şehrinin kartı, üç sütun: şehir (nüfus, garnizon, üretim, sadakat; altta ordu
- * çıkarma) | sekmeler: Şehir (yükseltmeler, asker bas), Liman (liman yapıları, gemi yap),
- * Garnizon (askerler kart kart: seç, dışarı çık).
+ * çıkarma) | sekmeler: Şehir (yükseltmeler), Asker bas (asker kartları), Liman (liman yapıları,
+ * gemi yap), Yapılar, Harikalar, Garnizon (askerler kart kart: seç, dışarı çık).
  */
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const tabs = ["city", ...(p.port ? ["port"] : []), "buildings", ...(p.kind === "castle" ? [] : ["wonders"]), "garrison"];
+  const tabs = ["city", "troops", ...(p.port ? ["port"] : []), "buildings", ...(p.kind === "castle" ? [] : ["wonders"]), "garrison"];
   const tab = tabs.includes(ui.cardTab) ? ui.cardTab : "city";
   const wonder = wondersAt(game, id)[0] ?? null;
   const A = 214, B = 265, C = 265, BC = B + GAP + C;
@@ -578,10 +578,16 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   // Sekmeler: ikinci ve üçüncü sütunun üstünde.
   x += A + GAP;
   vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-  const label = { city: T.tabCity, port: "⚓ " + T.tabPort, buildings: "⌂ " + T.tabBuildings, wonders: "✦ " + T.tabWonders, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
-  const tw = (BC - 8 * (tabs.length - 1)) / tabs.length;
+  const label = { city: T.tabCity, troops: "⚑ " + T.tabTroops, port: "⚓ " + T.tabPort, buildings: "⌂ " + T.tabBuildings, wonders: "✦ " + T.tabWonders, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
+  // Sekme genişliği yazısına göre; artan yer eşit dağılır.
+  const tsize = tabs.length > 4 ? 12 : 13, tgap = tabs.length > 5 ? 6 : 8;
+  const natural = tabs.map((k) => measure(ctx, label[k], { bold: true, size: tsize }) + 16);
+  const spare = (BC - tgap * (tabs.length - 1) - natural.reduce((a, b) => a + b, 0)) / tabs.length;
+  let tx = x;
   tabs.forEach((k, i) => {
-    button(ctx, boxes, { x: x + i * (tw + 8), y: y + 14, w: tw, h: 28, label: label[k], size: tabs.length > 4 ? 12 : 13, main: tab === k, act: { do: "cardTab", tab: k } });
+    const tw = natural[i] + spare;
+    button(ctx, boxes, { x: tx, y: y + 14, w: tw, h: 28, label: label[k], size: tsize, main: tab === k, act: { do: "cardTab", tab: k } });
+    tx += tw + tgap;
   });
   const top = y + 50;
   if (tab === "wonders") wondersTab(ctx, game, ui, boxes, T, id, x, top, BC, y + H - 12 - top);
@@ -604,14 +610,18 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   else if (tab === "garrison") {
     const g = cardGrid(ctx, boxes, T, ui, pl, pl.owner, of, { x, y: top + 26, w: BC, h: y + H - 12 - (top + 26) }, true);
     gridHead(ctx, boxes, T, pl, of, T.garrison, x, top, BC, g, true);
-  } else {
+  } else if (tab === "troops") recruitBlock(ctx, game, boxes, T, id, x, top, BC, y + H - 12 - (top + 26));
+  else if (tab === "port") {
     buildersRow(ctx, game, boxes, T, id, x, top, B);
-    buildingCards(ctx, game, boxes, T, id, tab === "port" ? PORT_UPGRADES : UPGRADES, x, top + 26, B, y + H - 12 - (top + 26));
-    // Asker bas ya da gemi yap.
+    buildingCards(ctx, game, boxes, T, id, PORT_UPGRADES, x, top + 26, B, y + H - 12 - (top + 26));
+    // Gemi yap.
     const xc = x + B + GAP;
     vrule(ctx, xc - GAP / 2, top + 4, y + H - 14);
-    if (tab === "port") fleetBlock(ctx, game, boxes, T, id, xc, y + 32, C, H - 32);
-    else recruitBlock(ctx, game, boxes, T, id, xc, y + 32, C, y + H - 12 - (y + 32 + 44));
+    fleetBlock(ctx, game, boxes, T, id, xc, y + 32, C, H - 32);
+  } else {
+    // Şehir: dört yükseltme kartı bütün genişlikte (asker basma kendi sekmesinde).
+    buildersRow(ctx, game, boxes, T, id, x, top, BC);
+    buildingCards(ctx, game, boxes, T, id, UPGRADES, x, top + 26, BC, y + H - 12 - (top + 26));
   }
   closeX(ctx, boxes, r);
   return r;
@@ -833,9 +843,15 @@ function troopArt(ctx, type, owner, ix, iy, iw, ih, k) {
   const cx = ix + iw / 2;
   // Gemiler: kadırga yalın, trireme mahmuzlu ve büyük, kinkerem en büyüğü ve küpeştesinde askerler.
   if (boat) galley(ctx, owner, cx, ground + 1 * k, (type === "quinq" ? 0.95 : type === "trireme" ? 0.86 : 0.74) * k, { troops: type === "quinq" });
-  else if (type === "cav") trooper(ctx, "cav", owner, cx - 4 * k, ground + 4 * k, -1, 1.2 * k);
+  else if (type === "cav" && iw > ih * 1.5) {
+    trooper(ctx, "cav", owner, cx + 18 * k, ground - 1 * k, -1, 1.05 * k);
+    trooper(ctx, "cav", owner, cx - 14 * k, ground + 4 * k, -1, 1.2 * k);
+  } else if (type === "cav") trooper(ctx, "cav", owner, cx - 4 * k, ground + 4 * k, -1, 1.2 * k);
   else if (type === "siege") trooper(ctx, "siege", owner, cx - 3 * k, ground + 3 * k, -1, 1.4 * k);
-  else {
+  else if (iw > ih * 1.5) {
+    for (const dx of [-24, 0, 24]) trooper(ctx, type, owner, cx + dx * k, ground - 1 * k, -1, 1.05 * k);
+    for (const dx of [-12, 12]) trooper(ctx, type, owner, cx + dx * k, ground + 5 * k, -1, 1.3 * k);
+  } else {
     // Üç asker: arkada iki, önde bir.
     trooper(ctx, type, owner, cx - 11 * k, ground - 1 * k, -1, 1.1 * k);
     trooper(ctx, type, owner, cx + 10 * k, ground - 1 * k, -1, 1.1 * k);
@@ -851,16 +867,17 @@ function troopArt(ctx, type, owner, ix, iy, iw, ih, k) {
  */
 function recruitBlock(ctx, game, boxes, T, id, x, y, w, h) {
   const ri = recruitInfo(game, id, "inf");
-  text(ctx, T.recruit, x, y + 32, { bold: true, size: 14 });
+  const lw = text(ctx, T.recruit, x, y + 15, { bold: true, size: 13 });
+  fit(ctx, fill(T.companyMen, N.company), x + lw + 10, y + 15, w / 2 - lw - 10, { italic: true, size: 12, color: INK.soft });
   const why = ri.why && ri.why !== "done" ? whyText(ri.why, T) : fill(T.recruitLeft, ri.left);
-  fit(ctx, why, x + 90, y + 32, w - 90, { italic: true, size: 12, color: ri.why && ri.why !== "done" ? INK.bad : INK.soft });
+  fit(ctx, why, x + w, y + 15, w / 2, { italic: true, size: 12, color: ri.why && ri.why !== "done" ? INK.bad : INK.good, align: "right" });
   const gap = 6, cw = (w - gap * 3) / 4;
   const pl = game.places[id];
   UNITS.forEach((type, i) => {
     const info = recruitInfo(game, id, type);
     const name = T.unitShort[type];
     troopCard(ctx, boxes, T, {
-      x: x + i * (cw + gap), y: y + 44, w: cw, h, type, owner: pl.owner, name, have: Math.ceil((pl[type] ?? 0) / N.company),
+      x: x + i * (cw + gap), y: y + 26, w: cw, h, type, owner: pl.owner, name, have: Math.ceil((pl[type] ?? 0) / N.company),
       cost: recruitCost(game.player, type), why: info.why, plus: "+" + N.company, act: { do: "recruit", id, type },
       tip: [name, T[UNIT_TIP[type]], info.why ? [whyText(info.why, T), "bad"] : null],
     });
@@ -881,7 +898,8 @@ function troopCard(ctx, boxes, T, o) {
   ctx.fill();
   // Resim, alttaki satırlara (ad, iş, maliyetler, düğme) yer kaldıkça büyük.
   const parts = ["money", "weapons", "food"].filter((k) => (o.cost[k] ?? 0) > 0);
-  const ih = Math.round(Math.max(36, Math.min(w * 1.05, h - (16 + 14 + parts.length * 13 + 32 + 12))));
+  const row = w >= 100, costH = row ? 13 : parts.length * 13;
+  const ih = Math.round(Math.max(36, Math.min(w * 1.05, h - (16 + 14 + costH + 32 + 12))));
   troopArt(ctx, type, owner, x + 3, y + 3, w - 6, ih, Math.min(w / 56, ih / 52));
   // Sağ üst köşe: bu şehirde kaç tane.
   const rx = x + w - 11, ry = y + 11;
@@ -895,12 +913,14 @@ function troopCard(ctx, boxes, T, o) {
   text(ctx, String(o.have), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
   fit(ctx, o.name, x + w / 2, y + ih + 18, w - 6, { bold: true, size: 12, color: CREAM, align: "center" });
   fit(ctx, T.role[type], x + w / 2, y + ih + 32, w - 6, { size: 10, italic: true, color: "rgba(243,231,201,0.7)", align: "center" });
-  // Maliyet: alt alta, simgeli.
-  parts.forEach((k, i) => {
-    const v = Math.round(o.cost[k] * 10) / 10;
-    const cw = 11 + 3 + measure(ctx, String(v), { size: 11, bold: true });
-    amount(ctx, k, v, x + w / 2 - cw / 2, y + ih + 47 + i * 13, { size: 11, bold: true, color: can ? GOLD_LIGHT : "rgba(243,231,201,0.45)" });
-  });
+  // Maliyet, simgeli: dar kartta alt alta, genişte yan yana.
+  const costStyle = { size: 11, bold: true, color: can ? GOLD_LIGHT : "rgba(243,231,201,0.45)" };
+  const vals = parts.map((k) => [k, Math.round(o.cost[k] * 10) / 10]);
+  const widths = vals.map(([, v]) => 11 + 3 + measure(ctx, String(v), costStyle));
+  if (row) {
+    let cx = x + w / 2 - (widths.reduce((a, b) => a + b, 0) + 10 * (vals.length - 1)) / 2;
+    vals.forEach(([k, v], i) => { amount(ctx, k, v, cx, y + ih + 48, costStyle); cx += widths[i] + 10; });
+  } else vals.forEach(([k, v], i) => amount(ctx, k, v, x + w / 2 - widths[i] / 2, y + ih + 47 + i * 13, costStyle));
   roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 4);
   ctx.strokeStyle = can ? (hot ? GOLD_LIGHT : GOLD) : GOLD_DARK;
   ctx.lineWidth = can ? 1.8 : 1.1;
@@ -1605,7 +1625,7 @@ const COACH = [
   { id: "research", when: (g, ui) => !ui.sel && !g.civs[g.player].research && !banditsOf(g), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "open" && a.modal === "research")) },
   { id: "food", when: (g) => budget(g, g.player).food < 0 && !banditsOf(g), at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.food)) },
   { id: "upgrade", when: (g, ui) => ownPlace(g, ui) && !banditsOf(g), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "upgrade")) },
-  { id: "recruit", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "recruit")) },
+  { id: "recruit", when: ownPlace, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "recruit") ?? findBox(boxes, (a) => a.do === "cardTab" && a.tab === "troops")) },
   { id: "garrison", when: (g, ui) => !!garrisonOf(g, ui) && ui.cardTab !== "garrison", at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "cardTab" && a.tab === "garrison")) },
   { id: "pick", when: (g, ui) => { const id = garrisonOf(g, ui); return !!id && !picked(ui, id); }, at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "pickAll" && a.all)) },
   { id: "form", when: (g, ui) => !!garrisonOf(g, ui), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "march" && !a.general) ?? findBox(boxes, (a) => a.do === "cardTab" && a.tab === "garrison")) },
