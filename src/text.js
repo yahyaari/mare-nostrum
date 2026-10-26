@@ -491,6 +491,8 @@ export const TEXT = {
     coachOffToast: "Tips are off. You can turn them back on in the menu.",
     coach: {
       bandits: "Bandits have made camp near your capital! Let's scatter them and take their loot. First you need an army.",
+      camp: "Tents with a campfire: a barbarian camp. It grows every turn and sends raiders to sack your towns. Right-click it with an army to attack - destroying it pays 40 gold.",
+      raid: "Barbarian raiders are marching on one of your towns! If they win they sack it. Recruit more soldiers there, or cut them off with an army.",
       city: "This is your capital. Click it to see what you can do.",
       food: "Your food is running low! Upgrade farms or fisheries, or your soldiers will starve.",
       upgrade: "Grow your city here: farms give food, industry weapons, barracks soldiers. Work takes a few turns; a city has 2 builders.",
@@ -1183,6 +1185,8 @@ export const TEXT = {
     coachOffToast: "İpuçları kapandı. Menüden yeniden açabilirsin.",
     coach: {
       bandits: "Başkentinin yakınına haydutlar kamp kurmuş! Onları dağıtıp ganimetlerini alalım. Önce bir ordu lazım.",
+      camp: "Kamp ateşli çadırlar barbar kampı. Her tur büyür, şehirlerine akıncı yollayıp yağmalar. Ordunla üstüne sağ tıkla, saldır - dağıtırsan 40 para ganimet.",
+      raid: "Barbar akıncıları şehirlerinden birine yürüyor! Kazanırlarsa yağmalarlar. O şehirde asker bas ya da ordunla önlerini kes.",
       city: "Bu senin başkentin. Ne yapabileceğini görmek için üstüne tıkla.",
       food: "Yiyeceğin azalıyor! Tarla ya da balıkçılık yükselt, yoksa askerler açlıktan ölür.",
       upgrade: "Şehrini buradan büyüt: tarla yiyecek, sanayi silah, kışla asker getirir. İşler birkaç tur sürer; şehirde 2 inşaatçın var.",

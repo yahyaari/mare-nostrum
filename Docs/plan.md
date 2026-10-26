@@ -75,6 +75,10 @@ barbar kamplarını seçti.
     Sonra kullanıcı: "ilk sekme çok kalabalık, liman gibi ayrı sekme olsun" - **Asker bas sekmesi**
     (Şehir ile Liman arasında); Şehir sekmesinde dört geniş yükseltme kartı. Geniş asker kartında
     beş asker / iki atlı, maliyet yan yana. Öğretici balonu sekmeyi gösterir.
+13. **Cilalar** (bu adım; kullanıcı "başka ne yapacaktık, hallet, bana bir şey sorma"; gemiler Liman
+    sekmesinde kalıyor): öğreticiden sonra balon en yakın barbar kampını gösterir, akın gelirken
+    uyarı balonu (kurallar.md 26); eksik kaynak kırmızı (bölüm 12); gemi resimleri daha iri; uzun
+    kart adları küçülerek sığar ("Liman kalesi"). `Tools/tutorial.mjs` kamp balonunu da bekler.
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 

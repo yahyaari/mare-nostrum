@@ -492,7 +492,7 @@ function dispatch(act) {
       // Zincirin balonları baştan: önceki oyunlarda görülmüş olsalar da (öğretici bitene kadar).
       // Birkaç oyuncuda öğretici yok.
       if (!many && !ui.coach.off && !ui.coach.done.has("loot") && spawnBandits(game)) {
-        for (const id of ["city", "recruit", "garrison", "pick", "form", "hunt", "strike", "preview"]) ui.coach.done.delete(id);
+        for (const id of ["city", "recruit", "garrison", "pick", "form", "hunt", "strike", "preview", "camp", "raid"]) ui.coach.done.delete(id);
         saveCoach();
       }
       ui.screen = "game";

@@ -55,6 +55,10 @@ try {
   await step("sonuc_seridi");
   await wait(5500);
   await step("ganimet");
+  // Öğreticiden sonra sıradaki hedef: başkentin yanındaki barbar kampı.
+  await press(`(a) => a.do === "coach" && a.id === "loot"`);
+  const next = await step("barbar_kampi");
+  if (next !== "camp") console.log("HATA: kamp balonu çıkmadı");
   const left = await ev(`return M.game.armies.some((a) => a.bandit)`);
   console.log("para:", await ev(`return M.game.civs[M.game.player].money`), left ? "HATA: haydutlar duruyor" : "haydutlar dağıldı");
   console.log(page.errors ? "HATA " + page.log.slice(-8).join("\n") : "konsol temiz");

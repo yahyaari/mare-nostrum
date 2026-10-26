@@ -505,6 +505,8 @@ oyundan çıkar.
   ("Hattı tutar", "Okçuyu biçer"), alt alta fiyatı, en altta *+10*. Basılabilen kartın çerçevesi
   altın; kilitliyse asma kilit ve kısaca nedeni (teknoloji adı, "Kışla 3"). Liman sekmesinde aynısı
   gemiler için: kadırga, trireme, kinkerem, köşede buradaki gemi sayısı, düğme *+1*.
+- **Eksik olan kırmızı:** bina kartında para yetmiyorsa fiyat kırmızı; asker ve gemi kartında kasada
+  yetmeyen kalem (para, silah, yiyecek) kırmızı.
 - **Şehre tıklayınca:** panel **ekranın altında ortada** açılır (Total War gibi; kullanıcı 22.10:
   "solda istemiyorum"): şehir (nüfus, garnizon, üretim, sadakat, Ordu çıkar) | sekmeler: Şehir
   (yükseltmeler), Asker bas (asker kartları), Liman (liman yapıları, gemi yap), Yapılar, Harikalar,
@@ -938,6 +940,9 @@ savaşılacak düşman). `src/rules/barbarians.js`.
 - Bot oyunlarında (14 oyun, 100 tur): ilk akın ortanca 10. turda; oyun başına ~10 akın, ~2.5 yağma;
   kampların çoğu bilgisayarlarca dağıtılır.
 - Eski kayıtlara da kamplar kurulur (kayıt 18).
+- **İpucu balonları:** öğreticideki haydutlar dağılınca balon başkente en yakın görünen kampı gösterir
+  (sıradaki hedef: "ordunla üstüne sağ tıkla, 40 para ganimet"). Görünen akıncılar oyuncunun bir yerine
+  yürürken ayrı bir balon uyarır ("o şehirde asker bas ya da ordunla önlerini kes").
 - Denge (70 oyun, zaferler kapalı): ilk düşüş aynı (46); 150. turda ayakta kalan 315 -> 295. Akınlar
   tamamen kapalıyken de 295: düşüş akınlardan değil, kamplar oyunları başka bir gidişata sokuyor
   (ve 70 oyunun gürültüsü +-10). Yağmayı yumuşatmak (nüfusun %15'i, akın 1/8) 291, akını seyrekleştirmek

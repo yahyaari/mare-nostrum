@@ -21,6 +21,7 @@ import {
 import { POS, cellOf, centre, dist, isLand, isMountain, placeAtCell } from "../rules/map.js";
 import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
 import { banditsOf } from "../rules/bandits.js";
+import { campsOf } from "../rules/barbarians.js";
 import { dealLeft, dealOf, moodLevel, moodOf, persona } from "../rules/leaders.js";
 import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turnsLeft as techTurns } from "../rules/research.js";
@@ -43,7 +44,7 @@ import { ALL_WONDERS, BUILDABLE, WONDERS, placeOfWonder, wonderAt, wondersAt, wo
 import { rankOf, ranking, scoreOf, wonderTurnsLeft } from "../rules/victory.js";
 import { ownersAt } from "../rules/chronicle.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
-import { sight } from "../rules/sight.js";
+import { eyes, seen, sight } from "../rules/sight.js";
 import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
 import { SCENE_MS, drawBattle, trooper } from "./battle.js";
 import { explain, fight, nextRankXp, veteranMul, veteranRank } from "../rules/combat.js";
@@ -371,7 +372,8 @@ function lines(ctx, s, x, y, w, o, max = 2, step = 16) {
 /** Sığmazsa küçülen, yine sığmazsa kısalan tek satır. */
 function fit(ctx, s, x, y, w, o) {
   let size = o.size ?? 13;
-  if (measure(ctx, s, { ...o, size }) > w) size = Math.max(o.min ?? 10, size - 1.5);
+  // `min` verilmişse sığana kadar küçülür (o sınıra dek), yoksa bir kez 1.5 küçülür (en az 10).
+  if (measure(ctx, s, { ...o, size }) > w) size = Math.max(o.min ?? 10, o.min ? Math.min(size - 1.5, size * w / measure(ctx, s, { ...o, size })) : size - 1.5);
   while (s.length > 4 && measure(ctx, s, { ...o, size }) > w) s = s.slice(0, -2) + "…";
   return text(ctx, s, x, y, { ...o, size });
 }
@@ -740,7 +742,7 @@ function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
   ctx.stroke();
   text(ctx, String(u.now), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
   // Ad ve şu an ne getirdiği.
-  fit(ctx, what === "level" ? T.cityCard : T[what], x + w / 2, y + ih + 19, w - 8, { bold: true, size: 12, color: CREAM, align: "center" });
+  fit(ctx, what === "level" ? T.cityCard : T[what], x + w / 2, y + ih + 19, w - 3, { bold: true, size: 12, min: 7.5, color: CREAM, align: "center" });
   fit(ctx, nowFx(game, id, what, T), x + w / 2, y + ih + 35, w - 6, { size: 11, min: 8.5, color: u.now > 0 ? GOLD_LIGHT : "rgba(243,231,201,0.5)", align: "center" });
   // Çerçeve: yükseltilebilirse altın.
   roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 4);
@@ -773,7 +775,7 @@ function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
       x: ax, y: ay, w: aw, h: 28, label: "", off: !!u.why, act: { do: "upgrade", id, what },
       tip: [...tip, u.why ? [u.why === "done" ? T.whyJustTaken : whyText(u.why, T), "bad"] : null],
     });
-    const c = u.why ? INK.faint : INK.ink;
+    const c = u.why === "money" ? INK.bad : u.why ? INK.faint : INK.ink;
     const cw = 10 + 4 + 13 + 3 + measure(ctx, String(u.cost), { bold: true, size: 12 });
     const sx = x + w / 2 - cw / 2;
     text(ctx, "▲", sx, ay + 19, { bold: true, size: 11, color: u.why ? INK.faint : INK.good });
@@ -842,7 +844,7 @@ function troopArt(ctx, type, owner, ix, iy, iw, ih, k) {
   ctx.fillRect(ix, ground, iw, iy + ih - ground);
   const cx = ix + iw / 2;
   // Gemiler: kadırga yalın, trireme mahmuzlu ve büyük, kinkerem en büyüğü ve küpeştesinde askerler.
-  if (boat) galley(ctx, owner, cx, ground + 1 * k, (type === "quinq" ? 0.95 : type === "trireme" ? 0.86 : 0.74) * k, { troops: type === "quinq" });
+  if (boat) galley(ctx, owner, cx, ground + 1 * k, Math.min((type === "quinq" ? 1.02 : type === "trireme" ? 0.95 : 0.85) * k, iw / 54), { troops: type === "quinq" });
   else if (type === "cav" && iw > ih * 1.5) {
     trooper(ctx, "cav", owner, cx + 18 * k, ground - 1 * k, -1, 1.05 * k);
     trooper(ctx, "cav", owner, cx - 14 * k, ground + 4 * k, -1, 1.2 * k);
@@ -878,7 +880,7 @@ function recruitBlock(ctx, game, boxes, T, id, x, y, w, h) {
     const name = T.unitShort[type];
     troopCard(ctx, boxes, T, {
       x: x + i * (cw + gap), y: y + 26, w: cw, h, type, owner: pl.owner, name, have: Math.ceil((pl[type] ?? 0) / N.company),
-      cost: recruitCost(game.player, type), why: info.why, plus: "+" + N.company, act: { do: "recruit", id, type },
+      cost: recruitCost(game.player, type), have_: game.civs[game.player], why: info.why, plus: "+" + N.company, act: { do: "recruit", id, type },
       tip: [name, T[UNIT_TIP[type]], info.why ? [whyText(info.why, T), "bad"] : null],
     });
   });
@@ -914,13 +916,15 @@ function troopCard(ctx, boxes, T, o) {
   fit(ctx, o.name, x + w / 2, y + ih + 18, w - 6, { bold: true, size: 12, color: CREAM, align: "center" });
   fit(ctx, T.role[type], x + w / 2, y + ih + 32, w - 6, { size: 10, italic: true, color: "rgba(243,231,201,0.7)", align: "center" });
   // Maliyet, simgeli: dar kartta alt alta, genişte yan yana.
+  // Kasada yetmeyen kalem kırmızı.
   const costStyle = { size: 11, bold: true, color: can ? GOLD_LIGHT : "rgba(243,231,201,0.45)" };
+  const styleOf = (k) => (o.have_?.[k] ?? Infinity) < o.cost[k] ? { ...costStyle, color: "#f08a70" } : costStyle;
   const vals = parts.map((k) => [k, Math.round(o.cost[k] * 10) / 10]);
   const widths = vals.map(([, v]) => 11 + 3 + measure(ctx, String(v), costStyle));
   if (row) {
     let cx = x + w / 2 - (widths.reduce((a, b) => a + b, 0) + 10 * (vals.length - 1)) / 2;
-    vals.forEach(([k, v], i) => { amount(ctx, k, v, cx, y + ih + 48, costStyle); cx += widths[i] + 10; });
-  } else vals.forEach(([k, v], i) => amount(ctx, k, v, x + w / 2 - widths[i] / 2, y + ih + 47 + i * 13, costStyle));
+    vals.forEach(([k, v], i) => { amount(ctx, k, v, cx, y + ih + 48, styleOf(k)); cx += widths[i] + 10; });
+  } else vals.forEach(([k, v], i) => amount(ctx, k, v, x + w / 2 - widths[i] / 2, y + ih + 47 + i * 13, styleOf(k)));
   roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 4);
   ctx.strokeStyle = can ? (hot ? GOLD_LIGHT : GOLD) : GOLD_DARK;
   ctx.lineWidth = can ? 1.8 : 1.1;
@@ -960,7 +964,7 @@ function fleetBlock(ctx, game, boxes, T, id, x, y, w, H) {
     const si = shipInfo(game, id, type);
     troopCard(ctx, boxes, T, {
       x: x + i * (cw + gap), y: top, w: cw, h: ch, type, owner: pl.owner, name: T.shipNames[type], have: pl[type] ?? 0,
-      cost: si.cost, why: si.why, plus: "+1", act: { do: "buildShip", id, type },
+      cost: si.cost, have_: game.civs[game.player], why: si.why, plus: "+1", act: { do: "buildShip", id, type },
       tip: [T.shipNames[type], shipLine(type, T), T.shipTips[type], si.why ? [whyText(si.why, T), "bad"] : null],
     });
   });
@@ -1613,6 +1617,16 @@ const armySpot = (cam, a) => {
 // çık -> haydutlara yürü -> saldır -> savaş penceresi -> ganimet. Şehri büyütmek haydutlardan sonra.
 const garrisonOf = (g, ui) => (ownPlace(g, ui) && men(g.places[ui.sel.id]) >= 40 ? ui.sel.id : null);
 const picked = (ui, id) => ui.cards?.of === "p:" + id && ui.cards.picks.size > 0;
+/** Görünen, başkente en yakın barbar kampı (öğreticiden sonraki ilk hedef). */
+const campNear = (g) => {
+  const e = eyes(g, g.player), cap = POS[capitalOf(g)];
+  return campsOf(g).filter((c) => seen(e, c)).sort((a, b) => (cap ? dist(a, cap) - dist(b, cap) : 0))[0] ?? null;
+};
+/** Oyuncunun bir yerine yürüyen, görünen barbar akıncıları. */
+const raiderOn = (g) => {
+  const e = eyes(g, g.player);
+  return g.armies.find((a) => a.raider && g.places[a.target]?.owner === g.player && seen(e, a)) ?? null;
+};
 /** Haydutlar dururken turu bitirmek ancak ordusu bu tur bir şey yapamayacaksa önerilir. */
 const idle = (g) => { const own = g.armies.filter((a) => a.owner === g.player); return !banditsOf(g) || (own.length > 0 && own.every((a) => a.mp <= 0.05)); };
 
@@ -1620,6 +1634,8 @@ const idle = (g) => { const own = g.armies.filter((a) => a.owner === g.player); 
 const COACH = [
   { id: "bandits", when: (g, ui) => !ui.sel && !!banditsOf(g), at: (g, ui, boxes, cam) => armySpot(cam, banditsOf(g)) },
   { id: "loot", when: (g, ui) => !!g.tutorial && !banditsOf(g) && !ui.fight, at: (g, ui, boxes, cam, T) => boxSpot(boxes.find((b) => b.tip?.[0] === T.money)) },
+  { id: "raid", when: (g, ui) => !ui.fight && !banditsOf(g) && !!raiderOn(g), at: (g, ui, boxes, cam) => armySpot(cam, raiderOn(g)) },
+  { id: "camp", when: (g, ui) => !ui.fight && !banditsOf(g) && !ownPlace(g, ui) && !!campNear(g), at: (g, ui, boxes, cam) => armySpot(cam, campNear(g)) },
   { id: "city", when: (g, ui) => !ui.sel, at: (g, ui, boxes, cam) => placeSpot(cam, capitalOf(g)) },
   // Haydutlar dururken yiyecek uyarısı öğreticiyi bölmesin (Sakaların fazladan askeri başta yiyeceği eksiye düşürür, 10 tur yeter).
   { id: "research", when: (g, ui) => !ui.sel && !g.civs[g.player].research && !banditsOf(g), at: (g, ui, boxes) => boxSpot(findBox(boxes, (a) => a.do === "open" && a.modal === "research")) },
