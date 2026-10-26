@@ -9,6 +9,8 @@
 
 import { N } from "../rules/numbers.js";
 import { extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
+import { BRIDGE, FOREST, WATER, placeName } from "../rules/field.js";
+import { TITLE_FONT } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shade } from "./pieces.js";
 import { INK, TAU, button, colorOf, measure, panel, text, wrap } from "./kit.js";
 
@@ -47,7 +49,8 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   // Arka plan: koyu çerçeve, ortada saha.
   ctx.fillStyle = "#2a2016";
   ctx.fillRect(0, 0, cam.w, cam.h);
-  field(ctx, f, b);
+  // Arazi bir kere çizilir (saha boyutu ya da dil değişince yeniden).
+  ctx.drawImage(terrainLayer(f, b, T, lang, ctx.getTransform().a), f.x, f.y, f.w, f.h);
   if (b.walls) wall(ctx, f, b);
   // Emir çizgileri (seçili birliklerin).
   for (const u of b.units) if (B.sel.has(u.id) && !u.dead && !u.gone && !u.routed && u.order) orderLine(ctx, f, b, u);
@@ -81,6 +84,154 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   if (B.sel.size && !b.over) formationBar(ctx, cam, f, B, T, boxes);
   if (b.over) endPanel(ctx, cam, B, T, lang, boxes);
   else if (B.paused && b.t === 0) startHint(ctx, cam, f, T, boxes);
+}
+
+let layer = null; // { key, canvas }
+
+/** Arazinin önbellek resmi: toprak, tepeler, su ve nehirler, orman, köprüler, evler, adlar. */
+function terrainLayer(f, b, T, lang, dpr) {
+  const key = `${Math.round(f.w)}|${Math.round(f.h)}|${dpr}|${b.seed}|${lang}`;
+  if (layer?.key === key && layer.field === b.field) return layer.canvas;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(f.w * dpr);
+  canvas.height = Math.round(f.h * dpr);
+  const c = canvas.getContext("2d");
+  c.scale(dpr, dpr);
+  const g = { x: 0, y: 0, w: f.w, h: f.h, k: f.k };
+  field(c, g, b);
+  terrain(c, g, b.field, T, lang);
+  layer = { key, canvas, field: b.field };
+  return canvas;
+}
+
+/** Tepeler, su, orman, köprü, ev ve adlar (field.js). */
+function terrain(ctx, f, F, T, lang) {
+  const k = f.k;
+  let s = 7;
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  // Tepeler: iç içe, kenarı gürültülü halkalar; dağ (en büyüğü) kalın, kayalık kenarlı (görseldeki gibi).
+  for (const hl of F.hills) {
+    const rings = hl.big ? 5 : 3;
+    for (let i = 0; i < rings; i++) {
+      const sc = 1.15 - (i / rings) * 0.85;
+      ctx.beginPath();
+      for (let a = 0; a <= 64; a++) {
+        const t = (a / 64) * Math.PI * 2;
+        const n = 1 + Math.sin(t * 5 + hl.x) * 0.06 + Math.sin(t * 11 + hl.y) * 0.04;
+        const ex = Math.cos(t) * hl.rx * sc * n, ey = Math.sin(t) * hl.ry * sc * n;
+        const x = f.x + (hl.x + ex * Math.cos(hl.rot) - ey * Math.sin(hl.rot)) * k, y = f.y + (hl.y + ex * Math.sin(hl.rot) + ey * Math.cos(hl.rot)) * k;
+        if (a) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = `rgba(120,92,58,${0.06 + hl.peak * 0.05})`;
+      ctx.fill();
+      ctx.strokeStyle = i === 0 && hl.big ? "rgba(92,66,40,0.9)" : "rgba(110,84,52,0.45)";
+      ctx.lineWidth = i === 0 && hl.big ? Math.max(3, k * 0.9) : 1.2;
+      ctx.stroke();
+      if (i === 0 && hl.big) {
+        // Kayalık kenar: dışa doğru kısa çizgiler.
+        ctx.strokeStyle = "rgba(80,58,36,0.7)";
+        ctx.lineWidth = 1;
+        for (let a = 0; a < 90; a++) {
+          const t = (a / 90) * Math.PI * 2, n = 1 + Math.sin(t * 5 + hl.x) * 0.06 + Math.sin(t * 11 + hl.y) * 0.04;
+          const ex = Math.cos(t) * hl.rx * sc * n, ey = Math.sin(t) * hl.ry * sc * n, len = 0.5 + r() * 0.9;
+          const x = hl.x + ex * Math.cos(hl.rot) - ey * Math.sin(hl.rot), y = hl.y + ex * Math.sin(hl.rot) + ey * Math.cos(hl.rot);
+          const dx = x - hl.x, dy = y - hl.y, d = Math.hypot(dx, dy) || 1;
+          ctx.beginPath();
+          ctx.moveTo(f.x + x * k, f.y + y * k);
+          ctx.lineTo(f.x + (x + (dx / d) * len) * k, f.y + (y + (dy / d) * len) * k);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+  // Su: önce kıyı rengi geniş, sonra su; nehirler ayrıca kıvrımlı çizgi (kıyı, su, ortada açık).
+  const cells = (kind) => { const out = []; for (let y = 0; y < F.h; y++) for (let x = 0; x < F.w; x++) if (F.kind[y * F.w + x] === kind) out.push([x, y]); return out; };
+  const water = cells(WATER);
+  for (const [rad, color] of [[0.95, "#6d8a80"], [0.72, "#4f7a8f"]]) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (const [x, y] of water) { ctx.moveTo(f.x + (x + 0.5 + rad) * k, f.y + (y + 0.5) * k); ctx.arc(f.x + (x + 0.5) * k, f.y + (y + 0.5) * k, rad * k, 0, TAU); }
+    ctx.fill();
+  }
+  const rw = N.tactics.terrain.riverWidth;
+  for (const river of F.rivers) {
+    for (const [wd, color] of [[rw + 0.8, "#5f7f78"], [rw - 0.4, "#3f6a82"], [rw * 0.35, "rgba(150,190,205,0.45)"]]) {
+      ctx.beginPath();
+      river.forEach((p, i) => (i ? ctx.lineTo(f.x + p.x * k, f.y + p.y * k) : ctx.moveTo(f.x + p.x * k, f.y + p.y * k)));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = wd * k;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+  }
+  // Orman: her hücrede bir ağaç (koyu yeşil taç, gölgeli), aşağıdakiler üstte.
+  for (const [x, y] of cells(FOREST)) {
+    const jx = (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1, jy = (Math.sin(x * 39.346 + y * 11.135) * 24634.6345) % 1;
+    const cx = f.x + (x + 0.5 + jx * 0.4) * k, cy = f.y + (y + 0.5 + jy * 0.4) * k, rad = k * (0.55 + Math.abs(jx) * 0.25);
+    ctx.beginPath();
+    ctx.arc(cx + rad * 0.25, cy + rad * 0.3, rad, 0, TAU);
+    ctx.fillStyle = "rgba(30,40,20,0.35)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, 0, TAU);
+    ctx.fillStyle = Math.abs(jy) > 0.5 ? "#3f5c33" : "#4a6a3a";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(22,32,16,0.75)";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+  // Köprüler: tahta, kenar çizgili.
+  for (const br of F.bridges) {
+    ctx.save();
+    ctx.translate(f.x + br.x * k, f.y + br.y * k);
+    ctx.rotate(br.a);
+    ctx.fillStyle = "#8a6a45";
+    ctx.fillRect((-br.len / 2) * k, (-br.w / 2) * k, br.len * k, br.w * k);
+    ctx.strokeStyle = "rgba(50,34,20,0.9)";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect((-br.len / 2) * k, (-br.w / 2) * k, br.len * k, br.w * k);
+    ctx.lineWidth = 0.7;
+    for (let t = -br.len / 2 + 0.6; t < br.len / 2; t += 0.6) {
+      ctx.beginPath();
+      ctx.moveTo(t * k, (-br.w / 2) * k);
+      ctx.lineTo(t * k, (br.w / 2) * k);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // Evler: açık duvar, koyu çatı çizgisi.
+  for (const hs of F.houses) {
+    ctx.save();
+    ctx.translate(f.x + hs.x * k, f.y + hs.y * k);
+    ctx.rotate(hs.rot);
+    ctx.fillStyle = "rgba(40,30,20,0.35)";
+    ctx.fillRect((-hs.w / 2 + 0.2) * k, (-hs.h / 2 + 0.25) * k, hs.w * k, hs.h * k);
+    ctx.fillStyle = "#d8c8a6";
+    ctx.fillRect((-hs.w / 2) * k, (-hs.h / 2) * k, hs.w * k, hs.h * k);
+    ctx.strokeStyle = "#5a4630";
+    ctx.lineWidth = 1;
+    ctx.strokeRect((-hs.w / 2) * k, (-hs.h / 2) * k, hs.w * k, hs.h * k);
+    ctx.beginPath();
+    ctx.moveTo((-hs.w / 2) * k, 0);
+    ctx.lineTo((hs.w / 2) * k, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Adlar: köy (yerleşimin adı) ve dağ sırası, koyu kenarlı altın yazı.
+  for (const l of F.labels) {
+    const s2 = l.kind === "place" ? placeName(l.id, lang) : T.ranges?.[l.id] ?? l.id;
+    ctx.font = `700 ${Math.round(Math.max(14, k * 3.2))}px ${TITLE_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(42,32,22,0.9)";
+    ctx.lineWidth = 5;
+    ctx.strokeText(s2, f.x + l.x * k, f.y + l.y * k);
+    ctx.fillStyle = GOLD_LIGHT;
+    ctx.fillText(s2, f.x + l.x * k, f.y + l.y * k);
+  }
 }
 
 /** Saha: parşömen rengi toprak, kenarlarda ot ve kaya (tohumla hep aynı yerde). */

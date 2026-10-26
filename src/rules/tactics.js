@@ -14,9 +14,13 @@
 // yağdırır; süvari dalarken hücum vurur (falanks durdurur). Moral bitince birlik bozulup kendi kenarına kaçar
 // - kaçanlar sağ kalır. Bir tarafın dövüşen birliği kalmayınca savaş biter; süre dolarsa savunan kazanır.
 // Çarpanlar otomatik savaştakiyle aynı (combat.js): medeniyet, araştırma, general, tecrübe, arazi, sur.
+// Saha arazisi (field.js): nehir köprüden geçilir (birlikler yolu kendileri bulur), karşı kıyıyla göğüs
+// göğüse dövüşülmez; ormanda yürüyüş yavaş, süvari zayıf, oklar ağaçlara takılır; tepeden aşağı vuran
+// güçlü, tepedeki okçunun menzili uzun; evler geçilmez.
 
 import { archMul, cavMul, eliteMelee, eliteMul, infMul, sideMuls } from "./combat.js";
 import { N, UNITS, uniqueOf } from "./numbers.js";
+import { FOREST, flatField, heightAt, kindAt, passable, pathOn, waterBetween } from "./field.js";
 
 const K = () => N.tactics;
 const PI2 = Math.PI * 2;
@@ -108,9 +112,9 @@ export function extent(u) {
  * Savaşı kur. `att`, `def`: moves.js sides / fieldSides'ın tarafları ({ civ, inf, arch, ..., gen, vet,
  * terrain, mods }); `walls`: null | "city" | "castle". Dönen savaş durumu.
  */
-export function setupBattle(att, def, walls, seed = 1) {
+export function setupBattle(att, def, walls, seed = 1, field = null) {
   const muls = sideMuls(att, def, walls);
-  const b = { t: 0, over: null, walls, seed, rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, sides: { att: { civ: att.civ, muls: muls.att, gen: !!att.gen }, def: { civ: def.civ, muls: muls.def, gen: !!def.gen } } };
+  const b = { t: 0, over: null, walls, seed, field: field ?? flatField(), rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, sides: { att: { civ: att.civ, muls: muls.att, gen: !!att.gen }, def: { civ: def.civ, muls: muls.def, gen: !!def.gen } } };
   for (const side of ["att", "def"]) {
     const s = side === "att" ? att : def;
     const groups = {};
@@ -177,6 +181,18 @@ function deploy(b, side, g) {
   }
   line(g.siege ?? [], front - 15, h / 2);
   for (let pass = 0; pass < 4; pass++) separate(b, 1);
+  // Su ya da ev üstüne düşen birlik en yakın yürünebilir yere (önce yanlara, sonra geriye).
+  for (const u of b.units.filter((v) => v.side === side)) {
+    if (passable(b.field, u.x, u.y)) continue;
+    let best = null;
+    for (let d = 1; d < 40 && !best; d += 1) {
+      for (const [dx, dy] of [[0, d], [0, -d], [side === "att" ? -d : d, 0], [side === "att" ? d : -d, 0]]) {
+        const x = u.x + dx, y = u.y + dy;
+        if (x > 1 && y > 1 && x < w - 1 && y < h - 1 && passable(b.field, x, y)) { best = { x, y }; break; }
+      }
+    }
+    if (best) Object.assign(u, best);
+  }
 }
 
 const alive = (u) => !u.dead && !u.gone;
@@ -328,6 +344,7 @@ function contactMap(b) {
       const A = R.get(a), C = R.get(c);
       if (dist(a, c) > A.r + C.r + K().reach) continue;
       if (gapOf(A, C).gap > K().reach) continue;
+      if (b.field.obstacles && waterBetween(b.field, a, c)) continue;
       m.get(a).push(c);
       m.get(c).push(a);
     }
@@ -387,7 +404,8 @@ export function aiOrders(b, side, all = false) {
 export function step(b, dt) {
   if (b.over) return;
   b.t += dt;
-  const T = K();
+  const T = K(), F = b.field;
+  for (const u of b.units) { u.px = u.x; u.py = u.y; }
   // 1. Yürüyüş (dövüşmeyen, bozulmamış birlikler emirlerine; bozulanlar kendi kenarına). Dövüşen birlik
   // yerinden kıpırdamaz, en çok vurduğu düşmana yavaşça döner (sarılan birlik arkasını hemen toplayamaz).
   for (const u of b.units.filter(alive)) {
@@ -406,14 +424,25 @@ export function step(b, dt) {
     u.wasMoving = false;
     if (goal) {
       const d = dist(u, goal);
-      const sp = u.speed * (u.routed ? 1.15 : 1) * dt;
+      // Arazi: engel varsa yol (köprüyü bulur), ormanda ve yokuşta yavaş.
+      let aim = goal;
+      if (F.obstacles) {
+        const key = `${Math.round(goal.x / 2)},${Math.round(goal.y / 2)}`;
+        if (u.pathKey !== key || b.t - (u.pathAt ?? -9) > 1.5) { u.path = pathOn(F, u, goal, u.mounted || u.type === "cav"); u.pathKey = key; u.pathAt = b.t; }
+        while (u.path.length > 1 && dist(u, u.path[0]) < 1.2) u.path.shift();
+        aim = u.path[0] ?? goal;
+      }
+      const ground = kindAt(F, u.x, u.y) === FOREST ? (u.mounted || u.type === "cav" ? T.terrain.forestMounted : T.terrain.forest) : 1;
+      const sp = u.speed * (u.routed ? 1.15 : 1) * ground * (1 - T.terrain.hillSlow * heightAt(F, u.x, u.y)) * dt;
       if (d > 0.3) {
         // Uzaktaysa yürüdüğü yöne, varmak üzereyken (ya da yanına kayarken) emredilen cepheye döner.
-        const to = goal.facing != null && d < 4 ? goal.facing : Math.atan2(goal.y - u.y, goal.x - u.x);
+        const da = dist(u, aim) || 1;
+        const to = goal.facing != null && d < 4 ? goal.facing : Math.atan2(aim.y - u.y, aim.x - u.x);
         turn(u, to, (u.routed ? 6 : T.turn.march) * dt);
-        const k = Math.min(1, sp / d);
-        u.x += (goal.x - u.x) * k;
-        u.y += (goal.y - u.y) * k;
+        const k = Math.min(1, sp / da);
+        const nx = u.x + (aim.x - u.x) * k, ny = u.y + (aim.y - u.y) * k;
+        if (passable(F, nx, ny)) { u.x = nx; u.y = ny; }
+        else { u.pathAt = -9; }
         u.wasMoving = true;
       } else if (u.order && !u.order.unit) {
         if (u.order.facing != null) u.facing = u.order.facing;
@@ -441,8 +470,12 @@ export function step(b, dt) {
       else u.x = Math.max(u.x, T.wallX + ex + 0.4);
     }
   }
+  // İtilip suya ya da eve giren birlik eski yerine.
+  if (F.obstacles) for (const u of b.units) if (alive(u) && !passable(F, u.x, u.y)) { u.x = u.px; u.y = u.py; }
   b.touch = contactMap(b);
   const sideMul = (v, u) => ({ front: 1, flank: T.flank.side, rear: T.flank.rear })[faceOf(v, u)];
+  // Tepeden aşağı vuran güçlü, yokuş yukarı vuran zayıf.
+  const hill = (u, v) => 1 + T.terrain.height * Math.max(-1, Math.min(1, heightAt(F, u.x, u.y) - heightAt(F, v.x, v.y)));
   // 2. Hücum: atlı birlik yeni değdiği düşmana dalar (okçuya tam, ötekine az; yandan ve arkadan daha
   // çok); falanks durdurur (önden).
   for (const u of b.units.filter((v) => alive(v) && !v.routed && v.charge > 0)) {
@@ -452,7 +485,8 @@ export function step(b, dt) {
       u.hit.add(v.id);
       const face = faceOf(v, u);
       const stop = v.stop > 0 && face === "front" ? (v.men / N.company) * v.stop : 0;
-      const raw = (u.men / N.company) * N.charge * u.charge * T.charge * (v.kind === "arch" ? 1 : T.chargeOther) * b.sides[u.side].muls.power * sideMul(v, u);
+      const wood = kindAt(F, v.x, v.y) === FOREST || kindAt(F, u.x, u.y) === FOREST ? T.terrain.forestCharge : 1;
+      const raw = (u.men / N.company) * N.charge * u.charge * T.charge * (v.kind === "arch" ? 1 : T.chargeOther) * b.sides[u.side].muls.power * sideMul(v, u) * wood * hill(u, v);
       const kills = Math.max(0, raw - stop * N.charge * T.charge);
       hurt(b, v, kills);
       v.morale -= kills > 0 ? T.morale.charge * (face === "front" ? 1 : 1.5) : 0;
@@ -468,11 +502,13 @@ export function step(b, dt) {
     const cs = contacts(b, u);
     if (!cs.length) continue;
     const fighters = Math.min(u.men, footprint(u).cols * T.ranks);
-    const out = fighters * u.melee * b.sides[u.side].muls.power * T.melee * dt;
+    // Ormanda atlı zayıf.
+    const wood = (u.mounted || u.type === "cav") && kindAt(F, u.x, u.y) === FOREST ? T.terrain.forestCav : 1;
+    const out = fighters * u.melee * b.sides[u.side].muls.power * T.melee * wood * dt;
     const tgt = cs.find((v) => v.id === u.order?.unit) ?? cs[0];
     for (const v of cs) {
       const share = cs.length === 1 ? 1 : v === tgt ? 0.7 : 0.3 / (cs.length - 1);
-      dmg.set(v, (dmg.get(v) ?? 0) + out * share * sideMul(v, u));
+      dmg.set(v, (dmg.get(v) ?? 0) + out * share * sideMul(v, u) * hill(u, v));
       const face = faceOf(v, u);
       if (face === "flank") v.morale -= T.morale.flanked * dt;
       if (face === "rear") v.morale -= T.morale.rear * dt;
@@ -485,11 +521,13 @@ export function step(b, dt) {
     u.cool -= dt;
     if (u.cool > 0 || contacts(b, u).length) continue;
     const ordered = u.order?.unit ? unitById(b, u.order.unit) : null;
-    const inRange = foes(b, u).filter((v) => dist(u, v) <= T.volley.range);
+    const range = T.volley.range * (1 + T.terrain.hillRange * heightAt(F, u.x, u.y));
+    const inRange = foes(b, u).filter((v) => dist(u, v) <= range);
     const t = ordered && inRange.includes(ordered) ? ordered : inRange.reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
     if (!t) continue;
     u.cool = T.volley.every * (0.9 + b.rand() * 0.2);
-    const kills = (u.men / N.company) * N.volley * u.shoot * b.sides[u.side].muls.volley * T.volley.kill * (0.85 + b.rand() * 0.3);
+    const trees = kindAt(F, t.x, t.y) === FOREST ? T.terrain.forestArrow : 1;
+    const kills = (u.men / N.company) * N.volley * u.shoot * b.sides[u.side].muls.volley * T.volley.kill * trees * (0.85 + b.rand() * 0.3);
     b.shots.push({ from: { x: u.x, y: u.y }, to: t.id, at: { x: t.x, y: t.y }, t0: b.t, t1: b.t + T.volley.flight, kills, side: u.side, n: Math.min(12, Math.ceil(u.men / 3)) });
   }
   for (const s of b.shots.filter((x) => x.t1 <= b.t)) {

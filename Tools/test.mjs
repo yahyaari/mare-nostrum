@@ -1195,6 +1195,57 @@ section("Taktik savaş (bölüm 29)");
   const front = routIn("none"), rear = routIn("rear");
   check("arkadan vurulan birlik çabuk bozulur", rear.face === "rear" && rear.t < 15 && front.t > rear.t * 3, `${front.t.toFixed(1)} / ${rear.t.toFixed(1)}`);
 
+  // Arazi (bölüm 29b; kullanıcı 26.10: "dağlar nehirler köprüler olsun, coğrafyaya göre şekillensin").
+  const FL = await import("../src/rules/field.js");
+  const gaul = { at: { x: POS.bibracte.x - 0.75, y: POS.bibracte.y + 0.25 }, dir: 0, place: null, seed: 9 };
+  const F1 = FL.makeField(gaul), F2 = FL.makeField(gaul);
+  check("saha tohumla hep aynı", F1.kind.every((k, i) => k === F2.kind[i]) && F1.bridges.length === F2.bridges.length);
+  check("Galya'da gerçek nehir, köprüleri ve orman var", F1.rivers.length > 0 && F1.bridges.length > 0 && F1.kind.some((k) => k === FL.FOREST));
+  check("köprü yürünür, nehir yürünmez", F1.bridges.every((br) => FL.passable(F1, br.x, br.y)) && F1.kind.some((k, i) => k === FL.WATER && !FL.passable(F1, i % F1.w + 0.5, Math.floor(i / F1.w) + 0.5)));
+  const tar = FL.makeField({ at: { x: POS.tarentum.x - 0.3, y: POS.tarentum.y }, dir: 0, place: "tarentum", attacked: true, seed: 2 });
+  check("kıyıda deniz, saldırılan yerin adı ve evleri", tar.sea && tar.labels.some((l) => l.kind === "place" && l.id === "tarentum") && tar.houses.length > 0);
+  const alps = FL.makeField({ at: { x: POS.mediolanum.x, y: POS.mediolanum.y - 0.4 }, dir: Math.PI / 2, place: null, seed: 5 });
+  check("dağ sırasının yakınında tepeler, sıranın adıyla", alps.hills.length > 0 && alps.labels.some((l) => l.kind === "range" && l.id === "alps"));
+  const flat = FL.makeField({ at: { x: POS.babylon.x + 2, y: POS.babylon.y + 1 }, dir: 0, place: null, seed: 4, river: true });
+  check("nehir geçişinde sahada gerçek nehir yoksa ortadan bir nehir, köprülü", flat.rivers.length > 0 && flat.bridges.length > 0);
+  // Yol bulma: nehrin karşısına köprüden.
+  const br = F1.bridges[0];
+  const bc = Math.cos(br.a), bs = Math.sin(br.a);
+  const from = { x: br.x - bc * 8, y: br.y - bs * 8 }, to = { x: br.x + bc * 8, y: br.y + bs * 8 };
+  const path = FL.pathOn(F1, from, to);
+  let ok = true, prev = from;
+  for (const p of path) { const n = Math.ceil(Math.hypot(p.x - prev.x, p.y - prev.y) / 0.5); for (let i = 1; i <= n; i++) if (!FL.passable(F1, prev.x + ((p.x - prev.x) * i) / n, prev.y + ((p.y - prev.y) * i) / n)) ok = false; prev = p; }
+  check("yol bulma suya girmeden karşı kıyıya varır", path.length > 0 && ok && Math.hypot(path.at(-1).x - to.x, path.at(-1).y - to.y) < 0.01);
+  // Karşı kıyıdaki düşmanla göğüs göğüse dövüşülmez; tepeden vuran güçlü; ormanda yavaş.
+  // İki birlik nehrin iki kıyısında, aralarında yalnız su (köprüden uzak): değseler de dövüşmezler.
+  let rv = null, spot = null;
+  for (const line of F1.rivers) {
+    spot = line.map((p, i) => ({ p, i })).find(({ p, i }) => i > 0 && i < line.length - 1 && p.x > 8 && p.x < F1.w - 8 && p.y > 8 && p.y < F1.h - 8 && F1.bridges.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > 7));
+    if (spot) { rv = line; break; }
+  }
+  const rb = TC.setupBattle({ civ: "rome", inf: 40 }, { civ: "gaul", inf: 40 }, null, 1, F1);
+  const [ra, rd] = [rb.units.find((u) => u.side === "att"), rb.units.find((u) => u.side === "def")];
+  const q0 = rv[spot.i - 1], q1 = rv[spot.i + 1], ql = Math.hypot(q1.x - q0.x, q1.y - q0.y);
+  const nx = -(q1.y - q0.y) / ql, ny = (q1.x - q0.x) / ql, off = N.tactics.terrain.riverWidth / 2 + TC.footprint(ra).d / 2 + 0.3;
+  Object.assign(ra, { x: spot.p.x - nx * off, y: spot.p.y - ny * off, facing: Math.atan2(ny, nx) });
+  Object.assign(rd, { x: spot.p.x + nx * off, y: spot.p.y + ny * off, facing: Math.atan2(-ny, -nx) });
+  const m0 = ra.men + rd.men;
+  for (let i = 0; i < 10; i++) TC.step(rb, 0.1);
+  check("nehrin karşı kıyısıyla göğüs göğüse dövüşülmez", !ra.engaged && !rd.engaged && ra.men + rd.men === m0);
+  const hillB = TC.setupBattle({ civ: "gaul", inf: 40 }, { civ: "gaul", inf: 40 }, null, 1, alps);
+  const top = alps.hills[0];
+  const hillA = hillB.units.find((u) => u.side === "att");
+  Object.assign(hillA, { x: top.x, y: top.y, facing: 0 });
+  check("tepenin üstü yüksek", FL.heightAt(alps, top.x, top.y) > 0.3 && FL.heightAt(alps, top.x, top.y) > FL.heightAt(alps, 2, 2));
+  const wood = TC.setupBattle({ civ: "rome", inf: 40 }, { civ: "gaul", inf: 40 }, null, 1, F1);
+  const fx = F1.kind.findIndex((k) => k === FL.FOREST);
+  const wu = wood.units.find((u) => u.side === "att");
+  Object.assign(wu, { x: (fx % F1.w) + 0.5, y: Math.floor(fx / F1.w) + 0.5 });
+  const wx0 = wu.x;
+  TC.command(wood, [wu.id], { x: wu.x + 0.6, y: wu.y });
+  TC.step(wood, 0.1);
+  check("ormanda yürüyüş yavaş", wu.x - wx0 < N.tactics.speed.inf * 0.1 * 0.9 && wu.x > wx0 - 1e-9, (wu.x - wx0).toFixed(3));
+
   // Kurallara hazır sonuç: yer alınır, sağ kalanlar ordunun askeri olur.
   const g = S.newGame("rome", 7);
   const a = raise(g, "rome", { inf: 120 });

@@ -99,10 +99,10 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
 20. **Taktik savaş** (f9b452d; kullanıcı bir görsel gönderdi - tepeden saha, nokta blokları - "sonuçları gör
     ve savaş seçeneği olsun ... tıklayıp şuraya git buraya git"): kurallar.md bölüm 29, `src/rules/tactics.js`,
     `src/view/tactics.js`. Saldırı penceresinde Sonucu gör / ⚔ Savaş.
-21. **Bölük, diziliş, kuşatma** (bu adım; "40 piyadeyi ikiye ayıramadım, uzatabilsem, etrafını sarsalar"):
+21. **Bölük, diziliş, kuşatma** (db6d9f0; "40 piyadeyi ikiye ayıramadım, uzatabilsem, etrafını sarsalar"):
     Böl / Birleştir / Genişlet / Derinleştir, sağ sürükleyerek hat, yandan x1.5 / arkadan x2. kurallar.md 29.
-    Sırada (kullanıcı aynı anda istedi): savaş sahasında arazi - dağ, nehir, köprü, orman, köy, haritadaki
-    yere göre.
+22. **Savaş sahasının arazisi** (bu adım; kullanıcı görsel gönderdi - nehir, köy, dağ): kurallar.md 29b,
+    `src/rules/field.js`. Gerçek kıyı, nehir, orman, dağ; köprüler, köy; yol bulma, tepe ve orman etkileri.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

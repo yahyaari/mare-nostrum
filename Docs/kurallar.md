@@ -1113,3 +1113,28 @@ süvari ayrılsın". `src/rules/tactics.js` (kurallar, saf), `src/view/tactics.j
 - **Ayar:** iki tarafı da bilgisayara oynatılan 300 rastgele savaşta kazanan %83 otomatik savaşla aynı
   (güç farkı belirgin olanlarda %88; diziliş ve kuşatma gelince %87'den indi - kendiliğinden yandan çarpışmalar);
   kazananın kaybı otomatikte %29, taktikte %24. Ortanca savaş ~40 sn (x1 hızda), surlu yerde daha uzun. 1200 askerlik bir savaşın tamamı 0.1 sn'de hesaplanıyor.
+
+### 29b. Savaş sahasının arazisi
+
+Kullanıcı 26.10 (bir görsel gönderdi: ağaçlı kıyılarıyla bir nehir, yanında "Ridaniye Köyü", büyük bir dağ, adlarıyla):
+"haritalarda dağlar nehirler köprüler olsun, harita çeşitliliği açısından; coğrafyaya göre şekillensin".
+`src/rules/field.js`; çizimi `view/tactics.js` (bir kere önbelleğe çizilir).
+
+- **Nereden:** saha, savaşın haritadaki yerinin çevresi - saldırandan savunana bakan 1.2 x 0.72 harita
+  birimlik bir dikdörtgen (meydan muharebesinde iki ordunun ortası; yerleşime saldırıda yerleşimin 0.35
+  önü, yerleşim savunanın ardında kalır). Gerçek veriden: **deniz** (kıyı çizgileri, 2 birimde bir
+  örnek), **nehirler** (Natural Earth çizgileri, kıvrımlı, 4 birim geniş, kıyıları ağaçlı), **orman**
+  (çevredeki ağaç noktalarının sayısı kadar öbek, en çok 7; dizilme yerlerinin önü açık), **dağ** (yer dağ
+  karesiyse ya da yol dağ geçidiyse 3 tepe - en büyüğü kayalık kenarlı, dağ sırasının adıyla; dağ sırasının
+  yakınındaysa 2; düzlükte belki bir alçak tepe), **köy** (saldırılan sursuz yerin evleri ve adı; meydan
+  muharebesinde yakındaki yerleşim sahanın ortasına düşerse). Yol nehirden geçiyorsa (moves.js
+  terrainOf) ve sahada gerçek nehir yoksa ortadan bir nehir. Surlu yerde nehir yok.
+- **Köprüler:** her nehirde, iki ordunun arasına en yakın noktada bir köprü, nehir uzunsa bir tane daha.
+- **Etkiler:** su ve evler geçilmez - birlikler yolu kendileri bulur (2 birimlik ızgarada A*, ormanı pahalı
+  sayar; köprüye gider); karşı kıyıdaki düşmanla göğüs göğüse dövüşülmez (oklar geçer). Ormanda yürüyüş
+  x0.6 (atlı x0.45), atlı göğüs göğüse x0.7, hücum x0.5, ormandakine ok x0.55. Yokuşta yavaşlama
+  (yükseklik x0.25). Tepeden aşağı vuran 1 + 0.35 x yükseklik farkı kadar güçlü (yokuş yukarı zayıf);
+  tepedeki okçunun menzili 1 + 0.3 x yükseklik.
+- **Görünüm:** tepeler iç içe gürültülü halkalar (dağ kalın, kayalık kenarlı), su kıyı rengiyle, nehir
+  üç katlı çizgi, orman tek tek ağaç tepeleri, köprüler tahta, evler, köy ve dağ adları altın yazıyla.
+- Hız: saha ~0.1-0.3 sn'de kurulur; engelli sahada 880 askerlik bir savaşın tamamı 0.35 sn'de hesaplanır.

@@ -36,6 +36,7 @@ import { besiege, lift } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
 import { sendSpy } from "./rules/spies.js";
 import { SCENE_MS } from "./view/battle.js";
+import { makeField } from "./rules/field.js";
 import { aiOrders, command as tacCommand, merge as tacMerge, orderLine, outcome, planLine, reshape, setupBattle, split as tacSplit, step as stepBattle } from "./rules/tactics.js";
 import { drawTactics, toField, unitAt } from "./view/tactics.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
@@ -1103,8 +1104,19 @@ function dispatch(act) {
       const defOwner = t ? t.owner : game.places[m.id].owner;
       const place = PLACES.find((p) => p.id === (t ? nearestPlace(t) : m.id)).name[ui.lang];
       const enemy = t ? (t.bandit ? T().bandits : t.camp ? T().barbCamp : t.horde ? T().horde : t.barbarian ? T().barbarians : civName(t.owner, ui.lang)) : civName(defOwner, ui.lang, T().free);
+      // Saha: savaşın haritadaki yerinden (field.js) - saldırandan savunana bakan, kıyı, nehir, orman, dağ, köy.
+      const seed = ((game.turn * 7919 + a.id * 131) % 99991) + 1;
+      const goal = t ? { x: t.x, y: t.y } : POS[m.id];
+      const dir = Math.hypot(goal.x - a.x, goal.y - a.y) > 1e-6 ? Math.atan2(goal.y - a.y, goal.x - a.x) : 0;
+      const np = t ? nearestPlace(t) : m.id;
+      const field = makeField({
+        seed, dir, walls: t ? null : sd.walls, attacked: !t,
+        at: t ? { x: (a.x + t.x) / 2, y: (a.y + t.y) / 2 } : { x: goal.x - Math.cos(dir) * 0.35, y: goal.y - Math.sin(dir) * 0.35 },
+        place: t ? (Math.hypot(POS[np].x - t.x, POS[np].y - t.y) < 0.7 ? np : null) : m.id,
+        river: !t && (sd.ter?.att ?? 1) < 1, pass: t ? (sd.def.terrain ?? 1) > 1 : (sd.ter?.def ?? 1) > 1,
+      });
       ui.battle = {
-        b: setupBattle(sd.att, sd.def, t ? null : sd.walls, ((game.turn * 7919 + a.id * 131) % 99991) + 1),
+        b: setupBattle(sd.att, sd.def, t ? null : sd.walls, seed, field),
         m: { ...m }, sel: new Set(), speed: 1, paused: true, auto: false, last: performance.now(), aiAt: 0, drag: null,
         owners: { att: me, def: defOwner }, names: { att: civName(me, ui.lang), def: enemy }, title: fill(T().tacTitle, place),
       };

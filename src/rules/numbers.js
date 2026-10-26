@@ -79,6 +79,10 @@ export const N = {
     // Kuşatma (kullanıcı 26.10: "düşmanın etrafını sarsalar"): yandan vuran x`side`, arkadan x`rear` öldürür;
     // dönüş hızı (radyan/sn): yürürken, dövüşürken (yavaş: sarılan arkasını hemen toplayamaz), dururken
     // `near` birimdeki düşmana. Bölünen birliğin her yarısı en az `minSplit` asker; birleşecekler `mergeReach` içinde.
+    // Arazi (field.js): nehrin genişliği; ormanda hız (atlı daha yavaş), atlının göğüs göğüse ve hücum gücü,
+    // ormana giren okların payı; yokuşta yavaşlama (yükseklik x); tepeden vuruş (yükseklik farkı x); tepedeki
+    // okçunun menzili (yükseklik x).
+    terrain: { riverWidth: 4, forest: 0.6, forestMounted: 0.45, forestCav: 0.7, forestCharge: 0.5, forestArrow: 0.55, hillSlow: 0.25, height: 0.35, hillRange: 0.3 },
     flank: { side: 1.5, rear: 2 }, turn: { march: 3, fight: 0.5, idle: 1.2, near: 14 }, minSplit: 5, mergeReach: 20,
   },
   // Ticaret yolları (bölüm 28, trade.js): karadan `reach`, iki liman arasında `seaReach` birime kadar;
