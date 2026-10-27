@@ -1291,6 +1291,201 @@ section("Taktik savaş: tavır ve dizilme (bölüm 29)");
   check("dizilirken hat çizimi birlikleri hatta ışınlar", zb.units.filter((u) => u.side === "att").every((u) => Math.abs(u.x - 25) < 6 && u.order == null));
 }
 
+section("Tahıl alımı ve hızlandırma (bölüm 3b, 4)");
+{
+  // Kullanıcı 27.10, önerilerden: "bilgisayarın kasası geç oyunda on binlerce para; harcayacak yeri yok".
+  const g = S.newGame("rome", 7);
+  const cap0 = S.grainCap(g, "rome");
+  g.places.rome.market = 2;
+  check("tahıl tavanı pazarla artar", S.grainCap(g, "rome") === cap0 + 2 * N.grain.market);
+  const b0 = S.budget(g, "rome");
+  g.civs.rome.grain = 6;
+  const b1 = S.budget(g, "rome");
+  check("tahıl alımı: buğday gelir, para gider", b1.food === b0.food + 6 && Math.abs(b1.money - (b0.money - 6 * N.grain.price)) < 1e-9 && b1.grain === 6);
+  g.civs.rome.grain = 999;
+  check("tavandan fazlası alınmaz", S.budget(g, "rome").grain === S.grainCap(g, "rome"));
+  g.civs.rome.money = 5;
+  check("kasanın yetmediği alınmaz", S.budget(g, "rome").grain === Math.floor(5 / N.grain.price));
+  // Hızlandırma: kalan turların parası iki katıyla, iş bu tur sonunda biter.
+  const h = S.newGame("rome", 7);
+  h.civs.rome.money = 500;
+  S.upgrade(h, "rome", "barracks");
+  const job = h.places.rome.builds[0];
+  const r = S.rushInfo(h, "rome", "barracks");
+  check("hızlandırmanın fiyatı kalan turlarla", r.cost === Math.ceil((job.left - 1) * (job.paid / job.total) * N.rush) && !r.why, JSON.stringify(r));
+  const m0 = h.civs.rome.money, lv = h.places.rome.barracks;
+  check("hızlandırılan iş bu tur sonunda biter", S.rush(h, "rome", "barracks") && h.civs.rome.money === m0 - r.cost && T.endTurn(h) && h.places.rome.barracks === lv + 1);
+  check("bitmek üzere olan iş hızlandırılmaz", (() => { const k = S.newGame("rome", 7); k.civs.rome.money = 500; S.upgrade(k, "rome", "farms"); k.places.rome.builds[0].left = 1; return S.rushInfo(k, "rome", "farms").why === "soon"; })());
+  // Bilgisayar: kasası dolunca tahıl alır, işini hızlandırır.
+  const AI = await import("../src/rules/ai.js");
+  const q = S.newGame("rome", 7);
+  q.civs.carthage.money = 5000;
+  S.upgrade(q, "carthage", "farms");
+  AI.aiTurn(q, "carthage", []);
+  check("kasası dolu bilgisayar tahıl alır ve inşaatını hızlandırır", (q.civs.carthage.grain ?? 0) > 0 && q.places.carthage.builds.every((b) => b.left === 1), JSON.stringify(q.places.carthage.builds));
+}
+
+section("Takviye (bölüm 7b)");
+{
+  // Kullanıcı 27.10: yakındaki dost ordular savaşa katılsın, taktik savaşta sahanın kenarından girsin.
+  const MAP2 = await import("../src/rules/map.js"), TC4 = await import("../src/rules/tactics.js");
+  const near = (id, k = 0) => MAP2.centre(MAP2.around(MAP2.PLACE_CELL[id]).map(([x]) => x).filter((x) => MAP2.isLand(x) && !MAP2.placeAtCell(x))[k]);
+  const g = S.newGame("rome", 7);
+  const main = S.formArmy(g, "rome", 10, 0), help = S.formArmy(g, "rome", 10, 0), far = S.formArmy(g, "tarentum", 10, 0);
+  Object.assign(main, near("mediolanum", 0), { at: null, mp: 4, inf: 60 });
+  Object.assign(help, near("mediolanum", 1), { at: null, mp: 4, inf: 40, elite: 0 });
+  const H = M.helpersOf(g, "rome", MAP2.POS.mediolanum, [main]);
+  check("yakındaki ordu takviye, uzaktaki değil", H.includes(help) && !H.includes(far));
+  const sd = M.sides(g, main, "rome", "mediolanum");
+  const P = N.reinforce.part, half = (n) => Math.floor(n * P);
+  check("saldıranın tarafı takviyenin savaşa yetişen kısmını da sayar", sd.att.inf === 60 + half(40) && sd.att.help.length === 1);
+  const ev = M.attack(g, main.id, "mediolanum", [1, 1]);
+  check("takviyeyle kazanılır, sağ kalanlar ordulara getirdikleri oranda, yetişmeyen kısım dokunulmaz, takviye yerinde kalır", ev.won && ev.help?.att === 1 && main.inf + help.inf === ev.after.att.inf + (40 - half(40)) && help.inf > 40 - half(40) && help.inf < 40 && main.at === "mediolanum" && help.at !== "mediolanum" && Math.abs(main.inf / 60 - (help.inf - (40 - half(40))) / half(40)) < 0.12, `${main.inf} ${help.inf} ${ev.after.att.inf}`);
+  // Savunanın dışarıdaki ordusu da savunur; saldıran kaybedince kayıp ona da düşer.
+  const d = S.newGame("rome", 7);
+  d.relations[S.key("rome", "gaul")] = "war";
+  const att = S.formArmy(d, "rome", 10, 0);
+  Object.assign(att, near("bibracte", 0), { at: null, mp: 4, inf: 150 });
+  const guard = S.formArmy(d, "bibracte", 10, 0);
+  Object.assign(guard, near("bibracte", 2), { at: null, inf: 120 });
+  const sd2 = M.sides(d, att, "rome", "bibracte");
+  check("savunanın yerin dışındaki ordusu da savunur", sd2.def.help.includes(guard) && sd2.def.inf >= half(120) + d.places.bibracte.inf);
+  const ev2 = M.attack(d, att.id, "bibracte", [1, 1]);
+  check("savunan takviye kazanınca o da kayıp verir, yalnız yetişen kısmı", !ev2.won && guard.inf < 120 && guard.inf >= 120 - half(120), `${guard.inf}`);
+  // Meydan muharebesi: iki tarafın da yakın orduları; yenilen takviye yerinde kalır ya da dağılır.
+  const e = S.newGame("rome", 7);
+  e.relations[S.key("rome", "gaul")] = "war";
+  const x = S.formArmy(e, "rome", 10, 0), y = S.formArmy(e, "rome", 10, 0);
+  const t = S.formArmy(e, "bibracte", 10, 0), u = S.formArmy(e, "bibracte", 10, 0);
+  const spot = near("mediolanum", 0);
+  Object.assign(t, { ...spot, at: null, inf: 60 });
+  Object.assign(u, { x: spot.x + 0.5, y: spot.y, at: null, inf: 60 });
+  Object.assign(x, { x: spot.x - 0.5, y: spot.y, at: null, mp: 4, inf: 100 });
+  Object.assign(y, { x: spot.x - 0.9, y: spot.y + 0.2, at: null, mp: 4, inf: 100 });
+  const sf = M.fieldSides(e, x, t);
+  check("meydan muharebesinde iki tarafın takviyesi", sf.att.help.includes(y) && sf.def.help.includes(u) && sf.att.inf === 100 + half(100) && sf.def.inf === 60 + half(60));
+  const ev3 = M.strike(e, x.id, t.id, [1, 1]);
+  check("meydanda kazanan takviye sağ, yenilen takviye kaçabildiyse yerinde", ev3.won && y.inf > 0 && x.inf > 0 && (S.armyById(e, u.id) ? u.at === null && u.inf >= N.retreat.min : true));
+  // Taktik savaş: takviye sonra girer; gelene kadar savaş bitmez, sağ kalanlara sayılır.
+  const b = TC4.setupBattle({ civ: "rome", inf: 80, help: [{ id: 9, x: 0.6, y: 0, inf: 40, arch: 0, cav: 0, siege: 0, elite: 0 }], near: { x: 0, y: 0 } }, { civ: "gaul", inf: 60 }, null, 3);
+  const men0 = b.units.filter((v) => v.side === "att").reduce((n, v) => n + v.men, 0);
+  check("taktik savaşta takviye başta sahada değil", men0 === 40 && b.reserve.length === 1 && b.reserve[0].men === 40 && b.reserve[0].arrive > N.reinforce.delay, `${men0}`);
+  check("yoldaki takviye sağ kalanlara sayılır", TC4.outcome({ ...b, over: { winner: "def" } }).escaped.inf === 80);
+  for (const v of b.units.filter((w) => w.side === "att")) v.dead = true;
+  TC4.step(b, 0.1);
+  check("yolda takviyesi olan taraf yenilmiş sayılmaz", !b.over);
+  while (b.t < b.reserve[0].arrive + 0.2) TC4.step(b, 0.1);
+  check("takviye vakti gelince kenardan girer", b.reserve[0].in && b.units.filter((v) => v.side === "att" && !v.dead).length > 0 && b.units.filter((v) => v.side === "att" && !v.dead).every((v) => v.x < 12) && b.fx.some((fx) => fx.kind === "reinforce"));
+}
+
+section("Dizilişler ve yetenekler (bölüm 29f)");
+{
+  // Kullanıcı 27.10: "Roma'ya kaplumbağa, Makedonya'ya falanks, atlılara kama" ve her medeniyete bir yetenek.
+  const TC5 = await import("../src/rules/tactics.js");
+  const of = (civ, type) => { const b = TC5.setupBattle({ civ, inf: 40, cav: 30, arch: 30, elite: 30 }, { civ: "gaul", inf: 40 }, null, 3); return TC5.abilityOf(b, b.units.find((u) => u.side === "att" && u.type === type)); };
+  check("Roma piyadesine kaplumbağa, Makedonya'ya falanks, atlılara kama", of("rome", "inf") === "testudo" && of("macedon", "inf") === "phalanx" && of("rome", "cav") === "wedge" && of("egypt", "cav") === "wedge");
+  check("Partların atlısına ağır kama, Galya'ya nara, Kartaca'nın filine fil hücumu, Mısır okçusuna ateşli ok, Saka atlı okçusuna çember", of("parthia", "cav") === "heavyWedge" && of("gaul", "inf") === "warcry" && of("carthage", "elite") === "stampede" && of("egypt", "arch") === "fire" && of("saka", "elite") === "circle");
+  // Kaplumbağa: aynı ok yağmuru dörtte bir işler.
+  const arrows = (stance) => {
+    const b = TC5.setupBattle({ civ: "gaul", arch: 30 }, { civ: "rome", inf: 40 }, null, 3);
+    const [ar, inf] = [b.units.find((u) => u.side === "att"), b.units.find((u) => u.side === "def")];
+    Object.assign(ar, { x: 30, y: 30, facing: 0 });
+    Object.assign(inf, { x: 50, y: 30, facing: Math.PI });
+    if (stance) TC5.useAbility(b, [inf.id]);
+    for (let i = 0; i < 100; i++) TC5.step(b, 0.1);
+    return 40 - inf.men;
+  };
+  const bare = arrows(false), shell = arrows(true);
+  check("kaplumbağa oklardan az yer", bare > 2 && shell < bare * 0.4, `${bare.toFixed(1)} / ${shell.toFixed(1)}`);
+  // Falanks: önden gelen darbe az işler, hücum durur.
+  const clash = (stance) => {
+    const b = TC5.setupBattle({ civ: "gaul", inf: 40 }, { civ: "macedon", inf: 40 }, null, 3);
+    const [x, y] = [b.units.find((u) => u.side === "att"), b.units.find((u) => u.side === "def")];
+    Object.assign(x, { x: 40, y: 30, facing: 0 });
+    Object.assign(y, { x: 40 + TC5.footprint(x).d / 2 + TC5.footprint(y).d / 2 + 0.3, y: 30, facing: Math.PI });
+    if (stance) TC5.useAbility(b, [y.id]);
+    for (let i = 0; i < 80; i++) TC5.step(b, 0.1);
+    return 40 - y.men;
+  };
+  check("falanks önden az yer", clash(true) < clash(false) * 0.75, `${clash(false).toFixed(1)} / ${clash(true).toFixed(1)}`);
+  // Yetenek: hazırsa süreli; beklerken yeniden kullanılmaz. Nara yakındaki düşmanı sarsar, surun ardındakini değil.
+  const w = TC5.setupBattle({ civ: "gaul", inf: 40 }, { civ: "rome", inf: 40 }, null, 3);
+  const [g1, r1] = [w.units.find((u) => u.side === "att"), w.units.find((u) => u.side === "def")];
+  Object.assign(g1, { x: 40, y: 30 });
+  Object.assign(r1, { x: 50, y: 30 });
+  const m0 = r1.morale;
+  check("savaş narası yakındaki düşmanı sarsar", TC5.useAbility(w, [g1.id]) === 1 && r1.morale === m0 - N.tactics.abilities.warcry.shock && TC5.active(w, g1, "warcry"));
+  check("yetenek beklerken yeniden kullanılmaz", TC5.useAbility(w, [g1.id]) === 0);
+  w.t += N.tactics.abilities.warcry.time + 0.1;
+  check("yeteneğin süresi biter", !TC5.active(w, g1, "warcry"));
+  const ww = TC5.setupBattle({ civ: "gaul", inf: 40 }, { civ: "rome", inf: 40 }, "city", 3);
+  const [g2, r2] = [ww.units.find((u) => u.side === "att"), ww.units.find((u) => u.side === "def")];
+  Object.assign(g2, { x: ww.field.city.x0 - 4, y: ww.field.city.cy });
+  Object.assign(r2, { x: ww.field.city.x0 + 4, y: ww.field.city.cy });
+  const m1 = r2.morale;
+  TC5.useAbility(ww, [g2.id]);
+  check("nara surun ardındakini sarsmaz", r2.morale === m1);
+  // Kama: hücum daha sert.
+  const charge = (stance) => {
+    const b = TC5.setupBattle({ civ: "rome", cav: 30 }, { civ: "gaul", arch: 30 }, null, 3);
+    const [c, t] = [b.units.find((u) => u.side === "att"), b.units.find((u) => u.side === "def")];
+    Object.assign(c, { x: 30, y: 30, facing: 0 });
+    Object.assign(t, { x: 45, y: 30, facing: Math.PI });
+    if (stance) TC5.useAbility(b, [c.id]);
+    TC5.command(b, [c.id], { unit: t.id });
+    for (let i = 0; i < 40; i++) TC5.step(b, 0.1);
+    return 30 - t.men;
+  };
+  check("kama hücumu daha sert", charge(true) > charge(false) * 1.15, `${charge(false).toFixed(1)} / ${charge(true).toFixed(1)}`);
+}
+
+section("Hava ve gün saati (bölüm 29g)");
+{
+  // Kullanıcı 27.10, önerilerden: "yağmurda okçular zayıf, siste görüş kısa, gece saldırısı".
+  const WX = await import("../src/rules/weather.js"), TC6 = await import("../src/rules/tactics.js"), MAP3 = await import("../src/rules/map.js");
+  const g = S.newGame("rome", 7);
+  const at = MAP3.POS.bibracte;
+  check("aynı tur aynı yerde hava aynı", JSON.stringify(WX.weatherAt(g, at)) === JSON.stringify(WX.weatherAt(g, at)));
+  const tally = (place, winter) => {
+    const out = { clear: 0, rain: 0, fog: 0, snow: 0, night: 0 };
+    for (let t = 1; t <= 400; t++) {
+      g.turn = winter ? 4 * t : 4 * t - 2;
+      for (const dx of [0, 0.3, 0.6]) {
+        const w = WX.weatherAt(g, { x: MAP3.POS[place].x + dx, y: MAP3.POS[place].y });
+        out[w.sky]++;
+        if (w.time === "night") out.night++;
+      }
+    }
+    return out;
+  };
+  const gaulWinter = tally("bibracte", true), egyptSummer = tally("memphis", false);
+  check("kışın Galya'da kar yağar, yazın Mısır'da yağmur az, kar hiç", gaulWinter.snow > 100 && egyptSummer.snow === 0 && egyptSummer.rain < gaulWinter.rain / 2, JSON.stringify([gaulWinter, egyptSummer]));
+  check("gece savaşı arada bir", gaulWinter.night > 20 && gaulWinter.night < 200);
+  const rain = WX.weatherMods({ sky: "rain", time: "night" });
+  check("yağmurlu gecede ok, menzil, hücum zayıf", rain.volley < 0.6 && rain.range < 0.5 && rain.charge < 1);
+  // Otomatik savaş: yağmurda okçu ordusu zayıflar.
+  const side = (w) => ({ civ: null, arch: 100, inf: 20, wx: WX.weatherMods(w) });
+  const dry = C.fight(side({ sky: "clear", time: "day" }), { civ: null, inf: 100 }, null).volley.byAtt;
+  const wet = C.fight(side({ sky: "rain", time: "day" }), { civ: null, inf: 100 }, null).volley.byAtt;
+  check("yağmurda ok yağmuru zayıf", wet < dry * 0.8 && wet > 0, `${dry} / ${wet}`);
+  check("döküm havayı gösterir", C.explain(side({ sky: "rain", time: "day" }), { civ: null, inf: 100 }, null).att.some(([k]) => k === "wxArrows"));
+  // Taktik savaş: siste okçu ancak yakından atar.
+  const firstShot = (w) => {
+    const b = TC6.setupBattle({ civ: "gaul", arch: 30, weather: w, wx: WX.weatherMods(w) }, { civ: "rome", inf: 40 }, null, 3);
+    const [ar, inf] = [b.units.find((u) => u.side === "att"), b.units.find((u) => u.side === "def")];
+    Object.assign(ar, { x: 20, y: 30, facing: 0, cool: 0 });
+    Object.assign(inf, { x: 70, y: 30, facing: Math.PI });
+    TC6.command(b, [inf.id], { x: 10, y: 30 });
+    for (let i = 0; i < 300; i++) { TC6.step(b, 0.1); if (b.shots.length) return Math.hypot(inf.x - ar.x, inf.y - ar.y); }
+    return 0;
+  };
+  const clearAt = firstShot({ sky: "clear", time: "day" }), fogAt = firstShot({ sky: "fog", time: "day" });
+  check("siste ok ancak yakından atılır", fogAt > 0 && fogAt < clearAt * 0.7, `${clearAt.toFixed(1)} / ${fogAt.toFixed(1)}`);
+  // Taraflar havayı taşır: tahmin ile savaş aynı havayı görür.
+  const sd = M.sides(g, { inf: 50, x: at.x - 0.5, y: at.y, at: null }, "rome", "bibracte");
+  check("saldırının iki tarafı aynı havayı taşır", sd.att.weather && JSON.stringify(sd.att.weather) === JSON.stringify(sd.def.weather) && JSON.stringify(sd.att.weather) === JSON.stringify(WX.weatherAt(g, at)));
+}
+
 section("Sahada komutan (bölüm 29e)");
 {
   // Kullanıcı 27.10: komutan sahada - muhafızıyla, yanındakileri güçlendirir, düşerse ordu sarsılır.

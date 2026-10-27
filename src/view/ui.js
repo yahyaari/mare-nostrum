@@ -29,7 +29,7 @@ import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait, uniqueOf } from "../rules/numbers.js";
 import {
-  ACADEMY, BUILDINGS, PORT_UPGRADES, UPGRADES, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  ACADEMY, BUILDINGS, PORT_UPGRADES, UPGRADES, rushInfo, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -807,6 +807,14 @@ function buildingCards(ctx, game, boxes, T, id, list, x, y, w, h) {
   list.forEach((what, i) => buildingCard(ctx, game, boxes, T, id, what, x + i * (cw + gap), y, cw, h));
 }
 
+/** Süren inşaatı hızlandırma (bölüm 4): basılırsa { act, tip, cost }; para yetmiyorsa basılmaz, ipucunda neden. */
+function rushOf(game, id, what, T) {
+  const r = rushInfo(game, id, what);
+  if (r.why === "none") return null;
+  if (r.why === "soon") return { act: null, tip: T.rushSoon, cost: 0 };
+  return { act: r.why ? null : { do: "rush", id, what }, tip: [fill(T.rushTip, r.cost), r.why === "money" ? [T.whyMoney, "bad"] : null], cost: r.cost };
+}
+
 function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
   const u = upgradeInfo(game, id, what), pl = game.places[id];
   const next = u.why === "max" ? null : fill(T.nextLevel, effect(game, id, what, T));
@@ -822,8 +830,9 @@ function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
     sub: why ?? nowFx(game, id, what, T), subColor: u.now > 0 ? GOLD_LIGHT : "rgba(243,231,201,0.5)",
     state: b ? "busy" : u.why === "max" ? "max" : locked ? "locked" : u.why ? "off" : "ready",
     cost: { money: u.cost }, purse: game.civs[pl.owner], maxText: T.maxShort,
-    busy: b && { part: (b.total - b.left) / b.total, text: b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left), act: { do: "cancelBuild", id, what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)] },
-    tip: [...tip, u.why && u.why !== "max" ? [u.why === "done" ? T.whyJustTaken : whyText(u.why, T), "bad"] : null],
+    busy: b && { part: (b.total - b.left) / b.total, text: b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left), act: { do: "cancelBuild", id, what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)],
+      rush: rushOf(game, id, what, T) },
+    tip: [...tip, u.why && u.why !== "max" && u.why !== "building" ? [u.why === "done" ? T.whyJustTaken : whyText(u.why, T), "bad"] : null],
   });
 }
 
@@ -903,6 +912,18 @@ function actionCard(ctx, boxes, o) {
     lock(ctx, 0, -6);
     ctx.restore();
   }
+  // Süren inşaat: üstüne gelince ortada » ve hızlandırmanın fiyatı.
+  if (state === "busy" && o.busy.rush?.cost && hot) {
+    ctx.beginPath();
+    ctx.arc(ix + iw / 2, mid, 16, 0, TAU);
+    ctx.fillStyle = "rgba(20,14,8,0.75)";
+    ctx.fill();
+    ctx.strokeStyle = o.busy.rush.act ? GOLD_LIGHT : "rgba(243,231,201,0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    text(ctx, "»", ix + iw / 2, mid + 6, { bold: true, size: 17, color: o.busy.rush.act ? GOLD_LIGHT : "rgba(243,231,201,0.5)", align: "center" });
+    amount(ctx, "money", o.busy.rush.cost, ix + iw / 2 - 12, mid + 32, { size: 11, bold: true, color: o.busy.rush.act ? GOLD_LIGHT : "#f08a70" });
+  }
   // Üstüne gelince: ortada ▲ ya da +10.
   if (ready && hot) {
     ctx.beginPath();
@@ -934,7 +955,8 @@ function actionCard(ctx, boxes, o) {
   ctx.lineWidth = ready ? (hot ? 2.2 : 1.8) : 1.1;
   ctx.stroke();
   ctx.restore();
-  boxes.push({ x, y: o.y, w, h, act: ready ? o.act : null, tip: o.tip, want: o.act });
+  const rushTip = state === "busy" && o.busy.rush ? (Array.isArray(o.busy.rush.tip) ? o.busy.rush.tip : [o.busy.rush.tip]) : [];
+  boxes.push({ x, y: o.y, w, h, act: ready ? o.act : state === "busy" ? o.busy.rush?.act ?? null : null, tip: rushTip.length ? [...o.tip, ...rushTip] : o.tip, want: o.act });
   // İnşaat sürüyorsa sol üst köşede iptal.
   if (state === "busy") {
     const bx = x + 11, by = y + 11, chot = over(bx - 9, by - 9, 18, 18);
@@ -1931,6 +1953,12 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     sub = `${civName(pl.owner, ui.lang, T.free)} · ${T.walls}: ${wallsText(walls, T)}`;
     theirs = sd.def; theirOwner = pl.owner; theirGen = sd.def.gen;
   }
+  // Hava ve gün saati (bölüm 29g): alt başlığın sonunda.
+  const wth = sd.att.weather;
+  if (wth && !(sea && b)) {
+    const ws = [wth.sky !== "clear" ? T.sky[wth.sky] : null, T.dayTime[wth.time] || null].filter(Boolean).join(" · ");
+    if (ws) sub = `${sub} · ${ws}`;
+  }
   const pow = sea && b ? null : fight(sd.att, sd.def, walls);
   const ex = sea && b ? { att: [], def: [] } : explain(sd.att, sd.def, walls);
   const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id)), 552, { size: 12, italic: true }) : [];
@@ -1941,7 +1969,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   fit(ctx, sub, r.x + r.w / 2, r.y + 60, w, { italic: true, size: 12, color: INK.soft, align: "center" });
 
   // İki taraf: sol sen, sağ onlar.
-  const side = (bx, owner, u, label, gen, xp, power, flip) => {
+  const side = (bx, owner, u, label, gen, xp, power, flip, help = 0) => {
     const by = r.y + 74;
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.fillRect(bx, by, cw, 112);
@@ -1953,8 +1981,9 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     shield(ctx, owner, bx + 10, by + 12, 14);
     fit(ctx, label, bx + 30, by + 26, cw - 40, { bold: true, size: 14 });
     const rk = veteranRank(xp);
-    const tag = [gen ? `★ ${gen.name}` : null, rk ? T.ranks[rk] : null].filter(Boolean).join(" · ");
+    const tag = [gen ? `★ ${gen.name}` : null, rk ? T.ranks[rk] : null, help ? fill(T.helpTag, help) : null].filter(Boolean).join(" · ");
     if (tag) fit(ctx, tag, bx + 30, by + 43, cw - 40, { italic: true, size: 12, color: INK.warn });
+    if (help) boxes.push({ x: bx, y: by + 30, w: cw, h: 18, act: null, tip: [fill(T.helpTag, help), T.helpTip] });
     // Askerler: türlerine göre küçük figürler (en çok 9).
     const total = men(u);
     if (sea && b) {
@@ -1968,8 +1997,10 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
     fit(ctx, sea && b ? `⛵ ${fleetOf(u)} ${T.ships}` : total ? troops(T, u, owner) : "", bx + 10, by + 104, cw - 20, { size: 12 });
     if (power !== null) text(ctx, fill(T.powerN, Math.round(power)), bx + cw - 10, by + 26, { bold: true, size: 13, align: "right", color: INK.soft });
   };
-  side(x, me, a, T.yours, a.general, a.xp ?? 0, pow?.attPow ?? null, false);
-  side(x + cw + 16, theirOwner, theirs, b ? (b.bandit || b.barbarian ? ownerName(b, T, ui.lang) : T.theirs) : T.defenders, theirGen, theirXp, pow?.defPow ?? null, true);
+  // Takviye (bölüm 7b): yakındaki ordular da katılır - askerleri tarafın kutusunda.
+  const ah = sea ? 0 : sd.att.help?.length ?? 0, dh = sea ? 0 : sd.def.help?.length ?? 0;
+  side(x, me, ah ? sd.att : a, T.yours, a.general, a.xp ?? 0, pow?.attPow ?? null, false, ah);
+  side(x + cw + 16, theirOwner, dh && b ? sd.def : theirs, b ? (b.bandit || b.barbarian ? ownerName(b, T, ui.lang) : T.theirs) : T.defenders, theirGen, theirXp, pow?.defPow ?? null, true, dh);
 
   // Güç çubuğu ve tahmin.
   let y = r.y + 206;

@@ -99,6 +99,21 @@ export const N = {
     // x`recover`. General ölürse tarafının bütün birlikleri `shock` moral yitirir (kaçarsa yarısı). Bilgisayarın
     // generali ordusunun ortasının `back` birim gerisinde durur, `engage` birime gelen düşmanla dövüşür.
     general: { guard: 12, melee: 1.8, charge: 1.2, morale: 20, aura: 14, bonus: 12, recover: 2, shock: 25, back: 9, engage: 7 },
+    // Dizilişler ve yetenekler (bölüm 29f; kullanıcı 27.10: "Roma'ya kaplumbağa, Makedonya'ya falanks, atlılara kama"):
+    // `civ` o medeniyetin (null: herkesin atlısı), `who` kimin (tür; "horse": atlı), `toggle` açılıp kapanan diziliş, yoksa
+    // `time` sn süren, `cooldown` sn'de bir kullanılan yetenek. Çarpanlar: `speed` hız, `turn` dönüş, `melee` vuruş,
+    // `charge` hücum, `volley` ok, `arrows` yediği ok, `front` / `flank` önden / yandan yediği darbe, `taken` bütün
+    // yediği darbe, `stop` hücum durdurma (eklenir), `arrowMorale` okunun moral etkisi; `radius` içindeki düşmana `shock` moral.
+    abilities: {
+      testudo: { civ: "rome", who: ["inf", "elite"], toggle: true, arrows: 0.25, speed: 0.5, melee: 0.85 },
+      phalanx: { civ: "macedon", who: ["inf", "elite"], toggle: true, front: 0.6, flank: 1.25, speed: 0.6, turn: 0.4, stop: 1 },
+      warcry: { civ: "gaul", who: ["inf", "elite", "cav"], time: 12, cooldown: 60, melee: 1.3, radius: 16, shock: 12 },
+      stampede: { civ: "carthage", who: ["elite", "cav"], time: 12, cooldown: 45, charge: 1.8, speed: 1.2, shock: 15 },
+      fire: { civ: "egypt", who: ["arch", "elite"], time: 20, cooldown: 60, volley: 1.3, arrowMorale: 3 },
+      circle: { civ: "saka", who: ["elite"], toggle: true, arrows: 0.5, volley: 1.2 },
+      heavyWedge: { civ: "parthia", who: ["horse"], toggle: true, charge: 1.8, melee: 1.15, taken: 1.1, turn: 0.6 },
+      wedge: { civ: null, who: ["horse"], toggle: true, charge: 1.5, melee: 1.1, taken: 1.15, turn: 0.6 },
+    },
     // Sur (kullanıcı 27.10: "surlara tırmanıyormuş gibi, tek sıra"): her birlik merdivenden saniyede `rate`
     // asker tırmanır; merdivenin `guard` birim yakınındaki savunan tırmananları göğüs göğüse gücünün `repel`
     // katı düşürür; sura dayanan makine (her 10 asker 1/sn) `breach` puanda `gapHalf` x 2 genişliğinde gedik
@@ -194,6 +209,27 @@ export const N = {
   // durmaya gidilir). Bunsuz bağımsız şehirler tampon olmaktan çıktı, Sakalar Odessos ile Bizans'ın
   // yanından geçip 12. turda Pella'yı alıyordu.
   reach: { strike: 0.8, zoc: 0.8, hold: 0.6, threat: 4.5, sightPlace: 3, sightArmy: 2.5, blockade: 1.2 },
+  // Takviye (bölüm 7b; kullanıcı 27.10): savaşın yerine `reach` birimden yakın, karada duran dost ordulardan en yakın
+  // `max` tanesinin `part` kadarı savaşa yetişir (kalanı yerinde kalır). Taktik savaşta sahaya `delay` + uzaklığı
+  // oranında en çok `late` saniye sonra girer.
+  reinforce: { reach: 1.2, max: 3, part: 0.5, delay: 12, late: 30 },
+  // Tahıl alımı (bölüm 3b; kullanıcı 27.10, önerilerden: "bilgisayarın biriken parası"): her tur tüccarlardan buğday
+  // başına `price` paraya; turda en çok `base` + pazar seviyesi başına `market` + ticareti olan liman başına `port`.
+  // Oyuncu `step` `step` artırır. Bilgisayar kasası `aiReserve` + yer başına `aiPerPlace`ın iki katını geçince tavana kadar,
+  // bir katını geçince yarısına kadar alır.
+  grain: { price: 3, base: 4, market: 2, port: 4, step: 2, aiReserve: 150, aiPerPlace: 25 },
+  // Hızlandırma (bölüm 4): süren inşaatın kalan turları, turluk payının `rush` katı parayla; iş o tur sonunda biter.
+  rush: 2,
+  // Hava ve gün saati (bölüm 29g, weather.js): mevsime göre yağmur, sis, kar ihtimali; `north` enleminin kuzeyinde
+  // yağmur ve sis sık, `south`un güneyinde az. Gün saati: gece, şafak, akşam. Etkiler: ok, ok menzili, hücum, hız.
+  weather: {
+    chance: { rest: { rain: 0.18, fog: 0.12, snow: 0 }, winter: { rain: 0.22, fog: 0.12, snow: 0.22 } },
+    time: { night: 0.07, dawn: 0.1, dusk: 0.13 }, north: 44, south: 33,
+    effects: {
+      rain: { volley: 0.7, range: 0.8, charge: 0.85, speed: 0.9 }, fog: { volley: 0.85, range: 0.55 }, snow: { volley: 0.85, charge: 0.8, speed: 0.8 },
+      dawn: { range: 0.85 }, dusk: { range: 0.85 }, night: { volley: 0.8, range: 0.6 },
+    },
+  },
   // Tarafsızın toprağında durmak (kullanıcı 22.10: "girilsin ama ilişki bozulsun"): her tur öfke
   // +1, girmeyince -0.5. Öfke `war` olunca o medeniyet savaş açar - barış süresini beklemeden,
   // ancak karşısındakinin gücünün en az `ratio` katıysa.

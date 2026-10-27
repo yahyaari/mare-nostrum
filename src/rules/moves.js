@@ -22,6 +22,7 @@ import { CELL, H, PLACE_CELL, POS, W, around, cellOf, centre, dist, field, isLan
 import { project } from "../geo.js";
 import { countWin } from "./victory.js";
 import { modsOf } from "./research.js";
+import { weatherAt, weatherMods } from "./weather.js";
 
 /**
  * `civ` buraya girebilir mi, girerse ne olur:
@@ -309,10 +310,14 @@ export function sides(state, unit, civ, id) {
   const pl = state.places[id];
   const from = spot(unit);
   const ter = terrainOf(from, id);
+  // Takviye: saldıranın yakındaki orduları (denizden saldırıda değil), savunanın yerin dışındaki orduları.
+  const sea = !!from && bySea(from, POS[id]);
   return {
-    att: { civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
-    def: { ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
-    walls: wallsOf(state, id), ter, sea: !!from && bySea(from, POS[id]),
+    att: withHelp({ civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, elite: unit.elite ?? 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
+      sea ? [] : helpersOf(state, civ, POS[id], [unit]), POS[id], state),
+    def: withHelp({ ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
+      helpersOf(state, pl.owner, POS[id], [unit], id), POS[id], state),
+    walls: wallsOf(state, id), ter, sea,
   };
 }
 
@@ -325,11 +330,73 @@ function insideVet(state, id) {
   return (men(pl) + own.reduce((n, a) => n + men(a) * veteranMul(a.xp), 0)) / total;
 }
 
+/**
+ * Takviye (bölüm 7b; kullanıcı 27.10: "yakındaki dost ordular savaşın ortasında sahanın kenarından girip katılsın"):
+ * `owner`ın, savaşın yerine (`at`) `N.reinforce.reach` birimden yakın, karada, askeri olan ordularından en yakın
+ * `max` tanesi - `skip`tekiler (savaşan ordular, numarasıyla) ve savunulan yerin (`inside`) içindekiler hariç.
+ */
+export function helpersOf(state, owner, at, skip = [], inside = null) {
+  if (!owner) return [];
+  const R = N.reinforce, ids = new Set(skip.map((x) => x?.id).filter((v) => v != null));
+  return state.armies
+    .filter((a) => a.owner === owner && !ids.has(a.id) && !skip.includes(a) && men(a) > 0 && !a.bandit && !a.barbarian && (inside == null || a.at !== inside)
+      && isLand(cellOf(a.x, a.y)) && dist(a, at) <= R.reach + 1e-9)
+    .sort((a, b) => dist(a, at) - dist(b, at))
+    .slice(0, R.max);
+}
+
+/**
+ * Bir tarafa yardımcıların savaşa yetişen kısmını (`N.reinforce.part`, her türden) kat; yardımcılar, yetişen kısımları
+ * (`helpPart`) ve savaşın yeri tarafın yanında (taktik savaş için).
+ */
+function withHelp(side, help, at, state = null) {
+  const part = help.map((h) => Object.fromEntries(UNITS.map((k) => [k, Math.floor((h[k] ?? 0) * N.reinforce.part)])));
+  for (const p of part) for (const k of UNITS) side[k] = (side[k] ?? 0) + p[k];
+  side.help = help;
+  side.helpPart = part;
+  side.near = { x: at.x, y: at.y };
+  // Hava ve gün saati (bölüm 29g): savaşın yerinde, bu tur.
+  if (state) { side.weather = weatherAt(state, at); side.wx = weatherMods(side.weather); }
+  return side;
+}
+
+/**
+ * Bir tarafın sağ kalanlarını savaşa katılan birliklere paylaştırır: her tür, her birliğin o türden getirdiği oranda
+ * (artan, o türü en çok getirene). `units`: yazılacaklar, `before`: savaştan önceki askerleri, `after`: toplam.
+ */
+function share(units, before, after) {
+  for (const k of UNITS) {
+    const total = before.reduce((n, b) => n + (b[k] ?? 0), 0), want = after[k] ?? 0;
+    let left = want;
+    units.forEach((u, i) => { const v = total ? Math.floor(((before[i][k] ?? 0) * want) / total) : 0; u[k] = v; left -= v; });
+    if (left > 0 && units.length) {
+      const i = before.reduce((m, b, j) => ((b[k] ?? 0) > (before[m][k] ?? 0) ? j : m), 0);
+      units[i][k] += left;
+    }
+  }
+}
+
+/**
+ * Yardımcıların savaştan sonraki askerleri: savaşa yetişen kısmın payı (`parts`) + savaşa yetişmeyen kısım.
+ */
+function backHome(help, before, parts) {
+  help.forEach((h, i) => { for (const k of UNITS) h[k] = (parts[i][k] ?? 0) + ((h[k] ?? 0) - (before[i][k] ?? 0)); });
+}
+
+/** Askeri kalmayan yardımcı ordular dağılır (generalleri ölür). */
+function dropEmpty(state, list, minMen = 1) {
+  for (const a of list) {
+    if (men(a) >= minMen) continue;
+    bury(state, a.owner, a.general);
+    state.armies = state.armies.filter((x) => x !== a);
+  }
+}
+
 /** Meydan muharebesinin iki tarafı: { att, def }. Dağda duran savunan dağ geçidi gibi güçlü. */
 export const fieldSides = (state, army, b) => ({
-  att: { civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp), mods: modsOf(state, army.owner) },
-  def: { civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp), mods: modsOf(state, b.owner),
-    terrain: isMountain(cellOf(b.x, b.y)) ? N.ground.pass : 1 },
+  att: withHelp({ civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp), mods: modsOf(state, army.owner) }, helpersOf(state, army.owner, b, [army, b]), b, state),
+  def: withHelp({ civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp), mods: modsOf(state, b.owner),
+    terrain: isMountain(cellOf(b.x, b.y)) ? N.ground.pass : 1 }, helpersOf(state, b.owner, b, [army, b]), b, state),
 });
 
 /** Deniz savaşının bir tarafı: gemileri ve araştırması. */
@@ -415,6 +482,9 @@ export function attack(state, armyId, id, luck = null, result = null) {
   }
   const sd = sides(state, army, army.owner, id);
   const def = sd.def, walls = sd.walls, defGen = def.gen;
+  // Takviye (bölüm 7b): iki tarafın yakındaki orduları; savaştan önceki askerleri (paylaştırmak için).
+  const help = sd.att.help, defHelp = sd.def.help;
+  const beforeAtt = [pickUnits(army), ...sd.att.helpPart], inside = pickUnits(defenders(state, id));
   // Taktik savaş (tactics.js) bittiyse onun sonucu; yoksa otomatik savaş.
   const r = result ?? fight(sd.att, def, walls, luck ?? rollLuck(state));
   // Taktik savaşta sahada ölen generaller (bölüm 29e): saldıranınki ordudan, savunanınki (ordusu ya da şehrinde
@@ -423,9 +493,10 @@ export function attack(state, armyId, id, luck = null, result = null) {
   if (r.genFell?.def && defGen) dropGeneral(state, pl.owner, defGen);
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
-    won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },
+    won: r.attWins, before: { att: pickUnits(sd.att), def: pickUnits(def) },
     after: { att: r.att, def: r.def }, naval: navalEv,
   };
+  if (help.length || defHelp.length) ev.help = { att: help.length, def: defHelp.length };
   const trace = { type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path, at: id, won: r.attWins, oldOwner: pl.owner };
   state.trace?.push(trace);
   army.mp = 0;
@@ -433,8 +504,21 @@ export function attack(state, armyId, id, luck = null, result = null) {
   countWin(state, r.attWins ? army.owner : pl.owner);
 
   if (r.attWins) {
-    for (const k of UNITS) army[k] = r.att[k];
+    const got = [army, ...help.map(() => ({}))];
+    share(got, beforeAtt, r.att);
+    backHome(help, sd.att.helpPart, got.slice(1));
     ev.rankUp = gainXp(army, N.veteran.win);
+    for (const h of help) gainXp(h, N.veteran.win);
+    dropEmpty(state, help);
+    // Savunanın yardımcıları yenildi: kaçabilenleri (taktik savaşta sahadan kaçanlar) yerinde kalır.
+    if (defHelp.length) {
+      const keepD = N.retreat.keep * Math.max(0, Math.min(1, r.defPow / Math.max(1e-6, r.attPow)));
+      const out = r.escaped ?? Object.fromEntries(UNITS.map((k) => [k, Math.floor((def[k] ?? 0) * keepD)]));
+      const parts = [{}, ...defHelp.map(() => ({}))];
+      share(parts, [inside, ...sd.def.helpPart], out);
+      backHome(defHelp, sd.def.helpPart, parts.slice(1));
+      dropEmpty(state, defHelp, N.retreat.min);
+    }
     const loser = pl.owner;
     capture(state, id, army.owner);
     army.at = id;
@@ -449,12 +533,21 @@ export function attack(state, armyId, id, luck = null, result = null) {
     for (const k of UNITS) {
       const keep = def[k] > 0 ? r.def[k] / def[k] : 0;
       for (const u of units) u[k] = Math.floor(u[k] * keep);
+      // Savunanın yardımcıları: yalnız savaşa yetişen kısmı kayıp verir.
+      defHelp.forEach((h, i) => { const p = sd.def.helpPart[i][k]; h[k] = (h[k] - p) + Math.floor(p * keep); });
     }
     // Saldıran, savaş yakınsa askerinin bir kısmıyla geri çekilir (durduğu yerde, kapının önünde
     // kalır); ezildiyse ordusu ve generali yok olur. Savunmayı tutan general tecrübe kazandı.
     // Taktik savaşta geri çekilen, sahadan kaçabilenlerdir.
     const keep = N.retreat.keep * Math.max(0, Math.min(1, r.attPow / Math.max(1e-6, r.defPow)));
-    const left = r.escaped ?? Object.fromEntries(UNITS.map((k) => [k, Math.floor((ev.before.att[k] ?? 0) * keep)]));
+    const all = r.escaped ?? Object.fromEntries(UNITS.map((k) => [k, Math.floor((ev.before.att[k] ?? 0) * keep)]));
+    // Kaçabilenler orduların getirdiği oranda; yardımcılar yerinde kalır (çok azı kaldıysa dağılır).
+    const parts = [army, ...help].map(() => ({}));
+    share(parts, beforeAtt, all);
+    const left = parts[0];
+    backHome(help, sd.att.helpPart, parts.slice(1));
+    dropEmpty(state, help, N.retreat.min);
+    for (const h of defHelp) h.xp = (h.xp ?? 0) + N.veteran.held;
     const fled = men(left) >= N.retreat.min;
     if (fled) {
       for (const k of UNITS) army[k] = left[k];
@@ -523,10 +616,29 @@ export function strike(state, armyId, targetId, luck = null, result = null) {
   } else {
     const sd = fieldSides(state, army, b);
     const r = result ?? fight(sd.att, sd.def, null, luck ?? rollLuck(state));
-    ev.escaped = r.escaped ?? null;
     won = r.attWins;
     ev.power = won ? r.defPow / Math.max(1e-6, r.attPow) : r.attPow / Math.max(1e-6, r.defPow);
-    for (const k of UNITS) (won ? army : b)[k] = (won ? r.att : r.def)[k];
+    // Takviye (bölüm 7b): iki tarafın yakındaki orduları da savaştı. Kazananların sağ kalanları, yenilenlerin
+    // kaçabilenleri ordulara getirdikleri oranda; yenilen yardımcılar yerinde kalır (çok azı kaldıysa dağılır).
+    const groups = { att: [army, ...sd.att.help], def: [b, ...sd.def.help] };
+    const before = { att: [pickUnits(army), ...sd.att.helpPart], def: [pickUnits(b), ...sd.def.helpPart] };
+    const partOf = { att: sd.att.helpPart, def: sd.def.helpPart };
+    ev.before = { att: pickUnits(sd.att), def: pickUnits(sd.def) };
+    if (sd.att.help.length || sd.def.help.length) ev.help = { att: sd.att.help.length, def: sd.def.help.length };
+    const [ws, ls] = won ? ["att", "def"] : ["def", "att"];
+    const wonParts = groups[ws].map(() => ({}));
+    share(wonParts, before[ws], won ? r.att : r.def);
+    Object.assign(groups[ws][0], wonParts[0]);
+    backHome(groups[ws].slice(1), partOf[ws], wonParts.slice(1));
+    for (const h of groups[ws].slice(1)) gainXp(h, N.veteran.win);
+    dropEmpty(state, groups[ws].slice(1));
+    const keep = N.retreat.keep * Math.max(0, Math.min(1, ev.power));
+    const out = r.escaped ?? Object.fromEntries(UNITS.map((k) => [k, Math.floor((ev.before[ls][k] ?? 0) * keep)]));
+    const parts = groups[ls].map(() => ({}));
+    share(parts, before[ls], out);
+    ev.escaped = parts[0];
+    backHome(groups[ls].slice(1), partOf[ls], parts.slice(1));
+    dropEmpty(state, groups[ls].slice(1), N.retreat.min);
     ev.after = { att: r.att, def: r.def };
     for (const [side, x] of [["att", army], ["def", b]]) {
       if (!r.genFell?.[side] || !x.general) continue;

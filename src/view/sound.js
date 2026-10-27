@@ -336,6 +336,13 @@ export function battleEnd(won) {
   (won ? victory : defeat)(won ? 2.1 : 2.9);
 }
 
+/** Hava: yağmurun hışırtısı (yüksek, yumuşak gürültü) ya da karda rüzgârın uğultusu (alçak). */
+export function weather(kind) {
+  if (!ctx) return;
+  if (kind === "rain") noise({ seconds: 1.2, loud: 0.025, type: "bandpass", from: 3500, to: 2800, q: 0.6, attack: 0.4 });
+  else noise({ seconds: 1.4, loud: 0.03, type: "bandpass", from: 420, to: 600, q: 1.5, attack: 0.5 });
+}
+
 /** Bir general düştü: uzaktan, alçak ve inen iki uzun boru notası. */
 export function genFell(pan = 0) {
   if (!ctx) return;

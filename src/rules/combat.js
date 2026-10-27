@@ -39,10 +39,12 @@ export function fight(att, def, walls, luck = [1, 1]) {
   const shots = (u, U, s) => (u.arch / N.company) * archMul(s) + (u.elite / N.company) * (U.volley ?? 0) * eliteMul(s);
   const rush = (u, U, s) => (u.cav / N.company) * cavMul(s) + (u.elite / N.company) * (U.charge ?? 0) * eliteMul(s);
   const stop = (u, U) => (u.elite / N.company) * (U.stop ?? 0) * N.charge;
-  const byAtt = Math.round(shots(a, ua, att) * N.volley * siege * volleyOf(att.gen));
-  const byDef = Math.round(shots(d, ud, def) * N.volley * breach(walls === "castle" ? N.castleVolley : 1) * volleyOf(def.gen));
-  const chargeA = Math.max(0, Math.round(rush(a, ua, att) * N.charge * (walls ? N.cavWall : 1) - stop(d, ud)));
-  const chargeD = Math.max(0, Math.round(rush(d, ud, def) * N.charge - stop(a, ua)));
+  // Hava (bölüm 29g): yağmurda, siste, karda, gece ok ve hücum zayıf; iki taraf aynı havayı görür.
+  const wx = att.wx ?? def.wx ?? {};
+  const byAtt = Math.round(shots(a, ua, att) * N.volley * siege * volleyOf(att.gen) * (wx.volley ?? 1));
+  const byDef = Math.round(shots(d, ud, def) * N.volley * breach(walls === "castle" ? N.castleVolley : 1) * volleyOf(def.gen) * (wx.volley ?? 1));
+  const chargeA = Math.max(0, Math.round(rush(a, ua, att) * N.charge * (walls ? N.cavWall : 1) * (wx.charge ?? 1) - stop(d, ud)));
+  const chargeD = Math.max(0, Math.round(rush(d, ud, def) * N.charge * (wx.charge ?? 1) - stop(a, ua)));
   d.arch = Math.max(0, d.arch - chargeA);
   a.arch = Math.max(0, a.arch - chargeD);
   lose(d, byAtt);
@@ -228,6 +230,12 @@ export function explain(att, def, walls) {
     if ((u.inf ?? 0) > 0) put(list, "genInf", genMul(u, "infantry"));
     if ((u.cav ?? 0) > 0) put(list, "genCav", genMul(u, "cavalry"));
   };
+  // Hava: okçusu ve atlısı olan tarafta.
+  const wx = att.wx ?? def.wx ?? {};
+  for (const [list, u] of [[A, att], [D, def]]) {
+    if ((u.arch ?? 0) + (u.elite ?? 0) > 0) put(list, "wxArrows", wx.volley ?? 1);
+    if ((u.cav ?? 0) > 0) put(list, "wxCharge", wx.charge ?? 1);
+  }
   put(A, "general", might(att.gen));
   put(A, "veteran", att.vet ?? 1);
   put(A, "river", att.terrain ?? 1);

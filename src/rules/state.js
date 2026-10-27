@@ -320,6 +320,23 @@ export function strength(state, civ) {
 }
 
 /** Turluk gelir ve gider: ekrandaki "+12" ile tur sonunda olan aynı hesap. */
+/** Tahıl alımının tavanı (bölüm 3b): turda temel + pazar seviyesi başına + ticareti olan liman başına buğday. */
+export function grainCap(state, civ) {
+  const G = N.grain;
+  let n = G.base;
+  for (const id of placesOf(state, civ)) {
+    const pl = state.places[id];
+    n += (pl.market ?? 0) * G.market + (byId[id].port && (pl.trade ?? 0) > 0 ? G.port : 0);
+  }
+  return n;
+}
+
+/** Bu tur gerçekten alınan tahıl: istenen, tavan ve kasanın yettiği kadar. */
+export function grainOf(state, civ) {
+  const c = state.civs[civ];
+  return Math.max(0, Math.min(c.grain ?? 0, grainCap(state, civ), Math.floor(Math.max(0, c.money) / N.grain.price)));
+}
+
 export function budget(state, civ) {
   const b = { money: 0, weapons: 0, food: 0, upkeep: 0 };
   for (const id of placesOf(state, civ)) {
@@ -342,6 +359,10 @@ export function budget(state, civ) {
     for (const k of SHIPS) b.upkeep += (u[k] ?? 0) * N.navy.types[k].upkeep;
   }
   b.food -= b.upkeep;
+  // Tahıl alımı: para gider, buğday gelir.
+  b.grain = grainOf(state, civ);
+  b.food += b.grain;
+  b.money -= b.grain * N.grain.price;
   return b;
 }
 
@@ -415,6 +436,30 @@ export function upgrade(state, id, what) {
   const pl = state.places[id];
   state.civs[pl.owner].money -= u.cost;
   pl.builds.push({ what, left: u.turns, total: u.turns, paid: u.cost });
+  return true;
+}
+
+/**
+ * Süren bir inşaatı hızlandır (bölüm 4; kullanıcı 27.10, önerilerden: "bilgisayarın biriken parası"): kalan turların
+ * parası (turluk payın `N.rush` katı) ödenir, iş bu tur sonunda biter. Dönen: { cost, why } - why "none" | "soon"
+ * (zaten bu tur bitiyor) | "money" | null.
+ */
+export function rushInfo(state, id, what) {
+  const pl = state.places[id], b = pl.builds?.find((x) => x.what === what);
+  if (!b) return { cost: 0, why: "none" };
+  const cost = Math.ceil((b.left - 1) * (b.paid / b.total) * N.rush);
+  const why = b.left <= 1 ? "soon" : state.civs[pl.owner].money < cost ? "money" : null;
+  return { cost, why };
+}
+
+export function rush(state, id, what) {
+  const r = rushInfo(state, id, what);
+  if (r.why) return false;
+  const pl = state.places[id];
+  state.civs[pl.owner].money -= r.cost;
+  const b = pl.builds.find((x) => x.what === what);
+  b.paid += r.cost;
+  b.left = 1;
   return true;
 }
 

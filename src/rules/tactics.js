@@ -131,31 +131,47 @@ export function setupBattle(att, def, walls, seed = 1, field = null) {
     if (!field.city) addCity(field, walls, K().w * 0.68, K().h / 2);
   }
   const b = {
-    t: 0, over: null, walls, seed, field: field ?? flatField(), rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, gaps: [],
+    t: 0, over: null, walls, seed, field: field ?? flatField(), rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, gaps: [], reserve: [],
+    // Hava (bölüm 29g): tarafların getirdiği (moves.js), yoksa açık gün.
+    weather: att.weather ?? null, wx: { volley: 1, range: 1, charge: 1, speed: 1, ...(att.wx ?? {}) },
     sides: { att: { civ: att.civ, muls: muls.att, open: muls.att, gen: !!att.gen, wild: !!att.wild }, def: { civ: def.civ, muls: muls.def, open: open.def, gen: !!def.gen, wild: !!def.wild } },
   };
-  for (const side of ["att", "def"]) {
-    const s = side === "att" ? att : def;
-    const groups = {};
+  // Bir tarafın askerlerinden birlikler: türüne göre eşit büyüklükte (100 piyade: 34, 33, 33 değil 40, 40, 20).
+  const troops = (side, s, counts, inside) => {
+    const out = [];
     for (const type of UNITS) {
-      let left = Math.floor(s[type] ?? 0);
-      const per = K().per[type];
-      // Eşit büyüklükte birlikler (100 piyade: 34, 33, 33 değil 40, 40, 20).
-      const n = Math.ceil(left / per);
+      let left = Math.floor(counts[type] ?? 0);
+      const n = Math.ceil(left / K().per[type]);
       for (let i = 0; i < n; i++) {
         const men = Math.ceil(left / (n - i));
         left -= men;
         const p = profile(type, s, side === "def", side === "att" && !!walls);
-        const u = {
+        const m = 100 + (s.gen ? 10 : 0) + (has(s.gen, "inspiring") ? N.officers.inspiringMorale : 0);
+        out.push({
           id: b.nextId++, side, type, ...p, men, start: men, cols: Math.ceil(men / Math.min(ROWS[type], men)),
-          morale: 100 + (s.gen ? 10 : 0) + (has(s.gen, "inspiring") ? N.officers.inspiringMorale : 0), moraleMax: 100 + (s.gen ? 10 : 0) + (has(s.gen, "inspiring") ? N.officers.inspiringMorale : 0), x: 0, y: 0, facing: side === "att" ? 0 : Math.PI,
-          order: null, cool: b.rand() * K().volley.every, engaged: false, routed: false, gone: false, dead: false, wasMoving: false,
-          inside: side === "def",
-        };
-        (groups[p.mounted || type === "cav" ? "cav" : p.kind === "arch" ? "arch" : type === "siege" ? "siege" : "front"] ??= []).push(u);
-        b.units.push(u);
+          morale: m, moraleMax: m, x: 0, y: 0, facing: side === "att" ? 0 : Math.PI,
+          order: null, cool: b.rand() * K().volley.every, engaged: false, routed: false, gone: false, dead: false, wasMoving: false, inside,
+        });
       }
     }
+    return out;
+  };
+  for (const side of ["att", "def"]) {
+    const s = side === "att" ? att : def;
+    const groups = {};
+    // Takviye (bölüm 7b): yakındaki orduların askerleri sahaya sonra girer; baştakiler yalnız kendi askerleri.
+    const help = s.help ?? [], part = s.helpPart ?? help;
+    const own = { ...s };
+    for (const p of part) for (const k of UNITS) own[k] = Math.max(0, (own[k] ?? 0) - (p[k] ?? 0));
+    for (const u of troops(side, s, own, side === "def")) {
+      (groups[u.mounted || u.type === "cav" ? "cav" : u.kind === "arch" ? "arch" : u.type === "siege" ? "siege" : "front"] ??= []).push(u);
+      b.units.push(u);
+    }
+    help.forEach((h, i) => {
+      const R = N.reinforce, d = s.near ? Math.hypot(h.x - s.near.x, h.y - s.near.y) : R.reach;
+      const units = troops(side, s, part[i] ?? h, false);
+      if (units.length) b.reserve.push({ side, army: h.id ?? null, arrive: R.delay + R.late * Math.min(1, d / R.reach), lane: (i + 1) / (help.length + 1), units, men: units.reduce((n, u) => n + u.men, 0) });
+    });
     // Sahada komutan (kullanıcı 27.10): generalli tarafın muhafız atlıları, ortada, hattın gerisinde.
     if (s.gen) {
       const G = K().general, m = 100 + 10 + (has(s.gen, "inspiring") ? N.officers.inspiringMorale : 0) + G.morale;
@@ -240,6 +256,8 @@ function deploy(b, side, g) {
 }
 
 const alive = (u) => !u.dead && !u.gone;
+/** Okun menzili, havaya göre (siste, gece kısa). */
+const range = (b) => K().volley.range * (b.wx?.range ?? 1);
 
 /**
  * Bir birliğin önündeki geçidin genişliği (kullanıcı 27.10: "dar geçitten okçularımın uzun hattı geçemiyor;
@@ -589,8 +607,86 @@ function generalOrder(b, u) {
   return dist(u, spot) > 2 ? spot : null;
 }
 
+// ---- dizilişler ve yetenekler (bölüm 29f) ----
+
+const ONE = { speed: 1, turn: 1, melee: 1, charge: 1, volley: 1, arrows: 1, front: 1, flank: 1, taken: 1, stop: 0, arrowMorale: 1 };
+
+/**
+ * Bir birliğin kullanabileceği diziliş ya da yetenek (kullanıcı 27.10): medeniyetinin özeli birliğe uyuyorsa o, yoksa
+ * atlıysa kama; hiçbiri yoksa null. Makine, general, köprübaşı ve bozulan kullanamaz.
+ */
+export function abilityOf(b, u) {
+  if (!alive(u) || u.routed || u.type === "siege" || u.type === "gen" || u.from) return null;
+  const civ = b.sides[u.side].civ, horse = !!(u.mounted || u.type === "cav");
+  const fits = (a) => a.who.includes(u.type) || (horse && a.who.includes("horse"));
+  for (const [id, a] of Object.entries(K().abilities)) if (a.civ && a.civ === civ && fits(a)) return id;
+  return horse ? "wedge" : null;
+}
+
+/** Diziliş açık mı ya da yetenek sürüyor mu. */
+export const active = (b, u, id) => u.stance === id || (u.boost?.id === id && u.boost.until > b.t);
+
+/** Birliğin bu adımdaki çarpanları (açık dizilişi ve süren yeteneği). */
+function modsNow(b, u) {
+  const A = K().abilities;
+  const id = u.stance ?? (u.boost && u.boost.until > b.t ? u.boost.id : null);
+  return id ? { ...ONE, ...A[id], stop: A[id].stop ?? 0 } : ONE;
+}
+
+/**
+ * Diziliş ya da yetenek kullan (seçili birlikler): diziliş açılır / kapanır; yetenek hazırsa `time` sn sürer, sonra
+ * `cooldown` sn bekler. Savaş narası çevresindeki düşmanların moralini kırar. Dönen: kullanılan birlik sayısı.
+ */
+export function useAbility(b, ids, want = null) {
+  let n = 0;
+  for (const id of ids) {
+    const u = unitById(b, id), ab = u && abilityOf(b, u);
+    if (!ab) continue;
+    const A = K().abilities[ab];
+    if (A.toggle) {
+      const on = want ?? u.stance !== ab;
+      if (on === (u.stance === ab)) continue;
+      u.stance = on ? ab : null;
+      n++;
+    } else if ((u.ready ?? 0) <= b.t && want !== false) {
+      u.boost = { id: ab, until: b.t + A.time };
+      u.ready = b.t + A.cooldown;
+      // Nara surun öte yanına geçmez (surun ardındaki savunan duymaz).
+      if (A.radius) for (const v of foes(b, u)) if (dist(u, v) < A.radius && (!b.walls || !v.inside === !u.inside)) v.morale -= A.shock;
+      b.fx.push({ kind: ab, x: u.x, y: u.y, t: b.t, side: u.side });
+      n++;
+    }
+  }
+  return n;
+}
+
+/**
+ * Bilgisayar dizilişleri ve yetenekleri yerinde kullanır: kaplumbağa ok yağarken (göğüs göğüse değilken, sura hücumda değil), falanks
+ * düşman yaklaşınca, kama hücuma giderken, çember dövüşmezken; nara dövüşürken, fil hücumu saldırırken, ateşli ok
+ * menzilde hedef varken.
+ */
+function aiAbilities(b, side, all) {
+  const T = K();
+  for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed)) {
+    if (u.manual && !all) continue;
+    const ab = abilityOf(b, u);
+    if (!ab) continue;
+    const en = foes(b, u);
+    const near = en.reduce((m, v) => Math.min(m, dist(u, v)), Infinity);
+    const archers = en.some((v) => v.shoot > 0 && dist(u, v) < range(b) + 4);
+    const charging = !!u.order?.unit && near < 25 && !u.engaged;
+    // Sura hücum başlayınca kaplumbağa bozulur (merdivene koşulur, yavaş yürünmez).
+    const storming = b.walls && u.side === "att" && b.assault;
+    const want = { testudo: archers && !u.engaged && near > 8 && !storming, phalanx: near < 18, wedge: charging, heavyWedge: charging, circle: !u.engaged,
+      warcry: u.engaged || near < 10, stampede: charging && near < 20, fire: u.shoot > 0 && near < range(b) }[ab];
+    if (K().abilities[ab].toggle) useAbility(b, [u.id], !!want);
+    else if (want) useAbility(b, [u.id]);
+  }
+}
+
 /** Bilgisayarın emirleri (düşman tarafı; ya da Otomatik'te oyuncunun tarafı). Elle emir verilmiş birliğe dokunmaz. */
 export function aiOrders(b, side, all = false) {
+  aiAbilities(b, side, all);
   for (const u of b.units.filter((v) => v.side === side && v.type === "gen" && alive(v) && !v.routed)) if (!u.manual || all) u.order = generalOrder(b, u);
   // Savunmada: tepede (ya da yerinde) hat kurar; yalnız yaklaşanla dövüşür, okçular atar.
   if (stanceOf(b, side) === "defend") {
@@ -601,7 +697,7 @@ export function aiOrders(b, side, all = false) {
       const near = en.reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
       const spot = plan.get(u.id) ?? { x: u.x, y: u.y, facing: u.facing };
       const home = dist(u, spot) > 1.5 ? spot : null;
-      if (u.shoot > 0 && u.charge < 1) { u.order = near && dist(u, near) <= T.volley.range * 0.95 ? null : home; continue; }
+      if (u.shoot > 0 && u.charge < 1) { u.order = near && dist(u, near) <= range(b) * 0.95 ? null : home; continue; }
       const reach = u.charge > 0 ? T.defend.cavEngage : T.defend.engage;
       u.order = near && dist(u, near) < reach ? { unit: near.id } : home;
     }
@@ -636,7 +732,7 @@ export function aiOrders(b, side, all = false) {
     if (b.walls && side === "def" && u.inside) {
       const inner = en.filter((v) => v.inside);
       const ladders = b.units.filter((v) => v.side !== side && alive(v) && !v.routed && v.climbing);
-      if (inner.length && (u.kind !== "arch" || dist(u, near(inner)) < K().volley.range)) { u.order = u.kind === "arch" ? null : { unit: near(inner).id }; continue; }
+      if (inner.length && (u.kind !== "arch" || dist(u, near(inner)) < range(b))) { u.order = u.kind === "arch" ? null : { unit: near(inner).id }; continue; }
       if (ladders.length && u.kind !== "arch") {
         const l = near(ladders).ladder ?? wallPoint(C, near(ladders));
         const ex = Math.abs(l.nx) * extent(u).x + Math.abs(l.ny) * extent(u).y;
@@ -652,7 +748,7 @@ export function aiOrders(b, side, all = false) {
     }
     if (u.shoot > 0 && !u.mounted) {
       // Okçu: menzildeyse durup atar; değilse menzile kadar yaklaşır.
-      u.order = dist(u, nearest) <= K().volley.range * 0.9 ? null : { unit: nearest.id };
+      u.order = dist(u, nearest) <= range(b) * 0.9 ? null : { unit: nearest.id };
       continue;
     }
     if (u.shoot > 0 && u.mounted && u.charge < 1) {
@@ -661,7 +757,7 @@ export function aiOrders(b, side, all = false) {
       if (threat) {
         const d = dist(u, threat) || 1;
         u.order = { x: u.x + ((u.x - threat.x) / d) * 8, y: u.y + ((u.y - threat.y) / d) * 8 };
-      } else u.order = dist(u, nearest) <= K().volley.range * 0.85 ? null : { unit: nearest.id };
+      } else u.order = dist(u, nearest) <= range(b) * 0.85 ? null : { unit: nearest.id };
       continue;
     }
     if (u.charge > 0) {
@@ -681,7 +777,19 @@ export function step(b, dt) {
   if (b.over) return;
   b.t += dt;
   const T = K(), F = b.field;
-  for (const u of b.units) { u.px = u.x; u.py = u.y; }
+  // Takviye geldi (bölüm 7b): tarafının kenarından, kendi şeridinde sahaya girer, ileri yürür.
+  for (const r of (b.reserve ?? []).filter((x) => !x.in && b.t >= x.arrive)) {
+    r.in = true;
+    const x0 = r.side === "att" ? 2 : T.w - 2, dir = r.side === "att" ? 1 : -1;
+    r.units.forEach((u, i) => {
+      let p = { x: x0 - dir * (i % 2) * 1.5, y: Math.max(3, Math.min(T.h - 3, T.h * r.lane + (Math.floor(i / 2) - (r.units.length - 1) / 4) * 7)) };
+      if (F.obstacles && !onMain(F, p.x, p.y)) p = nearestMain(F, p);
+      Object.assign(u, p, { px: p.x, py: p.y, facing: r.side === "att" ? 0 : Math.PI, order: { x: Math.max(2, Math.min(T.w - 2, p.x + dir * 14)), y: p.y } });
+      b.units.push(u);
+    });
+    b.fx.push({ kind: "reinforce", side: r.side, x: x0, y: T.h * r.lane, t: b.t, men: r.men });
+  }
+  for (const u of b.units) { u.px = u.x; u.py = u.y; u.m = modsNow(b, u); }
   // 1. Yürüyüş (dövüşmeyen, bozulmamış birlikler emirlerine; bozulanlar kendi kenarına). Dövüşen birlik
   // yerinden kıpırdamaz, en çok vurduğu düşmana yavaşça döner (sarılan birlik arkasını hemen toplayamaz).
   for (const u of b.units.filter(alive)) {
@@ -693,7 +801,7 @@ export function step(b, dt) {
       if (u.order.unit) {
         const t = unitById(b, u.order.unit);
         if (!t || !alive(t) || t.routed) { u.order = null; u.manual = false; }
-        else if (u.shoot > 0 && u.charge < 1 && dist(u, t) <= T.volley.range * 0.9) goal = null; // atıcı menzilde durur
+        else if (u.shoot > 0 && u.charge < 1 && dist(u, t) <= range(b) * 0.9) goal = null; // atıcı menzilde durur
         else goal = t;
       } else goal = u.order;
     }
@@ -719,12 +827,12 @@ export function step(b, dt) {
         aim = u.path[0] ?? goal;
       }
       const ground = kindAt(F, u.x, u.y) === FOREST ? (u.mounted || u.type === "cav" ? T.terrain.forestMounted : T.terrain.forest) : 1;
-      const sp = u.speed * (u.routed ? 1.15 : 1) * ground * (1 - T.terrain.hillSlow * heightAt(F, u.x, u.y)) * dt;
+      const sp = u.speed * (u.routed ? 1.15 : 1) * ground * (1 - T.terrain.hillSlow * heightAt(F, u.x, u.y)) * (u.m ?? ONE).speed * b.wx.speed * dt;
       if (d > 0.3) {
         // Uzaktaysa yürüdüğü yöne, varmak üzereyken (ya da yanına kayarken) emredilen cepheye döner.
         const da = dist(u, aim) || 1;
         const to = goal.facing != null && d < 4 ? goal.facing : Math.atan2(aim.y - u.y, aim.x - u.x);
-        turn(u, to, (u.routed ? 6 : T.turn.march) * dt);
+        turn(u, to, (u.routed ? 6 : T.turn.march * (u.m ?? ONE).turn) * dt);
         const k = Math.min(1, sp / da);
         const nx = u.x + (aim.x - u.x) * k, ny = u.y + (aim.y - u.y) * k;
         if (passable(F, nx, ny) || !passable(F, u.x, u.y) || (u.routed && kindAt(F, nx, ny) === WALL)) { u.x = nx; u.y = ny; }
@@ -741,7 +849,7 @@ export function step(b, dt) {
       }
     } else if (u.engaged) {
       const tgt = cs.find((v) => v.id === u.order?.unit) ?? cs[0];
-      turn(u, Math.atan2(tgt.y - u.y, tgt.x - u.x), T.turn.fight * dt);
+      turn(u, Math.atan2(tgt.y - u.y, tgt.x - u.x), T.turn.fight * (u.m ?? ONE).turn * dt);
     } else if (!u.routed && !u.order) {
       // Dar yerde duran da geçidin ortasına.
       centre(F, u, dt);
@@ -768,12 +876,13 @@ export function step(b, dt) {
       if (u.hit.has(v.id) || (!u.wasMoving && u.engagedBefore)) continue;
       u.hit.add(v.id);
       const face = faceOf(v, u);
-      const stop = v.stop > 0 && face === "front" ? (v.men / N.company) * v.stop : 0;
+      const vs = v.stop + (v.m?.stop ?? 0);
+      const stop = vs > 0 && face === "front" ? (v.men / N.company) * vs : 0;
       const wood = kindAt(F, v.x, v.y) === FOREST || kindAt(F, u.x, u.y) === FOREST ? T.terrain.forestCharge : 1;
-      const raw = (u.men / N.company) * N.charge * u.charge * T.charge * (v.kind === "arch" ? 1 : T.chargeOther) * mulsOf(b, u).power * sideMul(v, u) * wood * hill(u, v);
+      const raw = (u.men / N.company) * N.charge * u.charge * T.charge * (v.kind === "arch" ? 1 : T.chargeOther) * mulsOf(b, u).power * sideMul(v, u) * wood * hill(u, v) * (u.m ?? ONE).charge * b.wx.charge;
       const kills = Math.max(0, raw - stop * N.charge * T.charge);
       hurt(b, v, kills);
-      v.morale -= kills > 0 ? T.morale.charge * (face === "front" ? 1 : 1.5) : 0;
+      v.morale -= kills > 0 ? T.morale.charge * (face === "front" ? 1 : 1.5) + (active(b, u, "stampede") ? K().abilities.stampede.shock : 0) : 0;
       if (stop > 0) hurt(b, u, stop * T.charge * 2);
       b.fx.push({ kind: "charge", x: v.x, y: v.y, t: b.t });
     }
@@ -788,13 +897,15 @@ export function step(b, dt) {
     const fighters = Math.min(u.men, footprint(u).cols * T.ranks);
     // Ormanda atlı zayıf.
     const wood = (u.mounted || u.type === "cav") && kindAt(F, u.x, u.y) === FOREST ? T.terrain.forestCav : 1;
-    const out = fighters * u.melee * mulsOf(b, u).power * T.melee * wood * dt;
+    const out = fighters * u.melee * mulsOf(b, u).power * T.melee * wood * (u.m ?? ONE).melee * dt;
     const tgt = cs.find((v) => v.id === u.order?.unit) ?? cs[0];
     for (const v of cs) {
       const share = cs.length === 1 ? 1 : v === tgt ? 0.7 : 0.3 / (cs.length - 1);
       const face = faceOf(v, u);
       const wrap = face === "front" ? 1 + (Math.max(0, footprint(u).w - footprint(v).w) / footprint(u).w) * (T.flank.side - 1) * T.flank.wrap : 1;
-      dmg.set(v, (dmg.get(v) ?? 0) + out * share * sideMul(v, u) * wrap * hill(u, v));
+      // Falanks önden az, yandan çok; kama her yandan biraz çok yer.
+      const vm = v.m ?? ONE, guard = (face === "front" ? vm.front : vm.flank) * vm.taken;
+      dmg.set(v, (dmg.get(v) ?? 0) + out * share * sideMul(v, u) * wrap * hill(u, v) * guard);
       if (face === "flank") v.morale -= T.morale.flanked * dt;
       if (face === "rear") v.morale -= T.morale.rear * dt;
     }
@@ -806,20 +917,21 @@ export function step(b, dt) {
     u.cool -= dt;
     if (u.cool > 0 || contacts(b, u).length) continue;
     const ordered = u.order?.unit ? unitById(b, u.order.unit) : null;
-    const range = T.volley.range * (1 + T.terrain.hillRange * heightAt(F, u.x, u.y));
-    const inRange = foes(b, u).filter((v) => dist(u, v) <= range);
+    const reachOf = range(b) * (1 + T.terrain.hillRange * heightAt(F, u.x, u.y));
+    const inRange = foes(b, u).filter((v) => dist(u, v) <= reachOf);
     const t = ordered && inRange.includes(ordered) ? ordered : inRange.reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
     if (!t) continue;
     u.cool = T.volley.every * (0.9 + b.rand() * 0.2);
     const trees = kindAt(F, t.x, t.y) === FOREST ? T.terrain.forestArrow : 1;
     // Surun ardındaki savunan (surda ve evlerin arasında) oklardan korunur.
     const cover = b.walls && t.side === "def" && t.inside ? T.climb.cover : 1;
-    const kills = (u.men / N.company) * N.volley * u.shoot * mulsOf(b, u, true).volley * T.volley.kill * trees * cover * (0.85 + b.rand() * 0.3);
-    b.shots.push({ from: { x: u.x, y: u.y }, to: t.id, at: { x: t.x, y: t.y }, t0: b.t, t1: b.t + T.volley.flight, kills, side: u.side, n: Math.min(12, Math.ceil(u.men / 3)) });
+    const kills = (u.men / N.company) * N.volley * u.shoot * mulsOf(b, u, true).volley * T.volley.kill * trees * cover * (0.85 + b.rand() * 0.3) * (u.m ?? ONE).volley * b.wx.volley;
+    b.shots.push({ from: { x: u.x, y: u.y }, to: t.id, at: { x: t.x, y: t.y }, t0: b.t, t1: b.t + T.volley.flight, kills, side: u.side, n: Math.min(12, Math.ceil(u.men / 3)), fire: (u.m ?? ONE).arrowMorale > 1 ? u.m.arrowMorale : 0 });
   }
   for (const s of b.shots.filter((x) => x.t1 <= b.t)) {
     const v = unitById(b, s.to);
-    if (v && alive(v)) { hurt(b, v, s.kills); v.morale -= T.morale.arrow; }
+    // Kaplumbağa ve çember okları az yer; ateşli ok morali çok kırar.
+    if (v && alive(v)) { hurt(b, v, s.kills * modsNow(b, v).arrows); v.morale -= T.morale.arrow * (s.fire || 1); }
   }
   b.shots = b.shots.filter((x) => x.t1 > b.t);
   // 5. Moral: kayıp oranı (derin birlik daha dayanıklı, ince hat daha kırılgan), kuşatılma; dövüşmeyen
@@ -848,9 +960,9 @@ export function step(b, dt) {
       for (const v of b.units.filter((x) => x.side === u.side && alive(x) && !x.routed && dist(x, u) < 15)) v.morale -= shake;
     }
   }
-  b.fx = b.fx.filter((e) => b.t - e.t < (e.kind === "genFell" || e.kind === "genFled" ? 4 : 2));
+  b.fx = b.fx.filter((e) => b.t - e.t < (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce" ? 4 : 2));
   // 6. Bitti mi: bir tarafın dövüşen birliği kalmadıysa; süre dolduysa savunan kazanır.
-  const left = (side) => b.units.some((u) => u.side === side && fighting(u));
+  const left = (side) => b.units.some((u) => u.side === side && fighting(u)) || (b.reserve ?? []).some((r) => r.side === side && !r.in);
   // Surlu yerde okçular şehri alamaz: gedik yokken saldıranın elinde yalnız okçu ve makine kaldıysa (içeride
   // kimse yoksa) hücum başarısız.
   const storm = !b.walls || b.gaps.length || b.units.some((u) => u.side === "att" && fighting(u) && (u.inside || (u.type !== "gen" && (u.kind !== "arch" || u.mounted))));
@@ -991,6 +1103,7 @@ function hurt(b, u, k) {
 function survivors(b, side) {
   const out = Object.fromEntries(UNITS.map((k) => [k, 0]));
   for (const u of b.units) if (u.side === side && !u.dead && u.type !== "gen") out[u.type] += Math.floor(u.men);
+  for (const r of b.reserve ?? []) if (r.side === side && !r.in) for (const u of r.units) out[u.type] += Math.floor(u.men);
   return out;
 }
 
@@ -1015,7 +1128,9 @@ export function outcome(b) {
 export function strength(b, side) {
   let men = 0, start = 0;
   for (const u of b.units) if (u.side === side) { start += u.start; if (!u.dead && !u.gone && !u.routed) men += u.men; }
-  return { men: Math.floor(men), start };
+  // Yoldaki takviye: kaç asker, ilki kaç saniyede.
+  const way = (b.reserve ?? []).filter((r) => r.side === side && !r.in);
+  return { men: Math.floor(men), start, coming: way.reduce((n, r) => n + r.men, 0), eta: way.length ? Math.max(0, Math.ceil(Math.min(...way.map((r) => r.arrive)) - b.t)) : 0 };
 }
 
 /** Bütün savaşı bilgisayara oynat (Otomatik bitir; testler ve ayar için). */

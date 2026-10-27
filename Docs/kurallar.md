@@ -88,6 +88,22 @@ Her medeniyet ambarında 30 para, 5 silah ve 10 yiyecekle başlar.
 
 ---
 
+### 3b. Tahıl alımı ve hızlandırma (para nereye gider)
+
+Kullanıcı 27.10 (önerilerden beşincisi): bilgisayarın kasası geç oyunda on binlerce para oluyordu (100. turda ortası
+13.000, 150. turda 40.000); asker ancak tarlanın beslediği kadardı, parayla karar veren kurallar ona işlemiyordu.
+
+- **Tahıl alımı:** tüccarlardan her tur buğday, tanesi 3 para. Turda en çok 4 + pazar seviyesi başına 2 + ticareti
+  olan liman başına 4. Üst bantta buğdayın sağında küçük + ve − (2'şer); ipucunda ne kadar alındığı. Kasa yetmezse
+  yettiği kadar alınır. Alınan buğday turluk yiyecek dengesine katılır: daha büyük ordu beslenir.
+- **Hızlandırma:** süren bir inşaatın kartına basınca (üstüne gelince » ve fiyatı) kalan turların parası, turluk
+  payının iki katıyla ödenir; iş o tur sonunda biter. Bitmek üzere olan hızlandırılmaz.
+- Bilgisayar kasası yedeğinin (150 + yer başına 25) iki katını geçince tavana kadar, bir katını geçince yarısına
+  kadar tahıl alır; üç katını geçince süren inşaatlarını (ucuzdan başlayarak) hızlandırır.
+- Ölçüm (4 oyun, bilgisayarların kasası, ortanca): 75. tur 5.550 -> 1.000, 100. tur 13.200 -> 1.100, 125. tur
+  21.000 -> 3.200, 150. tur 39.500 -> 11.400. Orta oyunda orduları büyüdü (75. turda sahadaki asker 176 -> 586).
+  Geç oyunda bilgisayar ordularını sahaya çıkarmayı bırakıyor (ayrı bir konu); kasası yine birikiyor ama yavaş.
+
 ## 4. Şehirler ve kaleler
 
 Her yerleşimin dört yükseltmesi var:
@@ -325,6 +341,28 @@ sahnesi savaşın yerinin üstünde bir panoda oynar, bitince üstte bir sonuç 
 ve birkaç saniyede kendiliğinden kaybolur (basınca hemen).
 
 ---
+
+### 7b. Takviye
+
+Kullanıcı 27.10 (önerilerden ikincisi): "haritada yakında duran dost ordu savaşın ortasında sahanın kenarından girip
+katılsın; iki orduyu yan yana yürütmenin anlamı olsun".
+
+- Bir savaşa iki tarafın da **yakındaki orduları katılır**: savaşın yerine 1.2 birimden (kabaca bir saldırı menzili ve
+  yarısı) yakın, karada duran, askeri olan en yakın 3 ordu. Savunulan yerin içindekiler zaten savunan; dışarıdaki
+  orduları takviye. Denizden saldırıda saldıranın takviyesi yok; haydut ve barbarın takviyesi yok.
+- Her takviyenin **yarısı savaşa yetişir** (her türden; `N.reinforce.part`), kalanı yerinde kalır ve kayıp vermez.
+  Otomatik savaşta yetişen kısım tarafa katılır (general, tecrübe ve arazi asıl ordununki). Sonra: kazananın sağ
+  kalanları, yenilenin kaçabilenleri orduların her türden getirdiği oranda paylaşılır; asıl ordu (kazandıysa) yere
+  girer ya da geri çekilir, takviyeler yerinde kalır; çok azı kalan takviye dağılır, kazanan takviye tecrübe kazanır.
+- Neden yarısı: bütün ordular tam katılınca toplu güç savaşları çok kısalttı - 70 oyunda ilk düşüş 49. turdan
+  40'a, ayakta kalan 336'dan 302'ye indi (kuşatan ordular tek tek değil hep birlikte saldırıyordu).
+- **Taktik savaşta** takviyeler başta sahada değildir: 12 sn + uzaklığı oranında en çok 30 sn sonra tarafının
+  kenarından, kendi şeridinde girer ve ileri yürür ("Takviye geldi: 80 asker!" şeridi, saldırı borusu). Üst bantta
+  "+80 yolda · 17 sn". Yolda takviyesi olan taraf yenilmiş sayılmaz; gelmeyen takviye sağ kalanlara sayılır.
+- Saldırı penceresinde: "+2 yakındaki ordu katılır", askerler tarafın kutusunda toplanmış; tahmin ve bilgisayarın
+  kararları takviyeyi hesaba katar.
+- Yolda bulunan eski bir hata da düzeldi: şehre saldıran ordunun özel birlikleri savaşa sayılmıyor, kazanınca
+  sıfırlanıyordu.
 
 ## 8. Diplomasi
 
@@ -1325,3 +1363,49 @@ Kullanıcı 27.10 (önerilerden ilki): komutan taktik savaşta görünmüyordu, 
   Oyuncunun generali öteki birlikler gibi seçilip yönetilir (Otomatik'te bilgisayar yönetir).
 - Ayar (yalnız bir tarafı generalli 144 savaş): generalli taraf otomatik savaşta 75, taktik savaşta 78 kez kazanır;
   kazanan aynı %88.
+
+### 29f. Dizilişler ve yetenekler
+
+Kullanıcı 27.10 (önerilerden üçüncüsü): "Roma'ya kaplumbağa dizilişi, Makedonya'ya falanks, atlılara kama gibi bir
+düğmeyle açılan dizilişler". Seçili birliklerin çubuğunda beşinci düğme; açık diziliş ya da süren yetenek rozetin
+solunda altın bir işaretle görünür. Her medeniyetin bir özeli var; özeli birliğe uymuyorsa atlılar kama kullanır.
+
+| Diziliş / yetenek | Kimin | Etkisi |
+|---|---|---|
+| Kaplumbağa (açılıp kapanır) | Roma piyadesi, lejyoner | Oklar dörtte bir işler; yarı hız, vuruş x0.85; askerler kare kalkan |
+| Falanks (açılıp kapanır) | Makedonya piyadesi, falanks | Önden gelen darbe x0.6, hücumu durdurur (+1); yanlardan x1.25, hız x0.6, dönüş x0.4; önde mızraklar |
+| Kama (açılıp kapanır) | Herkesin atlısı | Hücum x1.5, vuruş x1.1; yediği darbe x1.15, dönüş x0.6 |
+| Katafrakt kaması (açılıp kapanır) | Partların atlısı | Hücum x1.8, vuruş x1.15; yediği x1.1 |
+| Savaş narası (12 sn, dakikada bir) | Galya piyadesi, savaşçısı, atlısı | 16 birimdeki düşmanlara -12 moral (surun ardındakine değil); 12 sn vuruş x1.3 |
+| Fil hücumu (12 sn, 45 sn'de bir) | Kartaca'nın fili ve atlısı | Hız x1.2, hücum x1.8, çarptığına -15 moral |
+| Ateşli oklar (20 sn, dakikada bir) | Mısır okçusu, savaş arabası | Ok x1.3, okun moral etkisi üç kat |
+| Atlı çember (açılıp kapanır) | Saka atlı okçusu | Gelen ok x0.5, kendi oku x1.2 |
+
+- Bilgisayar da kullanır: kaplumbağayı ok yağarken (göğüs göğüse değilken; sura hücum başlayınca bozar), falanksı düşman 18 birime gelince,
+  kamayı hücuma giderken, çemberi dövüşmezken; narayı dövüşürken, fil hücumunu saldırırken, ateşli oku menzilde hedef
+  varken. Oyuncunun birliklerinde yalnız oyuncu (Otomatik'te bilgisayar).
+- Ayar: iki taraf da bilgisayarda, surlu yerde saldıran otomatik savaşta 41, dizilişlerle taktik savaşta 48 kez kazanır
+  (dizilişler etkisizken 46) / 149; açık sahada kazanan aynı %89.
+
+### 29g. Hava ve gün saati
+
+Kullanıcı 27.10 (önerilerden dördüncüsü): "yağmurda okçular zayıf, siste görüş kısa, gece saldırısı".
+
+- Her savaşın bir havası ve gün saati var (`rules/weather.js`): yerine ve mevsimine göre. Kışın %22 kar, %22 yağmur,
+  %12 sis; öteki mevsimler %18 yağmur, %12 sis. 44. enlemin kuzeyinde (Galya, Germania) yağmur x1.4, sis x1.3, kar
+  x1.5; 33. enlemin güneyinde (Mısır, Mezopotamya) yağmur x0.3, sis yarısı, kar yok. Gün saati: %7 gece, %10 şafak,
+  %13 akşam. Aynı tur aynı yerde hava aynı: saldırı penceresi, otomatik savaş ve taktik savaş aynı havayı görür.
+
+| Hava | Ok | Ok menzili | Hücum | Yürüyüş |
+|---|---|---|---|---|
+| Yağmur | x0.7 | x0.8 | x0.85 | x0.9 |
+| Sis | x0.85 | x0.55 | - | - |
+| Kar | x0.85 | - | x0.8 | x0.8 |
+| Şafak, akşam | - | x0.85 | - | - |
+| Gece | x0.8 | x0.6 | - | - |
+
+- Otomatik savaşta ok yağmuru ve hücum (iki taraf için de); taktik savaşta menzil ve hız da. Savaş dökümünde
+  "Hava: oklar", "Hava: hücum" satırları; saldırı penceresinin alt başlığında ve taktik savaşın üst bandında havanın
+  adı ("☂ Yağmur · Akşam").
+- Görünüm: zeminde akşam turuncu, şafak pembe, gece lacivert örtü (askerler üstte, seçilebilir); askerlerin üstünde
+  yağmur eğik çizgiler, kar yavaş düşen taneler, sis sürüklenen beyaz öbekler. Ses: yağmurun hışırtısı, karda rüzgâr.

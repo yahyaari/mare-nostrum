@@ -7,7 +7,7 @@
 
 import { menace } from "../rules/moves.js";
 import { N } from "../rules/numbers.js";
-import { budget, placesOf } from "../rules/state.js";
+import { budget, grainCap, placesOf } from "../rules/state.js";
 import { fill } from "../text.js";
 import { seasonOf, yearOf } from "../rules/season.js";
 import { drawMinimap } from "./draw.js";
@@ -99,6 +99,24 @@ export function drawTopBar(ctx, cam, game, ui, boxes, T) {
       ctx.fillText(delta(per[k]), x + 42 + vw, cy + 2);
     }
     boxes.push({ x: x - 4, y: 4, w: 150, h: TOP - 8, act: null, tip: tips[k] });
+    // Tahıl alımı (bölüm 3b): buğdayın yanında küçük − ve + düğmeleri; ne kadar alındığı ipucunda.
+    if (k === "food") {
+      const cap = grainCap(game, me), now = civ.grain ?? 0;
+      const tip = [T.grain, fill(T.grainTip, N.grain.price, cap), b.grain ? [fill(T.grainNow, b.grain, b.grain * N.grain.price), "good"] : T.grainNone];
+      // Göstergenin sağ ucunda üst üste + ve − (yer dar).
+      const bx = x + 128;
+      for (const [i, sign] of [[0, 1], [1, -1]]) {
+        const off = sign < 0 ? now <= 0 : now >= cap;
+        const r = { x: bx, y: cy - 13 + i * 13, w: 13, h: 12 };
+        ctx.fillStyle = off ? "rgba(255,255,255,0.06)" : "rgba(201,164,90,0.3)";
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+        ctx.font = `700 12px ${SERIF}`;
+        ctx.fillStyle = off ? "rgba(243,231,201,0.3)" : CREAM;
+        ctx.textAlign = "center";
+        ctx.fillText(sign < 0 ? "−" : "+", r.x + r.w / 2, r.y + r.h / 2 + 1);
+        boxes.push({ ...r, act: off ? null : { do: "grain", by: sign * N.grain.step }, tip });
+      }
+    }
   }
 
   // Skor ve sıra (zafer yolları, rules/victory.js): defnenin içinde sıra, yanında skor. Basınca

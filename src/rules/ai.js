@@ -24,7 +24,7 @@ import { aiResearch, unlocked } from "./research.js";
 import { dealOf, moodOf, persona, warMoodMul } from "./leaders.js";
 import {
   armiesAt, armiesOf, armyById, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men,
-  freeBuilders, humansOf, isHuman, muster, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, startWonder, station, strength, together, upgrade, upgradeInfo, wonderInfo,
+  freeBuilders, grainCap, humansOf, isHuman, muster, rush, rushInfo, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, startWonder, station, strength, together, upgrade, upgradeInfo, wonderInfo,
 } from "./state.js";
 
 // Ordunun hedeflenen bileşimi (payları; gerisi piyade). Güçlü okçusu olan daha çok okçu, zayıf
@@ -292,7 +292,24 @@ const shipsFor = (pl, force) => shipsToCarry(pl, men(force));
 
 // ---- asker ----
 
+/**
+ * Tahıl alımı (bölüm 3b): kasası dolu bilgisayar parasıyla buğday alır - ordusunu besler, para yığılmaz (önceden geç
+ * oyunda on binlerce para birikiyordu, asker ancak tarlanın beslediği kadardı).
+ */
+function buyGrain(state, civ) {
+  const G = N.grain, c = state.civs[civ], cap = grainCap(state, civ);
+  const reserve = G.aiReserve + G.aiPerPlace * placesOf(state, civ).length;
+  c.grain = c.money > reserve * 2 ? cap : c.money > reserve ? Math.round(cap / 2) : 0;
+  // Kasası çok dolu bilgisayar süren inşaatlarını da hızlandırır (ucuzu önce).
+  const jobs = placesOf(state, civ).flatMap((id) => (state.places[id].builds ?? []).map((b) => ({ id, what: b.what, cost: rushInfo(state, id, b.what).cost })));
+  for (const j of jobs.sort((a, b) => a.cost - b.cost)) {
+    if (c.money - j.cost < reserve * 3) break;
+    rush(state, j.id, j.what);
+  }
+}
+
 function recruitAll(state, civ) {
+  buyGrain(state, civ);
   const mix = MIX[civ] ?? MIX.default;
   for (const id of placesOf(state, civ)) {
     for (let guard = 0; guard < 6; guard++) {

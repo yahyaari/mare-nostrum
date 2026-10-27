@@ -12,7 +12,7 @@ import {
 } from "./rules/moves.js";
 import { PLACE_CELL, POS, cellOf, centre, dist, isLand, pathCost, regionOf, search, smooth, stepCost } from "./rules/map.js";
 import {
-  VERSION, aliveHumans, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, humansOf, merge, men, migrate, muster, newGame, placesOf, recruit, startWonder, station, upgrade,
+  VERSION, aliveHumans, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, grainCap, holdGames, humansOf, merge, rush, men, migrate, muster, newGame, placesOf, recruit, startWonder, station, upgrade,
 } from "./rules/state.js";
 import { ownerOf, resolve as answer } from "./rules/events.js";
 import { appoint, officerFor } from "./rules/generals.js";
@@ -37,7 +37,7 @@ import { record } from "./rules/chronicle.js";
 import { sendSpy } from "./rules/spies.js";
 import { SCENE_MS } from "./view/battle.js";
 import { makeField } from "./rules/field.js";
-import { aiOrders, command as tacCommand, deployZone, merge as tacMerge, orderLine, outcome, placeAt as tacPlace, placeLine, planLine, reshape, setupBattle, split as tacSplit, step as stepBattle } from "./rules/tactics.js";
+import { aiOrders, useAbility, command as tacCommand, deployZone, merge as tacMerge, orderLine, outcome, placeAt as tacPlace, placeLine, planLine, reshape, setupBattle, split as tacSplit, step as stepBattle } from "./rules/tactics.js";
 import { incomingFor, incomingSides, resolveIncoming } from "./rules/incoming.js";
 import { drawTactics, toField, unitAt } from "./view/tactics.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
@@ -248,8 +248,12 @@ function battleSounds(B, now) {
   if (foot.length && now >= (B.stepAt ?? 0)) { B.stepAt = now + (440 + Math.random() * 80) / pace; sound.tramp(men(foot), pan(foot)); }
   if (horse.length && now >= (B.hoofAt ?? 0)) { B.hoofAt = now + (330 + Math.random() * 60) / pace; sound.hooves(men(horse), pan(horse)); }
   if (fighting.length && now >= (B.meleeAt ?? 0)) { B.meleeAt = now + (200 + Math.random() * 260) / pace; sound.melee(men(fighting), pan(fighting)); }
-  // General düştü: alçak, inen bir boru.
+  // Hava: yağmurda hışırtı, karda rüzgâr (arada bir, alçak).
+  const sky = B.b.weather?.sky;
+  if ((sky === "rain" || sky === "snow") && now >= (B.skyAt ?? 0)) { B.skyAt = now + 900; sound.weather(sky); }
+  // General düştü: alçak, inen bir boru. Takviye geldi: saldırı borusu, geldiği yandan.
   for (const e of B.b.fx) if (e.kind === "genFell" && !e.heard) { e.heard = true; sound.genFell(e.side === B.me ? -0.3 : 0.3); }
+  for (const e of B.b.fx) if (e.kind === "reinforce" && !e.heard) { e.heard = true; sound.charge(e.side === "att" ? -0.8 : 0.8); }
 }
 
 /** Girişte tıklamak ya da bir tuş girişi geçer (kamera, bulutlar, bantlar yerine). Geçtiyse true. */
@@ -1294,6 +1298,21 @@ function dispatch(act) {
       if (head) B.sel = new Set([head.id]);
       break;
     }
+    case "rush":
+      // Süren inşaatı hızlandır (bölüm 4).
+      if (rush(game, act.id, act.what)) { sound.build(); save(); }
+      break;
+    case "grain": {
+      // Tahıl alımı (bölüm 3b): adım adım, tavan ile sıfır arasında.
+      const c = game.civs[game.player];
+      c.grain = Math.max(0, Math.min(grainCap(game, game.player), (c.grain ?? 0) + act.by));
+      save();
+      break;
+    }
+    case "tacAbility":
+      // Diziliş ya da yetenek (bölüm 29f): seçili birlikler.
+      if (ui.battle && useAbility(ui.battle.b, [...ui.battle.sel])) sound.click();
+      break;
     case "tacWide":
     case "tacDeep":
       if (ui.battle) reshape(ui.battle.b, [...ui.battle.sel], act.do === "tacWide" ? 1 : -1);

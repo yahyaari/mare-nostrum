@@ -13,7 +13,7 @@
 // ya da bir tuş girişi geçer. Bitişte saha kararır, sonuç panosu aşağıdan yavaşça çıkar.
 
 import { N } from "../rules/numbers.js";
-import { deployZone, extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
+import { abilityOf, active, deployZone, extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
 import { BRIDGE, FOREST, WATER, insideCity, passable, placeName, sidePoint, wallAt } from "../rules/field.js";
 import { TITLE_FONT } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shade } from "./pieces.js";
@@ -85,6 +85,8 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
     const k = B.intro ? ramp(t, INTRO.bars) : 1;
     if (k > 0) for (const s of ["att", "def"]) zone(ctx, f, deployZone(b, s), B.owners[s], s === B.me, k);
   }
+  // Gecenin, akşamın, şafağın rengi zeminde (askerler seçilebilsin diye altlarında).
+  sky(ctx, f, b, now, "ground");
   // Yerdeki ölüler.
   corpses(ctx, f, B);
   // Askerler kendi yerlerine yürür (duraklatılınca durur).
@@ -118,10 +120,10 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   if (b.walls) for (const u of b.units) if (u.climbing && u.ladder && !u.dead && !u.gone) ladder(ctx, f, u, B.owners[u.side], now);
   for (const s of b.shots) arrows(ctx, f, b, s);
   for (const e of b.fx) burst(ctx, f, b, e);
-  for (const e of b.fx) if (e.kind === "genFell" || e.kind === "genFled") fallen(ctx, f, B, e, T);
+  for (const e of b.fx) if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce") fallen(ctx, f, B, e, T);
   for (const u of b.units) {
     if (u.dead || u.gone) continue;
-    badge(ctx, f, u, owner[u.side], B.sel.has(u.id));
+    badge(ctx, f, u, owner[u.side], B.sel.has(u.id), b);
   }
   // Seçim kutusu.
   if (B.drag) {
@@ -136,6 +138,8 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   }
   // Sağ sürükleme: çizilen hat ve birliklerin orada alacağı yer.
   if (B.plan?.length) plan(ctx, f, B);
+  // Hava (bölüm 29g): yağmur çizgileri, kar taneleri, sis (askerlerin üstünde).
+  sky(ctx, f, b, now, "air");
   if (view) {
     ctx.restore();
     clouds(ctx, cam, B, t);
@@ -295,6 +299,62 @@ function introTitle(ctx, cam, B, t) {
   ctx.shadowBlur = 10;
   text(ctx, B.title, 0, 0, { title: true, bold: true, size: 38, color: GOLD_LIGHT, align: "center" });
   text(ctx, `${B.names.att}   ⚔   ${B.names.def}`, 0, 26, { italic: true, size: 16, color: CREAM, align: "center" });
+  ctx.restore();
+}
+
+/**
+ * Hava katmanı (sahanın üstünde, kırpılmış): zeminde (`ground`) akşam turuncu, şafak pembe, gece lacivert bir örtü;
+ * askerlerin üstünde (`air`) sis sürüklenen beyaz
+ * öbekler; yağmur eğik çizgiler; kar yavaş düşen taneler. Zaman gerçek saatle akar (duraklatınca da yağar).
+ */
+function sky(ctx, f, b, now, layer) {
+  const w = b.weather;
+  if (!w || (w.sky === "clear" && w.time === "day")) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(f.x, f.y, f.w, f.h);
+  ctx.clip();
+  if (layer === "ground") {
+    const tint = { dawn: "rgba(240,170,170,0.14)", dusk: "rgba(230,130,60,0.18)", night: "rgba(10,16,46,0.55)" }[w.time];
+    if (tint) { ctx.fillStyle = tint; ctx.fillRect(f.x, f.y, f.w, f.h); }
+    ctx.restore();
+    return;
+  }
+  const s = now / 1000;
+  if (w.sky === "fog") {
+    ctx.fillStyle = "rgba(225,228,232,0.28)";
+    ctx.fillRect(f.x, f.y, f.w, f.h);
+    for (let i = 0; i < 14; i++) {
+      const x = f.x + ((i * 0.37 + s * 0.012 * (1 + (i % 3))) % 1.2 - 0.1) * f.w, y = f.y + ((i * 0.61) % 1) * f.h, r = f.w * (0.12 + (i % 4) * 0.03);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, "rgba(235,238,242,0.45)");
+      g.addColorStop(1, "rgba(235,238,242,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  } else if (w.sky === "rain") {
+    ctx.fillStyle = "rgba(60,80,100,0.16)";
+    ctx.fillRect(f.x, f.y, f.w, f.h);
+    ctx.strokeStyle = "rgba(200,215,230,0.45)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < 260; i++) {
+      const x = f.x + (((i * 0.6180339) % 1) * f.w + s * 60) % f.w, y = f.y + (((i * 0.4142) % 1) * f.h + s * 520 + i * 13) % f.h;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 4, y + 13);
+    }
+    ctx.stroke();
+  } else if (w.sky === "snow") {
+    ctx.fillStyle = "rgba(240,244,250,0.18)";
+    ctx.fillRect(f.x, f.y, f.w, f.h);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    for (let i = 0; i < 180; i++) {
+      const x = f.x + (((i * 0.6180339) % 1) * f.w + Math.sin(s * 0.8 + i) * 8 + f.w) % f.w, y = f.y + (((i * 0.4142) % 1) * f.h + s * 28 * (0.6 + (i % 5) * 0.15)) % f.h;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.2 + (i % 3) * 0.5, 0, TAU);
+      ctx.fill();
+    }
+  }
   ctx.restore();
 }
 
@@ -820,10 +880,24 @@ function block(ctx, f, B, u, owner, selected, dt) {
     ctx.fillStyle = GOLD_LIGHT;
     ctx.fill();
   }
+  // Falanks: ön sıralardan ileri uzanan mızraklar.
+  if (u.stance === "phalanx") {
+    ctx.strokeStyle = "rgba(60,44,26,0.85)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const row = i % fp.rows;
+      if (row > 2) return;
+      const x = f.x + p.x * f.k, y = f.y + p.y * f.k;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + cos * (2.4 - row * 0.6) * f.k, y + sin * (2.4 - row * 0.6) * f.k);
+    });
+    ctx.stroke();
+  }
   for (const p of pts) {
     const x = f.x + p.x * f.k, y = f.y + p.y * f.k;
     ctx.beginPath();
-    if (u.type === "siege") ctx.rect(x - r, y - r, r * 2, r * 2);
+    if (u.type === "siege" || u.stance === "testudo") ctx.rect(x - r, y - r, r * 2, r * 2);
     else if (u.mounted || u.type === "cav") ctx.ellipse(x, y, r * 1.35, r * 0.85, u.facing, 0, TAU);
     else ctx.arc(x, y, r, 0, TAU);
     ctx.fillStyle = u.kind === "arch" && !u.elite ? shade(color, 0.25) : color;
@@ -884,6 +958,17 @@ function formationBar(ctx, cam, f, B, T, boxes) {
     { label: T.tacWide, act: { do: "tacWide" }, tip: [T.tacWide, T.tacWideTip] },
     { label: T.tacDeep, act: { do: "tacDeep" }, tip: [T.tacDeep, T.tacDeepTip] },
   ];
+  // Diziliş ya da yetenek (bölüm 29f): seçililerden birinin varsa; açıksa vurgulu, beklerken kaç saniye kaldığı.
+  const able = sel.map((u) => [u, abilityOf(B.b, u)]).filter(([, a]) => a);
+  if (able.length) {
+    const [u0, ab] = able[0], A = N.tactics.abilities[ab], b = B.b;
+    const on = able.some(([u, a]) => active(b, u, a));
+    const wait = A.toggle ? 0 : Math.max(0, Math.ceil(Math.min(...able.map(([u]) => u.ready ?? 0)) - b.t));
+    const name = T.abilities[ab][0];
+    btns.push({ label: on && !A.toggle ? `${name} ✓` : wait ? `${name} · ${wait}` : name, main: on, off: !!wait, act: { do: "tacAbility" },
+      tip: [name, T.abilities[ab][1], on ? T.abilityOn : wait ? T.abilityReady.replace("{0}", wait) : null], size: name.length > 12 ? 11.5 : 13 });
+    void u0;
+  }
   const bw = 112, gap = 6, w = btns.length * bw + (btns.length - 1) * gap;
   const x0 = cam.w / 2 - w / 2, y = f.y + f.h - 40;
   ctx.fillStyle = "rgba(28,21,14,0.75)";
@@ -898,7 +983,7 @@ function formationBar(ctx, cam, f, B, T, boxes) {
 }
 
 /** Birliğin rozeti: türünün simgesi, sayısı, moral çubuğu. */
-function badge(ctx, f, u, owner, selected) {
+function badge(ctx, f, u, owner, selected, b = null) {
   const x = f.x + u.x * f.k, y = f.y + (u.y - extent(u).y) * f.k - 13;
   const R = 9;
   ctx.save();
@@ -918,6 +1003,16 @@ function badge(ctx, f, u, owner, selected) {
   ctx.fillStyle = u.routed ? "#9a4a3a" : m > 0.5 ? "#7fb85a" : m > 0.25 ? "#d6a63a" : "#c4523a";
   ctx.fillRect(x - 11, y + R + 2, 22 * (u.routed ? 1 : m), 3.5);
   text(ctx, u.routed ? "!" : String(Math.ceil(u.men)), x + R + 3, y + 4, { bold: true, size: 11, color: CREAM });
+  // Açık diziliş ya da süren yetenek: rozetin solunda küçük altın bir işaret.
+  const st = u.stance ?? (u.boost && b && u.boost.until > b.t ? u.boost.id : null);
+  if (st) {
+    const mark = { testudo: "▣", phalanx: "⇈", wedge: "▲", heavyWedge: "▲", warcry: "!", stampede: "»", fire: "✶", circle: "◎" }[st];
+    ctx.beginPath();
+    ctx.arc(x - R - 6, y, 6.5, 0, TAU);
+    ctx.fillStyle = GOLD_LIGHT;
+    ctx.fill();
+    text(ctx, mark, x - R - 6, y + 3.5, { bold: true, size: 9.5, color: DARK, align: "center" });
+  }
   ctx.restore();
 }
 
@@ -1009,8 +1104,8 @@ function arrows(ctx, f, b, s) {
 function fallen(ctx, f, B, e, T) {
   const age = B.b.t - e.t, a = Math.max(0, Math.min(1, age * 4, (4 - age) / 1.2));
   if (a <= 0) return;
-  const s = (e.kind === "genFell" ? T.tacGenFell : T.tacGenFled).replace("{0}", e.name ?? T.tacGeneral);
-  const y = f.y + f.h * 0.18, mine = e.side === B.me;
+  const s = e.kind === "reinforce" ? T.tacReinforced.replace("{0}", e.men) : (e.kind === "genFell" ? T.tacGenFell : T.tacGenFled).replace("{0}", e.name ?? T.tacGeneral);
+  const y = f.y + f.h * (e.kind === "reinforce" ? 0.85 : 0.18), mine = e.side === B.me;
   ctx.save();
   ctx.globalAlpha = a;
   const w = Math.min(f.w - 40, measure(ctx, s, { title: true, bold: true, size: 24 }) + 80);
@@ -1019,12 +1114,12 @@ function fallen(ctx, f, B, e, T) {
   ctx.fill();
   ctx.fillStyle = colorOf(B.owners[e.side]);
   ctx.fillRect(f.x + f.w / 2 - w / 2, y + 12, w, 2);
-  text(ctx, s, f.x + f.w / 2, y + 2, { title: true, bold: true, size: 24, color: mine ? "#e08a6a" : GOLD_LIGHT, align: "center" });
+  text(ctx, s, f.x + f.w / 2, y + 2, { title: true, bold: true, size: 24, color: e.kind === "reinforce" ? (mine ? "#9fd07a" : "#e08a6a") : mine ? "#e08a6a" : GOLD_LIGHT, align: "center" });
   ctx.restore();
 }
 
 function burst(ctx, f, b, e) {
-  if (e.kind === "genFell" || e.kind === "genFled") return;
+  if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce") return;
   const age = b.t - e.t;
   const a = Math.max(0, 1 - age / 1.6);
   if (a <= 0) return;
@@ -1060,14 +1155,17 @@ function topBar(ctx, cam, B, T, lang) {
     if (align === "left") ctx.fillRect(bx, 34, bw * k, 10); else ctx.fillRect(bx + bw * (1 - k), 34, bw * k, 10);
     ctx.strokeStyle = GOLD_DARK;
     ctx.strokeRect(bx + 0.5, 34.5, bw - 1, 9);
-    text(ctx, String(st.men), align === "left" ? bx + bw + 8 : bx - 8, 44, { bold: true, size: 12, color: GOLD_LIGHT, align: align === "left" ? "left" : "right" });
+    const nw = text(ctx, String(st.men), align === "left" ? bx + bw + 8 : bx - 8, 44, { bold: true, size: 12, color: GOLD_LIGHT, align: align === "left" ? "left" : "right" });
+    // Yoldaki takviye (bölüm 7b).
+    if (st.coming) text(ctx, T.tacComing.replace("{0}", st.coming).replace("{1}", st.eta), align === "left" ? bx + bw + 16 + nw : bx - 16 - nw, 44, { italic: true, size: 11.5, color: CREAM, align: align === "left" ? "left" : "right" });
   };
   side("att", 18, "left");
   side("def", cam.w - 18, "right");
   const left = Math.max(0, Math.ceil((B.b.walls ? N.tactics.timeWalls : N.tactics.time) - B.b.t));
   text(ctx, B.title, cam.w / 2, 24, { title: true, bold: true, size: 16, color: GOLD_LIGHT, align: "center" });
   const status = B.b.over ? "" : B.paused ? T.tacPaused : `${T.tacTime} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}${B.speed > 1 ? `  ·  x${B.speed}` : ""}${B.auto ? `  ·  ${T.tacAuto}` : ""}`;
-  text(ctx, status, cam.w / 2, 45, { italic: true, size: 12, color: B.paused ? GOLD_LIGHT : CREAM, align: "center" });
+  const wth = B.b.weather, ws = wth ? [wth.sky !== "clear" ? T.sky[wth.sky] : null, T.dayTime[wth.time] || null].filter(Boolean).join(" · ") : "";
+  text(ctx, ws && status ? `${status}  ·  ${ws}` : status || ws, cam.w / 2, 45, { italic: true, size: 12, color: B.paused ? GOLD_LIGHT : CREAM, align: "center" });
 }
 
 /** Alt bant: oyuncunun birliklerinin kartları (basınca seçer) ve düğmeler. */
