@@ -1133,6 +1133,15 @@ arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar".
   açılınca eski dizilişine açılır (dövüşürken değişmez, kuşatma makinesi değişmez). Köprüde 20'lik okçu hattı 2'lik
   kol olur, karşıda yeniden 20; şehrin kuzeyindeki koridorda 25 birimlik hat geçer. (Önce sur kuralı geniş birliği tüm
   genişliğiyle surdan uzak tuttuğu için koridorun köşesinde takılıyordu.) Dost birlikler zaten birbirinin içinden geçer.
+- **Toplu ve dağınık** (kullanıcı 27.10, kıyı boyunca uzayan yılan gibi kolların görselleriyle: "hep satır sütun nizami
+  ilerliyor, dağılsınlar; alan daralınca okçular geriye doğru sıralanıyor, en arkadakiler uzak kalıyor"): daralan birlik
+  en çok 6 sıra derinliğe iner (`N.tactics.squeezeRows`) - geçit daha darsa askerler kenarlara, engellerin dibine dağılır;
+  geçidin ortasına kayar. Askerler yerlerinin biraz yanında durur: dururken toplu, yürürken gevşek, dar yerde iyice
+  dağınık; su, ev ve sur üstüne düşen asker birliğin ortasına doğru sokulur. Geçidin genişliği iki yanın toplamıyla
+  ölçülür (birlik ortada değilse de).
+- **Dizilirken ışınlanma görünür:** duraklatılmışken de askerler birliğin yeni yerine gelir (önce çizim eski yerde
+  kalıyor, görünen yere tıklayınca birlik seçilemiyordu); dizilme aşamasında anında, duraklatılmış savaşta diziliş
+  değişince hızla akarak.
 - **Geniş hat sarar:** düşmandan geniş cephenin taşan payı önden vururken de x0.8 kadar yandan vurmuş sayılır.
 - **Sur:** dışarıdakiler surun önünde, içeridekiler ardında. Sura dayanan birlik **merdivenden tek sıra
   tırmanır**: saniyede 3 asker içeride ayrı bir birliğe (köprübaşı) geçer - kaç kişi olursa olsun; yan yana

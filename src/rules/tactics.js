@@ -231,6 +231,7 @@ const alive = (u) => !u.dead && !u.gone;
  * önünde de bakar. Dönen: ortalanmış serbest genişlik.
  */
 function room(b, u, ang, need, reach = 4) {
+  // Dönen: iki yanın serbest genişliklerinin toplamı (birlik geçidin ortasında değilse de geçidin kendi genişliği).
   const F = b.field, C = b.walls ? F.city : null, T = K();
   const fx = Math.cos(ang), fy = Math.sin(ang), px = -fy, py = fx;
   const blocked = (x, y) => {
@@ -240,25 +241,30 @@ function room(b, u, ang, need, reach = 4) {
     const near = x > C.x0 - pad && x < C.x1 + pad && y > C.y0 - pad && y < C.y1 + pad;
     return u.inside ? !insideCity(C, { x, y }) : near;
   };
-  let half = need / 2;
+  const side = { [-1]: need, 1: need };
   for (const ahead of [0, 2, 4]) {
     // Yalnız gideceği yere bakar: hedefin ötesine ya da önü kapalıysa (sura dayanmış, kıyıda) daha ileriye değil.
     if (ahead > reach || (ahead > 0 && blocked(u.x + fx * ahead, u.y + fy * ahead))) break;
     for (const sgn of [-1, 1]) {
-      for (let d = 0.4; d <= half; d += 0.4) {
-        if (blocked(u.x + fx * ahead + px * sgn * d, u.y + fy * ahead + py * sgn * d)) { half = Math.min(half, d - 0.3); break; }
+      for (let d = 0.4; d <= need; d += 0.4) {
+        if (blocked(u.x + fx * ahead + px * sgn * d, u.y + fy * ahead + py * sgn * d)) { side[sgn] = Math.min(side[sgn], d - 0.3); break; }
       }
     }
   }
-  return Math.max(0, half * 2);
+  return { width: Math.max(0, side[-1] + side[1]), shift: (side[1] - side[-1]) / 2, px, py };
 }
 
 /** Dar yerde cepheyi daralt, genişleyince eski dizilişe aç (dövüşürken değişmez). */
 function squeeze(b, u, ang, reach) {
   if (b.t - (u.roomAt ?? -9) < 0.25) return;
   u.roomAt = b.t;
-  const full = footprint({ ...u, march: null }), r = room(b, u, ang, full.w + 1, reach);
-  u.march = r < full.w ? Math.max(1, Math.floor((r - 0.2) / full.sp)) : null;
+  const full = footprint({ ...u, march: null }), R = room(b, u, ang, full.w + 1, reach), r = R.width;
+  // Dar yerde birlik geçidin ortasına kayar (kıyıya, sura yapışık değil).
+  u.lateral = r < full.w ? { x: R.px * R.shift, y: R.py * R.shift } : null;
+  // Kullanıcı 27.10: "tek sıra kol olup uzayınca en arkadakiler geride kalıyor, saçma; dağınık bir küme olsun" -
+  // daralan birlik en çok `squeezeRows` sıra derinliğe iner (geçit daha darsa asker kenarlarda dağılır, view).
+  const least = Math.ceil(Math.ceil(u.men) / K().squeezeRows);
+  u.march = r < full.w ? Math.max(1, least, Math.floor((r - 0.2) / full.sp)) : null;
 }
 const fighting = (u) => alive(u) && !u.routed && u.type !== "siege";
 const foes = (b, u) => b.units.filter((v) => v.side !== u.side && alive(v) && !v.routed);
@@ -668,6 +674,14 @@ export function step(b, dt) {
         const k = Math.min(1, sp / da);
         const nx = u.x + (aim.x - u.x) * k, ny = u.y + (aim.y - u.y) * k;
         if (passable(F, nx, ny) || (u.routed && kindAt(F, nx, ny) === WALL)) { u.x = nx; u.y = ny; }
+        // Geçidin ortasına doğru (yürüyüş hızının yarısıyla).
+        if (u.lateral) {
+          const l = Math.hypot(u.lateral.x, u.lateral.y), step = Math.min(l, u.speed * 0.5 * dt);
+          if (l > 1e-3) {
+            const sx = u.x + (u.lateral.x / l) * step, sy = u.y + (u.lateral.y / l) * step;
+            if (passable(F, sx, sy)) { u.x = sx; u.y = sy; u.lateral.x -= (u.lateral.x / l) * step; u.lateral.y -= (u.lateral.y / l) * step; }
+          }
+        }
         else { u.pathAt = -9; }
         u.wasMoving = true;
       } else if (u.order && !u.order.unit) {

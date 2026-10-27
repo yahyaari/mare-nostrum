@@ -110,7 +110,8 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
 25. **Dizilme, tavır, sana saldırılar** (b2ab149): kurallar.md 29c, `src/rules/incoming.js`. Dizilme bölgeleri ve
     ışınlama; zayıf savunan tepede savunur; bilgisayarın sana saldırısında Sonucu gör / Savaş. Test oyuncusu (playtest)
     artık Asker bas sekmesini açıyor (asker basma ayrı sekmeye geçince hiç asker basmıyordu).
-26. **Öğretici her yeni oyunda** (94669f6) ve **dar geçitte kola dönme** (bu adım): kurallar.md 29a "Dar geçit".
+26. **Öğretici her yeni oyunda** (94669f6) ve **dar geçitte kola dönme** (0e705a6): kurallar.md 29a "Dar geçit".
+27. **Toplu ve dağınık birlikler, dizilmede görünen ışınlanma** (bu adım): kurallar.md 29a "Toplu ve dağınık".
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

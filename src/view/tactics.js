@@ -9,7 +9,7 @@
 
 import { N } from "../rules/numbers.js";
 import { deployZone, extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
-import { BRIDGE, FOREST, WATER, placeName, sidePoint, wallAt } from "../rules/field.js";
+import { BRIDGE, FOREST, WATER, insideCity, passable, placeName, sidePoint, wallAt } from "../rules/field.js";
 import { TITLE_FONT } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shade } from "./pieces.js";
 import { INK, TAU, button, colorOf, measure, panel, text, wrap } from "./kit.js";
@@ -57,7 +57,10 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   // Yerdeki ölüler.
   corpses(ctx, f, B);
   // Askerler kendi yerlerine yürür (duraklatılınca durur).
-  const dt = B.paused || b.over ? 0 : Math.min(0.1, Math.max(0, (now - (B.dotT ?? now)) / 1000)) * B.speed;
+  // Askerlerin yürüyüşü: savaşla aynı hızda; duraklatılınca yerlerinde, ama birlik ışınlandıysa ya da dizilişi
+  // değiştiyse yeni yerlerine akarlar (kullanıcı 27.10: "noktalar olduğu yerde kalıyor, seçemiyorum").
+  const real = Math.min(0.1, Math.max(0, (now - (B.dotT ?? now)) / 1000));
+  const dt = b.over ? 0 : B.paused ? real * 3 : real * B.speed;
   B.dotT = now;
   // Emir çizgileri (seçili birliklerin).
   for (const u of b.units) if (B.sel.has(u.id) && !u.dead && !u.gone && !u.routed && u.order) orderLine(ctx, f, b, u);
@@ -477,17 +480,30 @@ function tower(ctx, f, x, y, r) {
  * en yakın olandan eksilir, yerde iz kalır; tırmanıp içeri geçen ölü sayılmaz.
  */
 function soldiers(B, u, dt) {
-  const b = B.b, fp = footprint(u);
+  const b = B.b, fp = footprint(u), F = b.field, C = b.walls ? F.city : null;
   const n = Math.max(1, Math.round(u.men));
   const cos = Math.cos(u.facing), sin = Math.sin(u.facing);
   B.dots ??= new Map();
   let D = B.dots.get(u.id);
-  const slot = (i) => {
-    const row = i % fp.rows, col = Math.floor(i / fp.rows);
-    const fx = (fp.rows / 2 - row - 0.5) * fp.sp, fy = (col - (fp.cols - 1) / 2) * fp.sp;
-    return { x: u.x + fx * cos - fy * sin, y: u.y + fx * sin + fy * cos, row };
-  };
   const jit = (i) => ({ a: Math.sin((u.id * 31 + i) * 12.9898) % 1, c: Math.cos((u.id * 17 + i) * 78.233) % 1 });
+  // Dağınıklık (kullanıcı 27.10: "hep satır sütun nizami ilerliyor, dağılsınlar"): her asker yerinin biraz yanında;
+  // yürürken daha gevşek, dar yerde (daralmış birlik) iyice dağınık; dururken toplu.
+  const loose = (u.march != null ? 0.55 : u.wasMoving ? 0.3 : 0.14) * fp.sp;
+  // Bir nokta askere uygun mu: su, ev, sur değil; surun dışındaki şehre, içindeki dışarıya taşmaz.
+  const ok = (x, y) => passable(F, x, y) && (!C || u.routed || (u.inside ? insideCity(C, { x, y }) : !insideCity(C, { x, y })));
+  const slot = (i) => {
+    const row = i % fp.rows, col = Math.floor(i / fp.rows), j = jit(i);
+    const fx = (fp.rows / 2 - row - 0.5) * fp.sp + j.c * loose, fy = (col - (fp.cols - 1) / 2) * fp.sp + j.a * loose;
+    let x = u.x + fx * cos - fy * sin, y = u.y + fx * sin + fy * cos;
+    // Yeri engelin üstündeyse birliğin ortasına doğru çekilir: dar yerde asker kıyıya, ağaca, sura sokulur.
+    if (F.obstacles && !ok(x, y)) {
+      for (let k = 1; k <= 6; k++) {
+        const t = k / 6, qx = x + (u.x - x) * t + j.a * 0.4, qy = y + (u.y - y) * t + j.c * 0.4;
+        if (ok(qx, qy)) { x = qx; y = qy; break; }
+      }
+    }
+    return { x, y, row };
+  };
   if (!D) {
     // İlk kez: yerinde; surdan tırmanan grup ise surun dibinde belirir.
     D = { pts: [], seen: u.climbed ?? 0 };
@@ -509,8 +525,8 @@ function soldiers(B, u, dt) {
     else { B.corpses ??= []; B.corpses.push({ x: p.x, y: p.y, side: u.side }); if (B.corpses.length > 1500) B.corpses.shift(); }
   }
   while (D.pts.length < n) { const s = slot(D.pts.length), L = u.ladder; D.pts.push(u.from && L ? { x: L.x - L.nx * 0.4, y: L.y - L.ny * 0.4 } : { x: s.x, y: s.y }); }
-  // Hedefler ve yürüyüş.
-  const vmax = (u.speed * 1.4 + 1.5) * dt;
+  // Hedefler ve yürüyüş (dizilirken ışınlanır: birlik nerede ise askerleri orada).
+  const vmax = B.deploy ? Infinity : (u.speed * 1.4 + 1.5) * dt;
   D.pts.forEach((p, i) => {
     const s = slot(i), j = jit(i);
     let tx = s.x, ty = s.y;

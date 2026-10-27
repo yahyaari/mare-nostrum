@@ -85,6 +85,8 @@ export const N = {
     // okçunun menzili (yükseklik x).
     terrain: { riverWidth: 4, forest: 0.6, forestMounted: 0.45, forestCav: 0.7, forestCharge: 0.5, forestArrow: 0.55, hillSlow: 0.25, height: 0.35, hillRange: 0.3 },
     flank: { side: 1.5, rear: 2, wrap: 0.8 },
+    // Dar yerde daralan birliğin en çok kaç sıra derinliğe indiği (uzun kol olmasın, toplu kalsın).
+    squeezeRows: 6,
     // Bilgisayarın tavrı: savunan, gücü saldıranınkinin `ratio` katına yetiyorsa saldırır, yoksa savunur - kendi
     // yarısında yüksekliği `hill`i geçen bir tepe varsa oraya çıkar; `engage` (atlı `cavEngage`) birime gelen düşmanla dövüşür.
     defend: { ratio: 1, hill: 0.3, engage: 10, cavEngage: 16 },

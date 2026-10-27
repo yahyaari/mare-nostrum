@@ -1223,7 +1223,7 @@ section("Taktik savaş: tavır ve dizilme (bölüm 29)");
   TC2.command(qb, [qa.id], { x: brq.x + qc * 22, y: brq.y + qs * 22 });
   let onBridge = 99;
   for (let i = 0; i < 120; i++) { TC2.step(qb, 0.1); if (Math.hypot(qa.x - brq.x, qa.y - brq.y) < 2) onBridge = Math.min(onBridge, TC2.footprint(qa).cols); }
-  check("köprüde kola döner, karşıda yeniden açılır", onBridge <= 3 && TC2.footprint(qa).cols === 20, `köprüde ${onBridge}, sonra ${TC2.footprint(qa).cols}`);
+  check("köprüde daralır ama en çok birkaç sıra derinlikte kalır, karşıda yeniden açılır", onBridge < 20 && Math.ceil(20 / onBridge) <= N.tactics.squeezeRows && TC2.footprint(qa).cols === 20, `köprüde ${onBridge}, sonra ${TC2.footprint(qa).cols}`);
   // Dost birlikler birbirinin içinden geçer: okçu hattının içinden piyade yürür.
   const pb = TC2.setupBattle({ civ: "rome", inf: 40, arch: 30 }, { civ: "gaul", inf: 10 }, null, 3);
   const [pi, pa] = [pb.units.find((u) => u.side === "att" && u.type === "inf"), pb.units.find((u) => u.side === "att" && u.type === "arch")];
