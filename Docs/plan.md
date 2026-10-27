@@ -3,9 +3,40 @@
 > **Yeni bir oturumda buradan başla.** Sonra `working-on-this.md` (komutlar, düzen, tuzaklar)
 > ve gerekirse `kurallar.md` (kuralların asıl kaynağı).
 >
-> Son güncelleme: **26.10.2026** (barbarlar, kartlar, özel birlikler, dinlenme, kayıt yuvaları, krizler, ticaret). Önceki: **23.10.2026** (zafer yolları, canlı savaşlar, öğretici, araştırma, liderler, harika yarışı, aynı bilgisayarda oyuncular, şehir binaları, geri çekilme ve dağlar, oyun sonu özeti).
+> Son güncelleme: **27.10.2026** (taktik savaş: saha, arazi, sur, dizilme, sana saldırılar). Önceki: 26.10 (barbarlar, kartlar, özel birlikler, dinlenme, kayıt yuvaları, krizler, ticaret); **23.10.2026** (zafer yolları, canlı savaşlar, öğretici, araştırma, liderler, harika yarışı, aynı bilgisayarda oyuncular, şehir binaları, geri çekilme ve dağlar, oyun sonu özeti).
 
-## SON EKLENENLER (23.10) - önce bunu oku
+## NEREDE KALDIK (27.10 akşam) - önce bunu oku
+
+Son commit **e5540a0**, hepsi push'lu, **2347 test** geçiyor, kayıt sürümü **19**. Kullanıcı son durum için
+"tamam şimdi çok güzel olmuş" dedi. Sırada: kullanıcı oynayıp söyleyecek.
+
+**Bu iki günün özü (ayrıntı aşağıdaki 10-27. maddelerde ve kurallar.md'de):**
+- 26.10: oyunun başı tutmuyordu -> barbar kampları (bölüm 26), Total War gibi kartlar (bina / asker / gemi;
+  kartın kendisi düğme, Asker bas ayrı sekme, gemi Liman'da kalır), öğretici sonrası balonlar. Sonra kullanıcının
+  istediği "olmazsa olmazlar": özel birlikler (5b), dinlenme (6c), kayıt yuvaları, büyük krizler (27), ticaret (28).
+- 26-27.10: **taktik savaş** (bölüm 29, 29a, 29b, 29c) - kullanıcı görseller gönderdi (tepeden nokta orduları,
+  İstanbul kuşatması, surlu şehirler). Saldırı penceresinde *Sonucu gör* / *⚔ Savaş*. Dosyalar:
+  `src/rules/tactics.js` (kurallar: birlikler dikdörtgen, bölme/birleştirme/genişlik, kuşatma ve sarma, moral,
+  sur tırmanma, gedik, dar geçitte daralma, bilgisayarın tavrı, dizilme bölgeleri), `src/rules/field.js` (saha:
+  gerçek kıyı/nehir/orman/dağ, köprüler, köy, surlu şehir `addCity`, A* yol bulma), `src/rules/incoming.js`
+  (bilgisayarın sana saldırısı bekler, pencere sorar; `state.defer` yalnız gerçek oyunda), `src/view/tactics.js`
+  (çizim: askerler tek tek nokta `soldiers`, arazi önbelleği, sur/kule/kapı, merdiven, kartlar, şeritler),
+  `main.js` (`openBattle`, `battleFrame`, `afterBattle`, fare: seç, sağ tık emir, sağ sürükle hat).
+- 27.10 düzeltmeler: öğretici haydutlar her yeni oyunda (ipuçları açıksa); dar geçitte birlik en çok 6 sıraya
+  iner, dağınık durur; dizilirken noktalar birlikle ışınlanır.
+
+**Ölçüm alışkanlıkları (bu iki günde öğrenilen):**
+- Taktik savaş otomatik savaşla tutarlı mı: `node Tools/tactics-cal.mjs` (açık saha / surlu, kazanan aynı %; son:
+  açık %91, surlu %87, saldıran surda otomatik 41 / taktik 44 / 149). Sur ya da dövüş kuralı değişince bak.
+- Denge: `node Tools/experiment.mjs '{"victory.wonders":99}' 70` (son: ilk düşüş 58, ayakta toplam 347).
+- Arayüz akışı: `node Tools/tutorial.mjs tr rome` (öğretici baştan sona) ve `node Tools/playtest.mjs
+  http://localhost:8060/ rome 25 normal` - birlik/kart/sekme değişince ikisini de çalıştır (özel birlik eklenince
+  main.js'teki elle yazılmış tür listesi yüzünden saatlerce garnizondan ordu çıkmadı; yalnız tutorial yakaladı).
+- Sunucu düşerse: `node Tools/serve.mjs . 8060` (arka planda).
+- Açık konu: bilgisayarın kasası geç oyunda on binlerce para (harcayacak yer yok) - parayla karar veren kurallar
+  bilgisayara işlemiyor.
+
+## SON EKLENENLER (23.10)
 
 Kullanıcı (23.10): "şu ana kadar güzel şeyler yaptık ama hâlâ bir oyun gibi hissettirmiyor".
 Sordum: eksik olan "ne için oynadığım belli değil" ve "savaşlar cansız"; örnek **Civilization**;
@@ -69,17 +100,17 @@ bir buton" sıkıcı; Total War'daki gibi görselli, seviyesi köşede bina kart
 barbar kamplarını seçti.
 10. **Bina kartları** (2326da2): kurallar.md bölüm 12; `src/view/buildings.js`.
 11. **Barbarlar** (f730dfd): kurallar.md bölüm 26; `src/rules/barbarians.js`. Kayıt 18.
-12. **Asker ve gemi kartları** (bu adım; kullanıcı bina kartlarını beğendi, "asker basma işini de böyle
+12. **Asker ve gemi kartları** (361c4f2, 957481c; kullanıcı bina kartlarını beğendi, "asker basma işini de böyle
     yapmamız lazım"): kurallar.md bölüm 12. `ui.js` `recruitBlock` / `troopCard` / `troopArt`;
     sütunlar 300/230 yerine 265/265. `fit` artık `min` alıyor (küçük yazılar 8'e kadar küçülür).
     Sonra kullanıcı: "ilk sekme çok kalabalık, liman gibi ayrı sekme olsun" - **Asker bas sekmesi**
     (Şehir ile Liman arasında); Şehir sekmesinde dört geniş yükseltme kartı. Geniş asker kartında
     beş asker / iki atlı, maliyet yan yana. Öğretici balonu sekmeyi gösterir.
-13. **Cilalar** (bu adım; kullanıcı "başka ne yapacaktık, hallet, bana bir şey sorma"; gemiler Liman
+13. **Cilalar** (3641341; kullanıcı "başka ne yapacaktık, hallet, bana bir şey sorma"; gemiler Liman
     sekmesinde kalıyor): öğreticiden sonra balon en yakın barbar kampını gösterir, akın gelirken
     uyarı balonu (kurallar.md 26); eksik kaynak kırmızı (bölüm 12); gemi resimleri daha iri; uzun
     kart adları küçülerek sığar ("Liman kalesi"). `Tools/tutorial.mjs` kamp balonunu da bekler.
-14. **Kartın kendisi düğme** (bu adım; kullanıcı: "kartın altında para ve buton gözüküyor, görselin
+14. **Kartın kendisi düğme** (9d6c6e0; kullanıcı: "kartın altında para ve buton gözüküyor, görselin
     kendisi buton olsun"): `ui.js actionCard` - bina, asker, gemi kartlarının ortak çizimi; fiyat resmin
     alt şeridinde, üstüne gelince ▲ / +10, iptal sol üst köşede. Ayrıca: barbar kampları sisde de
     görünür, başkentin kampı karadan varılır (`home`), öğretici bitince kamera ev kampına kayar,
@@ -89,8 +120,8 @@ Kullanıcı (26.10) "strateji oyunlarının olmazsa olmazları" sordu; önerdiğ
 yapalım": (1) medeniyete özel birlikler, (2) bölüklerin dinlenince dolması, (3) kayıt yuvaları, (4) oyun
 sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) ticaret yolları.
 15. **Medeniyete özel birlikler** (0bc3fee): kurallar.md 5b. `N.unique`, `elite` yuvası, kayıt 19.
-16. **Dinlenme**: kurallar.md 6c, `src/rules/refill.js`. Kartta yeşil ▲.
-17. **Kayıt yuvaları**: kurallar.md bölüm 12 (Ekran). Üç yuva + otomatik kayıt; menüde Kaydet / Yükle.
+16. **Dinlenme** (7e63263): kurallar.md 6c, `src/rules/refill.js`. Kartta yeşil ▲.
+17. **Kayıt yuvaları** (7e63263): kurallar.md bölüm 12 (Ekran). Üç yuva + otomatik kayıt; menüde Kaydet / Yükle.
     (16 ve 17 aynı commit'te.)
 18. **Büyük krizler** (a491bb7): kurallar.md bölüm 27, `src/rules/crises.js`. İç savaş (mektup), büyük salgın,
     Kimber göçü.
@@ -111,7 +142,7 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     ışınlama; zayıf savunan tepede savunur; bilgisayarın sana saldırısında Sonucu gör / Savaş. Test oyuncusu (playtest)
     artık Asker bas sekmesini açıyor (asker basma ayrı sekmeye geçince hiç asker basmıyordu).
 26. **Öğretici her yeni oyunda** (94669f6) ve **dar geçitte kola dönme** (0e705a6): kurallar.md 29a "Dar geçit".
-27. **Toplu ve dağınık birlikler, dizilmede görünen ışınlanma** (bu adım): kurallar.md 29a "Toplu ve dağınık".
+27. **Toplu ve dağınık birlikler, dizilmede görünen ışınlanma** (e5540a0): kurallar.md 29a "Toplu ve dağınık".
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

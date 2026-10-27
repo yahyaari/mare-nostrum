@@ -52,13 +52,16 @@ sallanma; dokunuş önce hızlandırır. Aşağıda "Animasyon tuzakları".
 ```
 node Tools/serve.mjs . 8060                         oyunu sun  ->  http://localhost:8060
 node Tools/serve.mjs . 8060 0.0.0.0                 aynı ağdaki telefon da girsin
-node Tools/test.mjs                                 bütün kontroller (tarayıcısız, birkaç sn)
+node Tools/test.mjs                                 bütün kontroller (tarayıcısız, ~6 dk; Logs/test-last.txt'e yaz)
 node Tools/bot.mjs 7 200                            7 oyunu bilgisayara oynat, özetini yaz
 node Tools/balance.mjs 70                           denge: 70 oyun (ilk düşüş, ayakta kalma)
 node Tools/who.mjs rome 35                          bir medeniyetin yerlerini kim alıyor
 node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720          ekran fotoğrafları
 node Tools/peek.mjs http://localhost:8060/ Logs/peek-phone 390 844     telefon, dikey
 node Tools/playtest.mjs http://localhost:8060/ saka 60 easy             tarayıcıda, düğmelere basarak 60 tur oyna
+node Tools/tutorial.mjs tr rome                     öğreticiyi tarayıcıda gerçek basışlarla baştan sona oyna
+node Tools/experiment.mjs '{"victory.wonders":99}' 70   denge deneyi (sayıları değiştirerek 70 oyun)
+node Tools/tactics-cal.mjs                          taktik savaş otomatik savaşla tutarlı mı (açık / surlu)
 node Tools/geo.mjs                                  kıyıları Natural Earth'ten yeniden üret
 node Tools/route.mjs                                denize giren yol için ara nokta öner
 ```
@@ -69,7 +72,7 @@ node Tools/route.mjs                                denize giren yol için ara n
 |---|---|
 | `src/data/` | Değişmeyen veri: `world.js` (medeniyetler, yerleşimler, yollar), `geo.js` (üretilmiş kıyılar), `bounds.js` |
 | `src/geo.js` | İzdüşüm ve karada mı / kıyıya ne kadar uzak. Ekran ve test aynısını kullanıyor. |
-| `src/rules/` | Saf kurallar, DOM yok: `numbers.js` (bütün sayılar), `state.js` (yeni oyun, üretim, yükseltme, asker, ordu), `combat.js`, `moves.js` (hareket, saldırı, ele geçirme), `diplomacy.js`, `ai.js`, `turn.js`, `graph.js`, `rng.js` (tohumlu: kayıtla birlikte saklanıyor) |
+| `src/rules/` | Saf kurallar, DOM yok. Taktik savaş: `tactics.js` (savaş), `field.js` (saha, surlu şehir, yol bulma), `incoming.js` (sana saldırılar); ayrıca `barbarians.js`, `crises.js`, `trade.js`, `refill.js`, `research.js`, `leaders.js`, `wonders.js`... Çekirdek: `numbers.js` (bütün sayılar), `state.js` (yeni oyun, üretim, yükseltme, asker, ordu), `combat.js`, `moves.js` (hareket, saldırı, ele geçirme), `diplomacy.js`, `ai.js`, `turn.js`, `graph.js`, `rng.js` (tohumlu: kayıtla birlikte saklanıyor) |
 | `Tools/bot.mjs` | TEK bot: oyuncunun yerine `ai.js`'i oynatır. test.mjs de bunu kullanır. |
 | `src/view/` | `camera.js`, `draw.js` (harita, ordular, seçim işaretleri), `ui.js` (bant, kartlar, pencereler), `kit.js` (panel, düğme, simgeler), `regions.js`. Hiçbir kuralı değiştirmez: her düğme bir `act` bırakır, `main.js` çalıştırır. |
 | `src/main.js` | Açılış, girdi, çizim döngüsü, kamera kayması. `window.MareNostrum` araçların kapısı. |
