@@ -59,6 +59,7 @@ node Tools/who.mjs rome 35                          bir medeniyetin yerlerini ki
 node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720          ekran fotoğrafları
 node Tools/peek.mjs http://localhost:8060/ Logs/peek-phone 390 844     telefon, dikey
 node Tools/battlefilm.mjs                           taktik savaşın girişi ve bitişi, kare kare (Logs/battlefilm)
+node Tools/noticefilm.mjs tr                        görselli bildirimlerin hepsi, tek tek fotoğraf (Logs/notices; Docs/gorseller.md)
 node Tools/soundcheck.mjs                           seslerin gerçekten ses ürettiğini ölç (çevrimdışı)
 node Tools/playtest.mjs http://localhost:8060/ saka 60 easy             tarayıcıda, düğmelere basarak 60 tur oyna
 node Tools/tutorial.mjs tr rome                     öğreticiyi tarayıcıda gerçek basışlarla baştan sona oyna

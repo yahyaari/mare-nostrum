@@ -34,6 +34,7 @@ import {
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
 import { drift } from "../rules/loyalty.js";
+import { artBox, glassButton, lit, pictureFrame } from "./art.js";
 import { appointInfo, capOf, chanceOf, features, generalsOf, leanings, officerFor } from "../rules/generals.js";
 import { options as letterOptions, ownerOf } from "../rules/events.js";
 import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
@@ -2274,21 +2275,32 @@ export function eventLines(game, lang) {
   return out;
 }
 
+/**
+ * Tur raporu: görselli (art.js) - turun en önemli olayının görseli (savaş, kıtlık, araştırma, yapı; yoksa sabah), altında
+ * olaylar.
+ */
 function reportModal(ctx, cam, game, ui, boxes, T) {
   const lines = eventLines(game, ui.lang);
   if (!lines.length) lines.push([T.quiet, null]);
-  const W = Math.min(cam.w - 24, 460) - 60;
+  const W = Math.min(cam.w - 24, 520) - 70;
   const rows = lines.flatMap(([s, tone]) => wrap(ctx, s, W, { size: 14 }).map((l, i) => [l, tone, i === 0]));
-  const shown = rows.slice(0, 14);
-  const r = modalFrame(ctx, cam, boxes, 96 + shown.length * 22 + 70, 460);
-  text(ctx, fill(T.turn, game.turn), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  const shown = rows.slice(0, 12);
+  const me = game.player, ev = game.events ?? [];
+  const tech = ev.find((e) => e.type === "tech" && e.civ === me);
+  const key = ev.some((e) => e.type === "battle" && (e.attacker === me || e.defender === me)) ? "notice/battle"
+    : ev.some((e) => e.type === "famine" && e.civ === me) ? "notice/famine"
+    : tech ? `tech/${tech.tech}` : ev.some((e) => e.type === "built" && e.civ === me) ? "notice/build" : "notice/turn";
+  const pic = 200;
+  const r = pictureFrame(ctx, cam, boxes, key, pic + 40 + shown.length * 22 + 74, 540, { owner: me, id: tech?.tech, lane: tech ? techById[tech.tech].lane : 0, pic, fade: Math.max(0.15, (pic - 60) / (pic + 40 + shown.length * 22 + 74)) });
+  lit(ctx, fill(T.turn, game.turn), r.x + r.w / 2, r.y + pic, { title: true, bold: true, size: 22, align: "center", color: GOLD_LIGHT });
   shown.forEach(([l, tone, first], i) => {
-    const y = r.y + 80 + i * 22;
-    const color = tone === "good" ? INK.good : tone === "bad" ? INK.bad : INK.ink;
-    if (first) { ctx.fillStyle = color; ctx.fillRect(r.x + 24, y - 9, 6, 6); }
-    text(ctx, l, r.x + 40, y, { size: 14, color });
+    const y = r.y + pic + 36 + i * 22;
+    const color = tone === "good" ? "#a8d88a" : tone === "bad" ? "#f08a70" : CREAM;
+    if (first) { ctx.fillStyle = color; ctx.fillRect(r.x + 28, y - 9, 6, 6); }
+    lit(ctx, l, r.x + 44, y, { size: 14, color });
   });
-  oneButton(ctx, boxes, r, { label: T.ok, act: { do: "close" } });
+  const bw = 180;
+  glassButton(ctx, boxes, { x: r.x + r.w / 2 - bw / 2, y: r.y + r.h - 56, w: bw, h: 40, label: T.ok, main: true, act: { do: "close" } }, over(r.x + r.w / 2 - bw / 2, r.y + r.h - 56, bw, 40));
 }
 
 /**
@@ -2326,24 +2338,30 @@ function researchModal(ctx, cam, game, ui, boxes, T) {
     const hot = open && over(p.x, p.y, NW, NH);
     ctx.save();
     if (!known && !open) ctx.globalAlpha = 0.5;
+    // Kartın zemini teknolojinin görseli (art.js "tech/<ad>"); yazılar üstünde, soldan sağa koyulaşan bir gölgeyle.
+    artBox(ctx, `tech/${id}`, p.x, p.y, NW, NH, { round: 6, id, lane: t.lane, owner: me, card: true });
+    const veil = ctx.createLinearGradient(p.x, 0, p.x + NW, 0);
+    veil.addColorStop(0, known ? "rgba(60,44,16,0.86)" : now ? "rgba(48,34,16,0.9)" : "rgba(20,14,8,0.82)");
+    veil.addColorStop(0.62, "rgba(20,14,8,0.55)");
+    veil.addColorStop(1, "rgba(20,14,8,0.1)");
     roundRect(ctx, p.x, p.y, NW, NH, 6);
-    ctx.fillStyle = known ? "rgba(222,190,112,0.5)" : now ? "rgba(255,244,214,0.95)" : hot ? "rgba(255,250,236,0.9)" : "rgba(255,255,255,0.42)";
+    ctx.fillStyle = veil;
     ctx.fill();
     ctx.strokeStyle = now ? GOLD : known ? GOLD_DARK : hot ? GOLD : INK.border;
     ctx.lineWidth = now ? 2.6 : hot ? 1.8 : 1.2;
     ctx.stroke();
     medal(ctx, null, p.x + 19, p.y + 20, 12, LANE_GLYPH[t.lane]);
-    fit(ctx, name, p.x + 38, p.y + 25, NW - 46, { bold: true, size: 14 });
-    lines(ctx, effect, p.x + 10, p.y + 45, NW - 20, { size: 11.5, color: INK.soft }, 2, 13);
-    if (known) text(ctx, "✓ " + T.techKnown, p.x + NW - 10, p.y + NH - 8, { size: 11.5, bold: true, color: INK.good, align: "right" });
+    fit(ctx, name, p.x + 38, p.y + 25, NW - 46, { bold: true, size: 14, color: CREAM });
+    lines(ctx, effect, p.x + 10, p.y + 45, NW - 20, { size: 11.5, color: "rgba(243,231,201,0.85)" }, 2, 13);
+    if (known) text(ctx, "✓ " + T.techKnown, p.x + NW - 10, p.y + NH - 8, { size: 11.5, bold: true, color: "#a8d88a", align: "right" });
     else if (now) {
       const f = Math.min(1, (c.progress[id] ?? 0) / costFor(game, me, id));
       ctx.fillStyle = "rgba(60,45,25,0.18)";
       ctx.fillRect(p.x + 10, p.y + NH - 13, NW - 64, 6);
       ctx.fillStyle = GOLD;
       ctx.fillRect(p.x + 10, p.y + NH - 13, (NW - 64) * f, 6);
-      text(ctx, fill(T.turnsN, techTurns(game, me, id)), p.x + NW - 10, p.y + NH - 7, { size: 11.5, bold: true, align: "right" });
-    } else text(ctx, fill(T.techCost, costFor(game, me, id), techTurns(game, me, id)), p.x + NW - 10, p.y + NH - 8, { size: 11, color: INK.soft, align: "right" });
+      text(ctx, fill(T.turnsN, techTurns(game, me, id)), p.x + NW - 10, p.y + NH - 7, { size: 11.5, bold: true, align: "right", color: CREAM });
+    } else text(ctx, fill(T.techCost, costFor(game, me, id), techTurns(game, me, id)), p.x + NW - 10, p.y + NH - 8, { size: 11, color: "rgba(243,231,201,0.75)", align: "right" });
     ctx.restore();
     const needs = t.needs.filter((n) => !knows(game, me, n)).map((n) => T.techs[n][0]).join(", ");
     if (open) boxes.push({ x: p.x, y: p.y, w: NW, h: NH, act: { do: "research", tech: id }, tip: [name, effect, fill(T.techCost, costFor(game, me, id), techTurns(game, me, id))] });
@@ -2499,23 +2517,24 @@ function incomingModal(ctx, cam, game, ui, boxes, T, m) {
     const who = a.bandit ? T.bandits : a.horde ? T.horde : a.barbarian ? T.barbarians : civName(a.owner, ui.lang);
     title = sd.field ? fill(T.incomingArmy, who, placeName(nearestPlace(sd.target), ui.lang)) : fill(T.incomingTitle, who, placeName(it.target, ui.lang));
   }
-  const r = modalFrame(ctx, cam, boxes, 236, 520);
-  const x = r.x + 26, w = r.w - 52;
-  // Üstte: saldıranın rengi.
-  ctx.fillStyle = colorOf(owner);
-  ctx.fillRect(r.x + 10, r.y + 10, r.w - 20, 4);
-  wrap(ctx, title, w, { title: true, bold: true, size: 19 }).slice(0, 2).forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 44 + i * 24, { title: true, bold: true, size: 19, align: "center" }));
-  fit(ctx, fill(T.incomingThem, troops(T, them, owner)), x, r.y + 100, w, { size: 13, color: INK.bad, bold: true });
-  fit(ctx, fill(T.incomingSub, men(mine) ? troops(T, mine, game.player) : T.undefended), x, r.y + 122, w, { size: 13, bold: true });
+  // Görsel: akıncılar atlı, ordu yürüyen asker, denizden gelen kadırga (art.js).
+  const key = m.letter || them.bandit || them.barbarian || them.horde ? "notice/raid" : sea ? "notice/naval" : "notice/incoming";
+  const r = pictureFrame(ctx, cam, boxes, key, 470, 560, { owner: game.player, them: owner, pic: 260, fade: 0.42 });
+  const x = r.x + 30, w = r.w - 60;
+  let y = r.y + 262;
+  wrap(ctx, title, w, { title: true, bold: true, size: 20 }).slice(0, 2).forEach((l, i) => lit(ctx, l, r.x + r.w / 2, y + i * 25, { title: true, bold: true, size: 20, align: "center", color: GOLD_LIGHT }));
+  y += 56;
+  litFit(ctx, fill(T.incomingThem, troops(T, them, owner)), x, y, w, { size: 14, bold: true, color: "#f0a088" });
+  litFit(ctx, fill(T.incomingSub, men(mine) ? troops(T, mine, game.player) : T.undefended), x, y + 22, w, { size: 14, bold: true });
   // Şans: saldıranın tahmininin tersi.
   const e = estimate(sd.att, sd.def, sd.walls).odds;
   const mineOdds = e === "easy" ? "hopeless" : e === "hopeless" ? "easy" : "risky";
   const [label, color] = oddsLabel(mineOdds, T);
-  const lw = text(ctx, `${T.incomingOdds}: `, x, r.y + 150, { size: 14 });
-  text(ctx, label, x + lw, r.y + 150, { size: 14, bold: true, color });
-  const bw = (r.w - 60) / 2, by = r.y + r.h - 62;
-  button(ctx, boxes, { x: r.x + 24, y: by, w: bw, h: 44, size: 15, label: T.incomingSee, act: { do: "incomingSee" }, tip: [T.incomingSee, T.seeResultTip] });
-  button(ctx, boxes, { x: r.x + 36 + bw, y: by, w: bw, h: 44, size: 15, main: true, label: T.incomingFight, off: sea, act: { do: "incomingFight" }, tip: [T.incomingFight, T.incomingFightTip] });
+  const lw = lit(ctx, `${T.incomingOdds}: `, x, y + 50, { size: 15 });
+  lit(ctx, label, x + lw, y + 50, { size: 15, bold: true, color: { easy: "#a8d88a", risky: "#f0c860", hopeless: "#f08a70" }[mineOdds] ?? color });
+  const bw = (r.w - 72) / 2, by = r.y + r.h - 62;
+  glassButton(ctx, boxes, { x: r.x + 28, y: by, w: bw, h: 44, size: 15, label: T.incomingSee, act: { do: "incomingSee" }, tip: [T.incomingSee, T.seeResultTip] }, over(r.x + 28, by, bw, 44));
+  glassButton(ctx, boxes, { x: r.x + 44 + bw, y: by, w: bw, h: 44, size: 15, main: true, label: T.incomingFight, off: sea, act: { do: "incomingFight" }, tip: [T.incomingFight, T.incomingFightTip] }, over(r.x + 44 + bw, by, bw, 44) && !sea);
 }
 
 /**
@@ -2610,32 +2629,46 @@ export function letterText(game, it, lang) {
 }
 
 /** Olay ya da teklif: bir karar, kapatılamaz; seçenekler alt alta. */
+/**
+ * Mektup (olay ya da teklif): görselli pencere (kullanıcı 27.10: "akıncılar geldiğinde ekranda atlı adamlar, altında
+ * yazı; yazıların arka planı görsel olsun"). Üstte olayın görseli (art.js, "notice/<olay>"), altında başlık, mektup
+ * ve seçenekler; teklifte liderin portresi görselin köşesinde, sözü başlığın üstünde.
+ */
 function decideModal(ctx, cam, game, ui, boxes, T) {
   const it = game.inbox.find((x) => ownerOf(game, x) === game.player);
   if (!it) return;
   const L = letterText(game, it, ui.lang);
-  const W = Math.min(cam.w - 24, 460);
-  const body = wrap(ctx, L.body, W - 48, { size: 14 });
-  // Teklif: liderin portresi ve kendi sözü (haraçta tehdidi, barışta yorgunluğu).
+  const W = Math.min(cam.w - 24, 540);
+  const body = wrap(ctx, L.body, W - 64, { size: 15 });
   const offer = it.type === "offer";
   const level = offer ? moodLevel(moodOf(game, it.civ, game.player).score) : null;
   const line = offer ? leaderLine(T, it.civ, { tribute: "demand", peace: "peaceAsk", ally: "friendly", trade: "friendly" }[it.key], level) : null;
-  const say = offer ? wrap(ctx, "“" + line + "”", W - 48, { size: 15, italic: true }) : [];
-  const top = offer ? 124 + say.length * 21 : 0;
-  const r = modalFrame(ctx, cam, boxes, 92 + top + body.length * 20 + L.options.length * 54 + 14, 460);
+  const say = offer ? wrap(ctx, "“" + line + "”", W - 64, { size: 15, italic: true }) : [];
+  const pic = 270, sayH = say.length ? say.length * 21 + 8 : 0;
+  const H = pic + sayH + 36 + body.length * 21 + 14 + L.options.length * 50 + 16;
+  const r = pictureFrame(ctx, cam, boxes, `notice/${it.key}`, H, 560, { owner: game.player, them: it.civ ?? null, pic, fade: Math.max(0.2, (pic - 70) / H) });
   if (offer) {
-    portrait(ctx, it.civ, r.x + r.w / 2, r.y + 62, 46, it.key === "tribute" ? "cold" : level);
-    say.forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 134 + i * 21, { size: 15, italic: true, align: "center" }));
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 10;
+    portrait(ctx, it.civ, r.x + 64, r.y + 64, 44, it.key === "tribute" ? "cold" : level);
+    ctx.restore();
   }
-  text(ctx, L.title, r.x + r.w / 2, r.y + top + 44, { title: true, bold: true, size: 19, align: "center" });
-  body.forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + top + 84 + i * 20, { size: 14, align: "center", color: INK.soft, italic: true }));
-  const by = r.y + top + 96 + body.length * 20;
-  L.options.forEach((o, i) => {
-    button(ctx, boxes, {
-      x: r.x + 20, y: by + i * 54, w: r.w - 40, h: 44, label: o.label, size: 14, off: o.off, main: i === 0 && !o.off,
-      act: { do: "decide", id: it.id, choice: o.key },
-    });
-  });
+  let y = r.y + pic;
+  say.forEach((l, i) => lit(ctx, l, r.x + r.w / 2, y + i * 21, { size: 15, italic: true, align: "center" }));
+  y += sayH;
+  lit(ctx, L.title, r.x + r.w / 2, y + 14, { title: true, bold: true, size: 22, align: "center", color: GOLD_LIGHT });
+  y += 40;
+  body.forEach((l, i) => lit(ctx, l, r.x + r.w / 2, y + i * 21, { size: 15, align: "center", italic: true }));
+  const by = y + body.length * 21 + 4;
+  L.options.forEach((o, i) => glassButton(ctx, boxes, { x: r.x + 28, y: by + i * 50, w: r.w - 56, h: 42, label: o.label, size: 14, off: o.off, main: i === 0 && !o.off, act: { do: "decide", id: it.id, choice: o.key } }, over(r.x + 28, by + i * 50, r.w - 56, 42) && !o.off));
+}
+
+/** Görselin üstünde, genişliğe sığdırılmış gölgeli yazı. */
+function litFit(ctx, s, x, y, w, o = {}) {
+  let size = o.size ?? 14;
+  while (size > 9 && measure(ctx, s, { ...o, size }) > w) size -= 0.5;
+  return lit(ctx, s, x, y, { ...o, size });
 }
 
 /** Uzun bir listenin bu sayfası ve sayfa düğmeleri; dönen: { rows, pages, page }. */
@@ -2733,19 +2766,20 @@ function missionModal(ctx, cam, game, ui, boxes, T, mm) {
   const m = game.missions?.find((x) => x.id === mm.id);
   if (!m) return;
   const L = missionText(game, m, ui.lang);
-  const body = wrap(ctx, L.body, 400, { size: 15, italic: true });
-  const r = modalFrame(ctx, cam, boxes, 236 + body.length * 22, 460);
+  const body = wrap(ctx, L.body, 440, { size: 15, italic: true });
+  const pic = 200;
+  const r = pictureFrame(ctx, cam, boxes, `notice/mission`, pic + 70 + body.length * 22 + 100, 540, { owner: game.player, pic, fade: Math.max(0.2, (pic - 60) / (pic + 70 + body.length * 22 + 100)) });
   const cx = r.x + r.w / 2;
-  shield(ctx, game.player, cx - 13, r.y + 18, 26);
-  text(ctx, fill(T.mFrom, T.councils[game.player]), cx, r.y + 70, { italic: true, size: 13, color: INK.soft, align: "center" });
-  text(ctx, L.title, cx, r.y + 98, { title: true, bold: true, size: 20, align: "center" });
-  ornament(ctx, cx, r.y + 110, 170);
-  body.forEach((l, i) => text(ctx, l, cx, r.y + 138 + i * 22, { size: 15, italic: true, align: "center" }));
-  const y = r.y + 138 + body.length * 22 + 6;
-  text(ctx, leftText(game, m, T), r.x + 28, y + 4, { bold: true, size: 13, color: INK.warn });
-  const rw = text(ctx, T.mReward + ":", r.x + r.w - 150, y + 4, { bold: true, size: 13 });
-  costLine(ctx, m.reward, r.x + r.w - 150 + rw + 52, y + 4, INK.ink, 13);
-  twoButtons(ctx, boxes, r, { label: T.mAccept, act: { do: "missionAccept", id: m.id } }, { label: T.mDecline, act: { do: "missionDecline", id: m.id } });
+  lit(ctx, fill(T.mFrom, T.councils[game.player]), cx, r.y + pic - 26, { italic: true, size: 13, align: "center" });
+  lit(ctx, L.title, cx, r.y + pic + 2, { title: true, bold: true, size: 22, align: "center", color: GOLD_LIGHT });
+  body.forEach((l, i) => lit(ctx, l, cx, r.y + pic + 34 + i * 22, { size: 15, italic: true, align: "center" }));
+  const y = r.y + pic + 34 + body.length * 22 + 8;
+  lit(ctx, leftText(game, m, T), r.x + 30, y + 4, { bold: true, size: 13, color: "#f0c860" });
+  const rw = lit(ctx, T.mReward + ":", r.x + r.w - 160, y + 4, { bold: true, size: 13 });
+  costLine(ctx, m.reward, r.x + r.w - 160 + rw + 52, y + 4, CREAM, 13);
+  const bw = (r.w - 72) / 2, by = r.y + r.h - 58;
+  glassButton(ctx, boxes, { x: r.x + 28, y: by, w: bw, h: 42, label: T.mAccept, main: true, act: { do: "missionAccept", id: m.id } }, over(r.x + 28, by, bw, 42));
+  glassButton(ctx, boxes, { x: r.x + 44 + bw, y: by, w: bw, h: 42, label: T.mDecline, act: { do: "missionDecline", id: m.id } }, over(r.x + 44 + bw, by, bw, 42));
 }
 
 /** Alt menüden: açık görevler. Yeri olan göreve basınca harita oraya kayar. */
@@ -2949,17 +2983,20 @@ function victoryModal(ctx, cam, game, ui, boxes, T) {
 
 function overModal(ctx, cam, game, ui, boxes, T) {
   const o = game.over, won = o.result === "won";
-  const r = modalFrame(ctx, cam, boxes, 236);
+  const r = pictureFrame(ctx, cam, boxes, won ? "notice/victory" : "notice/defeat", 420, 540, { owner: game.player, pic: 250, fade: 0.45 });
   const many = humansOf(game).length > 1;
-  text(ctx, many && o.winner ? fill(T.winnerIs, civName(o.winner, ui.lang)) : won ? T.victory : T.defeat, r.x + r.w / 2, r.y + 56, { title: true, bold: true, size: 28, align: "center", color: won ? INK.good : INK.bad });
+  const cx = r.x + r.w / 2;
+  lit(ctx, many && o.winner ? fill(T.winnerIs, civName(o.winner, ui.lang)) : won ? T.victory : T.defeat, cx, r.y + 228, { title: true, bold: true, size: 30, align: "center", color: won ? "#a8d88a" : "#f08a70" });
   // Hangi yoldan: fetih, harikalar, skor; kaybedildiyse kim kazandı.
   const kind = { conquest: T.vConquest, wonders: T.vWonders, score: T.vScore }[o.kind];
-  if (kind) text(ctx, kind.toLocaleUpperCase(ui.lang), r.x + r.w / 2, r.y + 82, { title: true, bold: true, size: 13, align: "center", color: INK.warn });
+  if (kind) lit(ctx, kind.toLocaleUpperCase(ui.lang), cx, r.y + 254, { title: true, bold: true, size: 13, align: "center", color: "#f0c860" });
   const who = civName(o.winner, ui.lang);
   const line = won && !many ? fill({ conquest: T.victoryText, wonders: T.winWonders, score: T.winScore }[o.kind] ?? T.victoryText, o.turn)
     : o.kind === "wonders" ? fill(T.loseWonders, who) : o.kind === "score" ? fill(T.loseScore, who, rankOf(game, game.player)) : fill(T.defeatText, o.turn);
-  lines(ctx, line, r.x + 24, r.y + 112, r.w - 48, { size: 14, align: "center" }, 2, 18);
-  twoButtons(ctx, boxes, r, { label: T.newGame, act: { do: "newGame" } }, { label: T.summary, act: { do: "summary" } });
+  wrap(ctx, line, r.w - 60, { size: 15 }).slice(0, 2).forEach((l, i) => lit(ctx, l, cx, r.y + 284 + i * 20, { size: 15, align: "center" }));
+  const bw = (r.w - 72) / 2, by = r.y + r.h - 60;
+  glassButton(ctx, boxes, { x: r.x + 28, y: by, w: bw, h: 42, label: T.newGame, main: true, act: { do: "newGame" } }, over(r.x + 28, by, bw, 42));
+  glassButton(ctx, boxes, { x: r.x + 44 + bw, y: by, w: bw, h: 42, label: T.summary, act: { do: "summary" } }, over(r.x + 44 + bw, by, bw, 42));
 }
 
 /**

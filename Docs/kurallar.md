@@ -683,6 +683,22 @@ oyundan çıkar.
 
 ---
 
+### 12d. Görselli bildirimler
+
+Kullanıcı 27.10: "akıncılar mesajı geldiğinde ekranda atlı adamlar çıksın, altında yazı; yazıların arka planı olmasın,
+arka plan görsel olsun - bütün bildirimlerde, araştırmada da; sonra hepsine kendim güzel görseller ayarlayacağım,
+şimdilik temsili".
+
+- Mektuplar (akın, paralı asker, veba, hasat, yangın, huzursuzluk, kervan, iç savaş), teklifler (ittifak, barış,
+  ticaret, haraç), sana saldırı bildirimi, tur raporu, görev ve oyun sonu: görsel bütün pencereyi kaplar; başlık,
+  mektup ve düğmeler görselin üstünde (yazının zemini yok, görselin alt kısmı kararır; düğmeler yarı saydam, altın
+  kenarlı). Teklifte liderin portresi görselin köşesinde. Tur raporunun görseli turun en önemli olayından: savaş,
+  kıtlık, biten araştırma, biten yapı, yoksa sabah.
+- Araştırma kartlarının zemini de teknolojinin görseli (yazılar solda, simge sağda).
+- Her görselin bir anahtarı var (`notice/raid`, `tech/irrigation`...): `art/<anahtar>.jpg` (.png, .webp) varsa o,
+  yoksa kodla çizilmiş temsili sahne (`src/view/art.js`). Dosya adları ve önerilen boyutlar: `Docs/gorseller.md`.
+  Hepsini görmek için `node Tools/noticefilm.mjs`.
+
 ## 12b. Casuslar
 
 Kullanıcı 22.10: "casus gönder şeyi yapacağız, şehirler hakkında bilgi toplamak için, mesafeye
