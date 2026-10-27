@@ -82,7 +82,8 @@ export const EVENTS = {
       if (ch === "bribe") return {};
       const pl = s.places[it.place];
       const def = defenders(s, it.place);
-      const r = fight({ civ: null, inf: it.raiders, arch: 0 }, def, wallsOf(s, it.place), [1, 1]);
+      // Oyuncu savaşı kendi yönettiyse (taktik savaş) onun sonucu.
+      const r = it.tactical ?? fight({ civ: null, inf: it.raiders, arch: 0 }, def, wallsOf(s, it.place), [1, 1]);
       const own = armiesAt(s, it.place).filter((a) => a.owner === pl.owner);
       if (r.attWins) {
         // Akıncılar kazandı: savunanlar öldü, yağma: nüfusun dörtte biri ve bir tarla.

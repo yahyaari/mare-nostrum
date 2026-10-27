@@ -23,6 +23,7 @@ import { canAttack, forecast, order, sides } from "./moves.js";
 import { armiesAt, empty, men } from "./state.js";
 import { UNITS } from "./numbers.js";
 import { hordeTarget } from "./crises.js";
+import { deferRaid } from "./incoming.js";
 
 const B = () => N.barbarians;
 
@@ -130,6 +131,9 @@ export function tickBarbarians(state, events) {
     if (!pl?.owner) { state.armies = state.armies.filter((x) => x !== r); continue; }
     if (!canAttack(state, r, r.target)) order(state, r.id, { place: r.target });
     if (!state.armies.includes(r)) continue;
+    // Oyuncunun yerine akın: oyuncu kendi turunda karar verir (incoming.js); sorulmuşsa bekler.
+    if (canAttack(state, r, r.target) && (state.incoming ?? []).some((x) => x.from === r.id)) continue;
+    if (canAttack(state, r, r.target) && deferRaid(state, r, r.target)) continue;
     if (canAttack(state, r, r.target)) raid(state, r, r.target, events);
     else if (!r.route.length) state.armies = state.armies.filter((x) => x !== r);
   }
@@ -149,10 +153,17 @@ export function tickBarbarians(state, events) {
  * Akın: akıncılar yerleşime saldırır. Kazanırlarsa yağmalar ve ganimetle döner (dağılır), kaybederse
  * dağılır; ikisinde de yer sahibinde kalır. Savunanların kayıpları normal savaştaki gibi.
  */
-function raid(state, r, id, events) {
+/** Oyuncunun kararından sonra akın (incoming.js): `result` taktik savaşın sonucu. Dönen savaş olayı. */
+export function raidOn(state, r, id, result = null) {
+  const events = [];
+  raid(state, r, id, events, result);
+  return events.find((e) => e.type === "battle") ?? null;
+}
+
+function raid(state, r, id, events, result = null) {
   const pl = state.places[id], owner = pl.owner;
   const sd = sides(state, r, null, id);
-  const res = fight(sd.att, sd.def, sd.walls, [between(state, 1 - N.luck, 1 + N.luck), between(state, 1 - N.luck, 1 + N.luck)]);
+  const res = result ?? fight(sd.att, sd.def, sd.walls, [between(state, 1 - N.luck, 1 + N.luck), between(state, 1 - N.luck, 1 + N.luck)]);
   const ev = {
     type: "battle", turn: state.turn, attacker: null, defender: owner, place: id, won: res.attWins, barbarians: true,
     before: { att: Object.fromEntries(UNITS.map((k) => [k, r[k] ?? 0])), def: Object.fromEntries(UNITS.map((k) => [k, sd.def[k] ?? 0])) },

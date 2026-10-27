@@ -129,7 +129,7 @@ export function setupBattle(att, def, walls, seed = 1, field = null) {
   }
   const b = {
     t: 0, over: null, walls, seed, field: field ?? flatField(), rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, gaps: [],
-    sides: { att: { civ: att.civ, muls: muls.att, open: muls.att, gen: !!att.gen }, def: { civ: def.civ, muls: muls.def, open: open.def, gen: !!def.gen } },
+    sides: { att: { civ: att.civ, muls: muls.att, open: muls.att, gen: !!att.gen, wild: !!att.wild }, def: { civ: def.civ, muls: muls.def, open: open.def, gen: !!def.gen, wild: !!def.wild } },
   };
   for (const side of ["att", "def"]) {
     const s = side === "att" ? att : def;
@@ -283,6 +283,47 @@ export function planLine(b, ids, p0, p1) {
   });
 }
 
+/**
+ * Dizilme bölgesi (kullanıcı 27.10: "düşmanın ve benim sınır çizgilerim olsun, savaş başlamadan dizebileyim"):
+ * saldıranın sahanın sol üçte biri (surlu şehirde surdan en az 8 birim uzak), savunanın sağ üçte biri ya da
+ * surlu şehrin içi. Dönen { x0, y0, x1, y1 }.
+ */
+export function deployZone(b, side) {
+  const { w, h } = K(), C = b.walls ? b.field.city : null;
+  if (side === "def") return C ? { x0: C.x0 + 2, y0: C.y0 + 2, x1: C.x1 - 2, y1: C.y1 - 2 } : { x0: w * 0.66, y0: 2, x1: w - 2, y1: h - 2 };
+  return { x0: 2, y0: 2, x1: C ? Math.min(w * 0.34, C.x0 - 8) : w * 0.34, y1: h - 2 };
+}
+
+/** Bir birliği bölgesinin içinde, yürünebilir bir yere koy (gerekirse yakında arar). */
+function settle(b, u, Z) {
+  const ex = extent(u);
+  const fit = (x, y) => ({ x: Math.max(Z.x0 + ex.x, Math.min(Z.x1 - ex.x, x)), y: Math.max(Z.y0 + ex.y, Math.min(Z.y1 - ex.y, y)) });
+  let p = fit(u.x, u.y);
+  for (let d = 0; d < 20 && !passable(b.field, p.x, p.y); d += 1) {
+    const c = [[d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, -d], [d, -d], [-d, d]].map(([dx, dy]) => fit(u.x + dx, u.y + dy)).find((q) => passable(b.field, q.x, q.y));
+    if (c) p = c;
+  }
+  Object.assign(u, p, { order: null, manual: false, px: p.x, py: p.y });
+}
+
+/** Dizilirken: seçili birlikler bir noktaya ışınlanır (aralarındaki düzen korunur), bölgenin içinde kalır. */
+export function placeAt(b, ids, p) {
+  const us = ids.map((id) => unitById(b, id)).filter((u) => u && alive(u));
+  if (!us.length) return;
+  const Z = deployZone(b, us[0].side);
+  const cx = us.reduce((n, u) => n + u.x, 0) / us.length, cy = us.reduce((n, u) => n + u.y, 0) / us.length;
+  for (const u of us) { u.x = p.x + (u.x - cx); u.y = p.y + (u.y - cy); settle(b, u, Z); }
+}
+
+/** Dizilirken hat çizimi: birlikler hattaki yerlerine ışınlanır. */
+export function placeLine(b, ids, p0, p1) {
+  for (const t of planLine(b, ids, p0, p1)) {
+    const u = unitById(b, t.id);
+    Object.assign(u, { x: t.x, y: t.y, facing: t.facing, cols: t.cols });
+    settle(b, u, deployZone(b, u.side));
+  }
+}
+
 /** Hat çizimini uygula. */
 export function orderLine(b, ids, p0, p1) {
   for (const t of planLine(b, ids, p0, p1)) command(b, [t.id], t);
@@ -408,8 +449,70 @@ export function faceOf(v, u) {
 
 // ---- bilgisayar ----
 
+/** Bir tarafın kabaca gücü (dövüşen birliklerin askeri x göğüs göğüse ya da ok gücü). */
+function might(b, side) {
+  return b.units.filter((u) => u.side === side && fighting(u)).reduce((n, u) => n + u.men * Math.max(u.melee, u.shoot * 0.8, 0.3) * b.sides[side].open.power, 0);
+}
+
+/**
+ * Bilgisayarın tavrı (kullanıcı 27.10: "150 kişiyim, düşman 30 kişi bana hücum ediyor, mantıksız; benden güçlü ya da
+ * eşitse ya da bana saldırmışsa hücum etsin, ben saldırdım ve benden güçsüzse haritaya göre savunma yapsın; haydutlar
+ * hariç"): saldıran taraf, haydut ve barbar hep saldırır; savunan, gücü saldıranınkine yetiyorsa saldırır, yoksa
+ * savunur (surlu şehirde hep surun ardında).
+ */
+export function stanceOf(b, side) {
+  if (side === "att" || b.sides[side].wild) return "attack";
+  if (b.walls) return "hold";
+  return might(b, side) >= might(b, "att") * K().defend.ratio ? "attack" : "defend";
+}
+
+/**
+ * Savunma yeri: kendi yarısında en yüksek tepe (yeterince yüksekse), yoksa olduğu yer; birlikler dizilişlerini
+ * koruyarak oraya, cepheleri düşmana dönük. Bir kere hesaplanır.
+ */
+function defendPlan(b, side) {
+  b.defend ??= {};
+  if (b.defend[side]) return b.defend[side];
+  const T = K(), F = b.field;
+  const mine = b.units.filter((u) => u.side === side && alive(u) && !u.routed);
+  const foesC = b.units.filter((u) => u.side !== side && alive(u));
+  const cx = mine.reduce((n, u) => n + u.x, 0) / (mine.length || 1), cy = mine.reduce((n, u) => n + u.y, 0) / (mine.length || 1);
+  const ex = foesC.reduce((n, u) => n + u.x, 0) / (foesC.length || 1), ey = foesC.reduce((n, u) => n + u.y, 0) / (foesC.length || 1);
+  let best = { x: cx, y: cy }, score = T.defend.hill * 10;
+  const half = side === "def" ? [T.w * 0.55, T.w - 6] : [6, T.w * 0.45];
+  for (let x = half[0]; x <= half[1]; x += 3) {
+    for (let y = 8; y <= T.h - 8; y += 3) {
+      const s = heightAt(F, x, y) * 10 - Math.hypot(x - cx, y - cy) * 0.05;
+      if (s > score && passable(F, x, y)) { score = s; best = { x, y }; }
+    }
+  }
+  const facing = Math.atan2(ey - best.y, ex - best.x);
+  const plan = new Map();
+  for (const u of mine) {
+    const x = Math.max(3, Math.min(T.w - 3, best.x + (u.x - cx))), y = Math.max(3, Math.min(T.h - 3, best.y + (u.y - cy)));
+    plan.set(u.id, passable(F, x, y) ? { x, y, facing } : { x: u.x, y: u.y, facing });
+  }
+  b.defend[side] = plan;
+  return plan;
+}
+
 /** Bilgisayarın emirleri (düşman tarafı; ya da Otomatik'te oyuncunun tarafı). Elle emir verilmiş birliğe dokunmaz. */
 export function aiOrders(b, side, all = false) {
+  // Savunmada: tepede (ya da yerinde) hat kurar; yalnız yaklaşanla dövüşür, okçular atar.
+  if (stanceOf(b, side) === "defend") {
+    const plan = defendPlan(b, side), T = K();
+    for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed)) {
+      if (u.manual && !all) continue;
+      const en = foes(b, u);
+      const near = en.reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
+      const spot = plan.get(u.id) ?? { x: u.x, y: u.y, facing: u.facing };
+      const home = dist(u, spot) > 1.5 ? spot : null;
+      if (u.shoot > 0 && u.charge < 1) { u.order = near && dist(u, near) <= T.volley.range * 0.95 ? null : home; continue; }
+      const reach = u.charge > 0 ? T.defend.cavEngage : T.defend.engage;
+      u.order = near && dist(u, near) < reach ? { unit: near.id } : home;
+    }
+    return;
+  }
   // Sura saldıran bilgisayar: tırmanacak birlikler önce surun önünde toplanır, hepsi gelince birlikte saldırır
   // (tek tek varıp merdivende kırılmasınlar).
   const T = K(), C = b.walls ? b.field.city : null;

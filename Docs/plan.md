@@ -105,8 +105,11 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     `src/rules/field.js`. Gerçek kıyı, nehir, orman, dağ; köprüler, köy; yol bulma, tepe ve orman etkileri.
 23. **Canlı dövüş ve sura tırmanma** (8293e51; kullanıcı İstanbul kuşatması görselleri: "takılıyorlar, iç içe
     geçsinler; surdan tek sıra tırmansınlar; arı kovanı gibi titriyorlar"): kurallar.md 29a.
-24. **Surla çevrili şehir** (bu adım; "şehirlerin surlarla etrafı çevrili"): kurallar.md 29a sonu, `field.js addCity`.
+24. **Surla çevrili şehir** (686c7c7; "şehirlerin surlarla etrafı çevrili"): kurallar.md 29a sonu, `field.js addCity`.
     Dört yanı surlu şehir, kuleler, kapılar, sokaklar, evler, kale; bilgisayar şehri dört yandan sarar.
+25. **Dizilme, tavır, sana saldırılar** (bu adım): kurallar.md 29c, `src/rules/incoming.js`. Dizilme bölgeleri ve
+    ışınlama; zayıf savunan tepede savunur; bilgisayarın sana saldırısında Sonucu gör / Savaş. Test oyuncusu (playtest)
+    artık Asker bas sekmesini açıyor (asker basma ayrı sekmeye geçince hiç asker basmıyordu).
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

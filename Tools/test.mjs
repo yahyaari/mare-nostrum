@@ -1122,6 +1122,87 @@ section("Arayüz tür listeleri");
   check("main.js asker türlerini elle listelemiyor", !src.includes('["inf", "arch", "cav"'));
 }
 
+section("Oyuncuya saldırılar (bölüm 29c)");
+
+{
+  const IN = await import("../src/rules/incoming.js");
+  const { endTurn: ET } = await import("../src/rules/turn.js");
+  const { TEXT } = await import("../src/text.js");
+  for (const lang of ["en", "tr"]) check(`${lang}: saldırı penceresi ve dizilme yazıları`, ["incomingTitle", "incomingArmy", "incomingSub", "incomingThem", "incomingSee", "incomingFight", "incomingOdds", "defWon", "defLost", "defSacked", "defFieldWon", "defFieldLost", "tacDeployTitle", "tacDeployHint", "tacTimeoutHeld", "raiders"].every((k) => TEXT[lang][k]));
+  // Bot oyunu (defer kapalı): hiçbir saldırı ertelenmez.
+  const bot = S.newGame("rome", 11);
+  for (let i = 0; i < 30; i++) ET(bot);
+  check("bot oyununda saldırılar hemen çözülür", !(bot.incoming ?? []).length);
+  // Gerçek oyun: bilgisayarın oyuncuya saldırısı ertelenir; oyuncu çözer.
+  const g = S.newGame("rome", 11);
+  g.defer = true;
+  let it = null;
+  for (let i = 0; i < 80 && !it; i++) { ET(g); it = IN.incomingFor(g, "rome")[0] ?? null; }
+  check("gerçek oyunda bilgisayarın oyuncuya saldırısı ertelenir", !!it && it.to === "rome" && !!S.armyById(g, it.from));
+  if (it) {
+    const sd = IN.incomingSides(g, it);
+    check("bekleyen saldırının iki tarafı", sd.att.civ === it.by && (sd.field || sd.place === it.target));
+    const ev = IN.resolveIncoming(g, it);
+    check("oyuncu çözünce savaş olur, sıradan düşer", !!ev && ev.incoming && ev.attacker === it.by && !IN.incomingFor(g, "rome").some((x) => x.id === it.id));
+  }
+  // Oyuncu karar vermeden turu bitirirse otomatik savaş.
+  const h = S.newGame("rome", 11);
+  h.defer = true;
+  let pend = null;
+  for (let i = 0; i < 80 && !pend; i++) { ET(h); pend = IN.incomingFor(h, "rome")[0] ?? null; }
+  if (pend) { ET(h); check("karar verilmeyen saldırı tur sonunda çözülür", !(h.incoming ?? []).some((x) => x.id === pend.id)); }
+  // Taktik sonuçla: savunan kazanırsa yer oyuncuda kalır.
+  const k = S.newGame("rome", 7);
+  k.defer = true;
+  const D = await import("../src/rules/diplomacy.js");
+  D.declareWar(k, "gaul", "rome");
+  const ga = raise(k, "bibracte", { inf: 60 });
+  before(ga, "ariminum");
+  ga.mp = 0;
+  k.incoming = [{ id: 1, from: ga.id, by: "gaul", to: "rome", kind: "place", target: "ariminum", turn: k.turn }];
+  const res = { attWins: false, att: { inf: 0, arch: 0, cav: 0, siege: 0, elite: 0 }, def: { inf: k.places.ariminum.inf, arch: 0, cav: 0, siege: 0, elite: 0 }, attPow: 1, defPow: 9, escaped: { inf: 15, arch: 0, cav: 0, siege: 0, elite: 0 }, tactical: true };
+  const kev = IN.resolveIncoming(k, k.incoming[0], res);
+  check("taktik savunma zaferi: yer oyuncuda kalır, saldıranın kaçabilenleri geri çekilir", kev && !kev.won && k.places.ariminum.owner === "rome" && S.armyById(k, ga.id)?.inf === 15);
+  // Akın mektubu: taktik sonuçla.
+  const EV = await import("../src/rules/events.js");
+  const r = S.newGame("rome", 7);
+  r.inbox.push({ id: 5, turn: r.turn, type: "event", key: "raid", civ: "rome", place: "tarentum", raiders: 40, bribe: 15 });
+  const lt = r.inbox.at(-1);
+  lt.tactical = { attWins: false, att: { inf: 0, arch: 0, cav: 0, siege: 0, elite: 0 }, def: { inf: 10, arch: 0, cav: 0, siege: 0, elite: 0 }, attPow: 1, defPow: 9, escaped: {}, tactical: true };
+  const lr = EV.resolve(r, lt, "fight");
+  check("akın mektubu taktik savaşın sonucunu kullanır", lr.result.held === true);
+}
+
+section("Taktik savaş: tavır ve dizilme (bölüm 29)");
+
+{
+  const TC2 = await import("../src/rules/tactics.js");
+  const st = (att, def, walls = null) => TC2.stanceOf(TC2.setupBattle(att, def, walls, 3), "def");
+  check("güçlü saldırana karşı zayıf savunan savunur", st({ civ: "rome", inf: 150 }, { civ: "gaul", inf: 30 }) === "defend");
+  check("güçlü savunan karşı saldırır", st({ civ: "rome", inf: 30 }, { civ: "gaul", inf: 150 }) === "attack");
+  check("haydut ve barbar her zaman saldırır", st({ civ: "rome", inf: 150 }, { civ: null, inf: 30, wild: true }) === "attack");
+  check("saldıran her zaman saldırır", TC2.stanceOf(TC2.setupBattle({ civ: "rome", inf: 10 }, { civ: "gaul", inf: 200 }, null, 3), "att") === "attack");
+  // Savunan yerinde (ya da tepede) bekler, uzaktaki düşmana yürümez.
+  const db = TC2.setupBattle({ civ: "rome", inf: 150 }, { civ: "gaul", inf: 30 }, null, 3);
+  const du = db.units.find((u) => u.side === "def"), x0 = du.x;
+  for (let i = 0; i < 30; i++) { TC2.aiOrders(db, "def"); TC2.step(db, 0.1); }
+  check("savunan uzaktaki düşmana hücum etmez", Math.abs(du.x - x0) < 3, (du.x - x0).toFixed(2));
+  // Dizilme: bölgeler ve ışınlama.
+  const zb = TC2.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 80 }, null, 3);
+  const Za = TC2.deployZone(zb, "att"), Zd = TC2.deployZone(zb, "def");
+  check("dizilme bölgeleri: saldıran solda, savunan sağda, ayrık", Za.x1 < Zd.x0 && zb.units.every((u) => { const Z = u.side === "att" ? Za : Zd; return u.x >= Z.x0 && u.x <= Z.x1; }));
+  const zu = zb.units.find((u) => u.side === "att");
+  TC2.placeAt(zb, [zu.id], { x: 20, y: 50 });
+  check("dizilirken birlik tıklanan yere ışınlanır", Math.abs(zu.x - 20) < 0.01 && Math.abs(zu.y - 50) < 3);
+  TC2.placeAt(zb, [zu.id], { x: 90, y: 30 });
+  check("ışınlama kendi bölgesinin dışına çıkmaz", zu.x <= Za.x1);
+  const wz = TC2.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 80 }, "city", 3);
+  const WZ = TC2.deployZone(wz, "def"), WC2 = wz.field.city;
+  check("surlu şehirde savunanın bölgesi şehrin içi", WZ.x0 > WC2.x0 && WZ.x1 < WC2.x1 && WZ.y0 > WC2.y0 && WZ.y1 < WC2.y1);
+  TC2.placeLine(zb, zb.units.filter((u) => u.side === "att").map((u) => u.id), { x: 25, y: 10 }, { x: 25, y: 50 });
+  check("dizilirken hat çizimi birlikleri hatta ışınlar", zb.units.filter((u) => u.side === "att").every((u) => Math.abs(u.x - 25) < 6 && u.order == null));
+}
+
 section("Taktik savaş (bölüm 29)");
 
 {

@@ -25,6 +25,7 @@ import { tickBarbarians } from "./barbarians.js";
 import { replenish } from "./refill.js";
 import { tickCrises } from "./crises.js";
 import { tickTrade } from "./trade.js";
+import { incomingFor, resolveIncoming } from "./incoming.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -69,8 +70,9 @@ export function endTurn(state) {
   const events = [];
   // Kroniğin ilk fotoğrafı: oyunun başı (eski kayıtta yükseltildiği tur).
   if (!state.chronicle?.places.length) snapshot(state);
-  // Oyuncu karar vermeden geçtiyse bekleyen mektuplar bedava seçenekle kapanır.
+  // Oyuncu karar vermeden geçtiyse bekleyen mektuplar bedava seçenekle kapanır; bekleyen saldırılar otomatik savaşla.
   settleInbox(state);
+  for (const h of humansOf(state)) for (const it of incomingFor(state, h)) { const ev = resolveIncoming(state, it); if (ev) events.push(ev); }
   for (const c of CIVS) {
     if (!isHuman(state, c.id) && state.civs[c.id].alive) aiTurn(state, c.id, events);
   }

@@ -18,6 +18,7 @@ import { BUILDABLE, wondersAt } from "./wonders.js";
 import { besiege, canBesiege } from "./siege.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { candidates, openRoute, routesFrom, slotsOf } from "./trade.js";
+import { deferAttack } from "./incoming.js";
 import { random } from "./rng.js";
 import { aiResearch, unlocked } from "./research.js";
 import { dealOf, moodOf, persona, warMoodMul } from "./leaders.js";
@@ -391,14 +392,17 @@ function bestStrike(state, civ, a) {
 
 /** Hedefe yürü ve saldır. Dönen olay ya da null. */
 function go(state, a, t) {
+  // Oyuncuya saldırı: oyuncu kendi turunda karar verir (incoming.js; sonucu gör ya da kendin yönet).
   if (t.kind === "place") {
     if (!canAttack(state, a, t.id)) order(state, a.id, { place: t.id });
-    return state.armies.includes(a) && canAttack(state, a, t.id) ? attack(state, a.id, t.id) : null;
+    if (!state.armies.includes(a) || !canAttack(state, a, t.id) || deferAttack(state, a, t)) return null;
+    return attack(state, a.id, t.id);
   }
   const b = armyById(state, t.id);
   if (!b) return null;
   if (!canStrike(state, a, b)) order(state, a.id, { army: b.id });
-  return state.armies.includes(a) && canStrike(state, a, b) ? strike(state, a.id, b.id) : null;
+  if (!state.armies.includes(a) || !canStrike(state, a, b) || deferAttack(state, a, t)) return null;
+  return strike(state, a.id, b.id);
 }
 
 function military(state, civ, events) {

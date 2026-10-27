@@ -113,6 +113,12 @@ window.PT = (() => {
         await frame();
         continue;
       }
+      // Sana saldırı (incoming.js): sonucu gör.
+      if (M.ui.modal.kind === "incoming") {
+        stats.incoming = (stats.incoming ?? 0) + 1;
+        if (!(await press((a) => a.do === "incomingSee", "sonucu gör"))) break;
+        continue;
+      }
       // Görev: çoğunu kabul et, arada bir reddet.
       if (M.ui.modal.kind === "mission") {
         stats.missions = (stats.missions ?? 0) + 1;
@@ -152,6 +158,8 @@ window.PT = (() => {
         if (upgraded) break;
         if (await press((a) => a.do === "upgrade" && a.id === id && a.what === what)) { stats.upgrades++; break; }
       }
+      // Asker basma kendi sekmesinde (Asker bas).
+      await press((a) => a.do === "cardTab" && a.tab === "troops", "asker sekmesi");
       for (let k = 0; k < 3; k++) {
         if (state.budget(g, me).food < 1.5) break;
         const pl = g.places[id];

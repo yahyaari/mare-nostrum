@@ -8,7 +8,7 @@
 // emirler, sonra Başlat. Bitince sonuç panosu.
 
 import { N } from "../rules/numbers.js";
-import { extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
+import { deployZone, extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
 import { BRIDGE, FOREST, WATER, placeName, sidePoint, wallAt } from "../rules/field.js";
 import { TITLE_FONT } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shade } from "./pieces.js";
@@ -52,6 +52,8 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   // Arazi bir kere çizilir (saha boyutu ya da dil değişince yeniden).
   ctx.drawImage(terrainLayer(f, b, T, lang, ctx.getTransform().a), f.x, f.y, f.w, f.h);
   if (b.field.city) wall(ctx, f, b);
+  // Dizilirken iki tarafın bölgesi (kullanıcı 27.10: "düşmanın ve benim sınır çizgilerim olsun").
+  if (B.deploy) for (const s of ["att", "def"]) zone(ctx, f, deployZone(b, s), B.owners[s], s === B.me);
   // Yerdeki ölüler.
   corpses(ctx, f, B);
   // Askerler kendi yerlerine yürür (duraklatılınca durur).
@@ -90,7 +92,7 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   bottomBar(ctx, cam, B, T, boxes);
   if (B.sel.size && !b.over) formationBar(ctx, cam, f, B, T, boxes);
   if (b.over) endPanel(ctx, cam, B, T, lang, boxes);
-  else if (B.paused && b.t === 0) startHint(ctx, cam, f, T, boxes);
+  else if (B.deploy) deployBar(ctx, cam, f, T);
 }
 
 let layer = null; // { key, canvas }
@@ -833,7 +835,7 @@ function bottomBar(ctx, cam, B, T, boxes) {
   ctx.fillRect(0, y0, cam.w, BOTTOM_H);
   ctx.fillStyle = GOLD_DARK;
   ctx.fillRect(0, y0, cam.w, 2);
-  const mine = B.b.units.filter((u) => u.side === "att" && !u.absorbed);
+  const mine = B.b.units.filter((u) => u.side === B.me && !u.absorbed);
   // Kartlar düğmelerin soluna sığar; çok birlik olunca (tırmananlar yeni birlik olur) iki sıra, küçük kart.
   const bw = 120, right = cam.w - 16 - bw, avail = right - bw - 8 - 32;
   const rowsN = mine.length * 46 > avail ? 2 : 1, per = Math.ceil(mine.length / rowsN);
@@ -851,7 +853,7 @@ function bottomBar(ctx, cam, B, T, boxes) {
     const gy = small ? y + 12 : y + 22, gr = small ? 9 : 13;
     ctx.beginPath();
     ctx.arc(x + cw / 2, gy, gr, 0, TAU);
-    ctx.fillStyle = out ? "#555" : colorOf(B.owners.att);
+    ctx.fillStyle = out ? "#555" : colorOf(B.owners[B.me]);
     ctx.fill();
     ctx.strokeStyle = u.elite ? GOLD_LIGHT : "rgba(20,14,8,0.9)";
     ctx.lineWidth = 1.5;
@@ -874,32 +876,56 @@ function bottomBar(ctx, cam, B, T, boxes) {
   // Düğmeler: sağda alt alta.
   const bx = right, by = y0 + 10;
   const over = !!B.b.over;
-  button(ctx, boxes, { x: bx - bw - 8, y: by, w: bw, h: 30, label: B.paused ? (B.b.t === 0 ? T.tacBegin : T.tacGo) : T.tacPause, main: B.paused, size: 13, off: over, act: { do: "tacPause" }, tip: [T.tacPause, T.tacSpaceTip] });
+  button(ctx, boxes, { x: bx - bw - 8, y: by, w: bw, h: 30, label: B.paused ? (B.deploy ? T.tacBegin : T.tacGo) : T.tacPause, main: B.paused, size: 13, off: over, act: { do: "tacPause" }, tip: [T.tacPause, T.tacSpaceTip] });
   button(ctx, boxes, { x: bx, y: by, w: bw, h: 30, label: `${T.tacSpeed} x${B.speed}`, size: 13, off: over, act: { do: "tacSpeed" } });
   button(ctx, boxes, { x: bx - bw - 8, y: by + 36, w: bw, h: 30, label: T.tacAuto, main: B.auto, size: 13, off: over, act: { do: "tacAuto" }, tip: [T.tacAuto, T.tacAutoTip] });
   button(ctx, boxes, { x: bx, y: by + 36, w: bw, h: 30, label: T.tacRetreat, size: 13, off: over, act: { do: "tacRetreat" }, tip: [T.tacRetreat, T.tacRetreatTip] });
   wrap(ctx, T.tacHelp, bw * 2 + 8, { italic: true, size: 11 }).slice(0, 2).forEach((l, i) => text(ctx, l, bx - bw - 8, by + 84 + i * 13, { italic: true, size: 11, color: "rgba(243,231,201,0.6)" }));
 }
 
-/** Başlangıç: savaş duraklatılmış; emirleri ver, sonra başlat. */
-function startHint(ctx, cam, f, T, boxes) {
-  const w = Math.min(520, f.w * 0.5), h = 104, x = (cam.w - w) / 2, y = f.y + f.h / 2 - h / 2;
-  panel(ctx, x, y, w, h);
-  text(ctx, T.tacStartTitle, cam.w / 2, y + 30, { bold: true, size: 16, align: "center" });
-  wrap(ctx, T.tacStartHint, w - 30, { italic: true, size: 12 }).slice(0, 2).forEach((l, i) => text(ctx, l, cam.w / 2, y + 48 + i * 14, { italic: true, size: 12, color: INK.soft, align: "center" }));
-  button(ctx, boxes, { x: cam.w / 2 - 90, y: y + h - 32, w: 180, h: 26, label: T.tacStart, main: true, size: 13, act: { do: "tacPause" } });
+/**
+ * Dizilme şeridi (kullanıcı 27.10: "ekranın ortasında yazı duruyor, diziliş yapamıyorum"): sahanın üst kenarında
+ * ince bir şerit - ne yapılacağı ve Başlat'ın altta olduğu; sahanın ortası boş kalır.
+ */
+function deployBar(ctx, cam, f, T) {
+  const w = Math.min(f.w - 20, 760), h = 26, x = cam.w / 2 - w / 2, y = f.y + 6;
+  ctx.fillStyle = "rgba(28,21,14,0.82)";
+  roundRect(ctx, x, y, w, h, 5);
+  ctx.fill();
+  ctx.strokeStyle = GOLD_DARK;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  const s = `${T.tacDeployTitle} · ${T.tacDeployHint}`;
+  let size = 12.5;
+  while (size > 9 && measure(ctx, s, { size }) > w - 20) size -= 0.5;
+  text(ctx, s, cam.w / 2, y + 17, { size, color: CREAM, align: "center" });
+}
+
+/** Dizilme bölgesi: tarafın renginde soluk zemin, kesik çizgili sınır; oyuncununki daha belirgin. */
+function zone(ctx, f, Z, owner, mine) {
+  const x = f.x + Z.x0 * f.k, y = f.y + Z.y0 * f.k, w = (Z.x1 - Z.x0) * f.k, h = (Z.y1 - Z.y0) * f.k;
+  ctx.save();
+  ctx.fillStyle = colorOf(owner);
+  ctx.globalAlpha = mine ? 0.12 : 0.07;
+  ctx.fillRect(x, y, w, h);
+  ctx.globalAlpha = mine ? 0.9 : 0.55;
+  ctx.strokeStyle = colorOf(owner);
+  ctx.lineWidth = mine ? 2.5 : 1.8;
+  ctx.setLineDash([10, 6]);
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  ctx.restore();
 }
 
 /** Sonuç panosu: zafer ya da yenilgi, iki tarafın kaybı, haritaya dön. */
 function endPanel(ctx, cam, B, T, lang, boxes) {
-  const won = B.b.over.winner === "att";
+  const won = B.b.over.winner === B.me;
   const w = Math.min(460, cam.w - 40), h = 176, x = (cam.w - w) / 2, y = (cam.h - h) / 2 - 20;
   panel(ctx, x, y, w, h);
   text(ctx, won ? T.tacWon : B.b.over.retreat ? T.tacFled : T.tacLost, cam.w / 2, y + 42, { title: true, bold: true, size: 24, align: "center", color: won ? INK.good : INK.bad });
   const lost = (s) => Math.round(B.b.units.filter((u) => u.side === s).reduce((n, u) => n + (u.start - Math.floor(u.dead ? 0 : u.men)), 0));
   const fled = (s) => B.b.units.filter((u) => u.side === s && (u.routed || u.gone) && !u.dead).reduce((n, u) => n + Math.floor(u.men), 0);
-  text(ctx, `${T.tacYourLoss}: ${lost("att")}  ·  ${T.tacTheirLoss}: ${lost("def")}`, cam.w / 2, y + 74, { size: 14, align: "center" });
-  const note = B.b.over.timeout ? T.tacTimeout : won ? (fled("def") ? `${T.tacTheyFled}: ${fled("def")}` : "") : fled("att") ? `${T.tacWeFled}: ${fled("att")}` : "";
+  text(ctx, `${T.tacYourLoss}: ${lost(B.me)}  ·  ${T.tacTheirLoss}: ${lost(B.foe)}`, cam.w / 2, y + 74, { size: 14, align: "center" });
+  const note = B.b.over.timeout ? (B.me === "def" ? T.tacTimeoutHeld : T.tacTimeout) : won ? (fled(B.foe) ? `${T.tacTheyFled}: ${fled(B.foe)}` : "") : fled(B.me) ? `${T.tacWeFled}: ${fled(B.me)}` : "";
   if (note) text(ctx, note, cam.w / 2, y + 98, { italic: true, size: 12, color: INK.soft, align: "center" });
   button(ctx, boxes, { x: cam.w / 2 - 110, y: y + h - 52, w: 220, h: 38, label: T.tacBack, main: true, size: 15, act: { do: "tacEnd" } });
 }

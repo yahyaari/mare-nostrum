@@ -1158,6 +1158,33 @@ arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar".
   surundan, yukarıdakiler kuzeyden, aşağıdakiler güneyden (deniz yanına değil), her yanda sur boyunca eşit
   aralıkla; makineler batı suruna. Denge değişmedi: surlu yerde kazanan %88 otomatik savaşla aynı.
 
+### 29c. Dizilme, bilgisayarın tavrı, sana saldırılar
+
+Kullanıcı 27.10: "savaşa başlarken ekranın ortasında yazı duruyor, diziliş yapamıyorum; düşmanın ve benim sınır
+çizgilerim olsun, savaş başlamadan dizebileyim, tıkladığım gibi ışınlansınlar"; "150 kişiyim, düşman 30 kişi bana
+hücum ediyor, mantıksız: benden güçlü ya da eşitse ya da bana saldırmışsa hücum etsin, ben saldırdım ve benden
+güçsüzse haritaya göre savunma yapsın; haydutlar hariç"; "haydutlar kalene saldırdı diye baloncuk çıkıyor, garnizonla
+savaş diyorum, ne olduğunu anlamıyorum - biri kaleme saldırdığında bildirim gelsin, simüle et ya da savaş desin, savaş
+dersem kaledeki birlikleri ben yöneteyim".
+
+- **Dizilme:** savaş dizilme aşamasında başlar (ortada pano yok; sahanın üstünde ince bir şerit, Başlat altta).
+  İki tarafın bölgesi tarafın renginde kesik çizgiyle (seninki belirgin): saldıranınki sahanın sol üçte biri
+  (surlu şehirde surdan 8 birim uzak), savunanınki sağ üçte biri ya da surlu şehrin içi. Birlik seç, bölgende bir
+  yere tıkla (ya da sağ tıkla) - ışınlanır (birlikte seçilenler düzenini korur, bölgenin içinde, yürünebilir yerde
+  kalır); sağ sürükleyerek çizilen hatta anında dizilir. Başlat (ya da Otomatik) dizilmeyi bitirir.
+- **Tavır** (`tactics.js stanceOf`): saldıran taraf, haydutlar ve barbarlar hep saldırır. Savunan, gücü (dövüşen
+  birliklerin askeri x göğüs göğüse ya da ok gücü) saldıranınkine yetiyorsa saldırır, yoksa **savunur**: kendi
+  yarısında yeterince yüksek bir tepe varsa birlikleri dizilişlerini koruyarak oraya çıkar, yoksa yerinde kalır;
+  cephesi düşmana dönük; yalnız 10 birime (atlı 16) gelen düşmanla dövüşür, okçular menzile gireni okla karşılar.
+  Güçler değişirse tavır değişir. Surlu şehirde savunan surun ardında (önceki gibi).
+- **Sana saldırılar** (`src/rules/incoming.js`): gerçek oyunda (`state.defer`, tek oyunculu) bilgisayarın ya da barbar
+  akıncılarının senin yerine ya da ordunun saldırısı hemen çözülmez - saldıran kapıda bekler. Turun başında bir pencere:
+  "Galyalılar, Ariminum üstüne saldırıyor!" - saldıranlar, savunanların, şansın; *Sonucu gör* (otomatik savaş) ya da
+  *⚔ Savaş* (taktik savaş, savunmayı sen yönetirsin; denizden saldırıda yok). Karar vermeden turu bitirirsen otomatik
+  savaş. Akın mektubunda "garnizonla savaş" da aynı seçimi açar. Savunduğun savaşta sonuç şeridi senin gözünden:
+  "Ariminum dayandı!" / "Ariminum düştü." / "yağmalandı", kayıpların ve düşmanınki. Bot oyunları ve testler eskisi gibi
+  hemen çözer.
+
 ### 29b. Savaş sahasının arazisi
 
 Kullanıcı 26.10 (bir görsel gönderdi: ağaçlı kıyılarıyla bir nehir, yanında "Ridaniye Köyü", büyük bir dağ, adlarıyla):

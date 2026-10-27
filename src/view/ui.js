@@ -49,7 +49,8 @@ import { musicEnabled, soundEnabled } from "./sound.js";
 import { eyes, seen, sight } from "../rules/sight.js";
 import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
 import { SCENE_MS, drawBattle, trooper } from "./battle.js";
-import { explain, fight, nextRankXp, veteranMul, veteranRank } from "../rules/combat.js";
+import { estimate, explain, fight, nextRankXp, veteranMul, veteranRank } from "../rules/combat.js";
+import { incomingSides } from "../rules/incoming.js";
 import { drawMinimap, drawVignette, placeOnScreen } from "./draw.js";
 import { buildingArt } from "./buildings.js";
 import { toScreen } from "./camera.js";
@@ -1471,7 +1472,7 @@ function drawFight(ctx, cam, game, ui, boxes, T) {
   const e = ui.fight.ev;
   const t = performance.now() - ui.fight.t0;
   if (t < SCENE_MS + 400 && !e.tactical) fightScene(ctx, cam, game, e, t);
-  if (t > SCENE_MS - 250) fightRibbon(ctx, cam, ui, boxes, T, e, t - SCENE_MS + 250);
+  if (t > SCENE_MS - 250) fightRibbon(ctx, cam, ui, boxes, T, e, t - SCENE_MS + 250, game.player);
 }
 
 /** Sahne: savaşın yerinin üstünde (sığmazsa altında) bir pano; açılırken belirir, biterken söner. */
@@ -1499,23 +1500,29 @@ function fightScene(ctx, cam, game, e, t) {
 }
 
 /** Sonuç şeridi: üstte ortada, uçları çentikli koyu bir kurdele; zafer altın, yenilgi kızıl. */
-function fightRibbon(ctx, cam, ui, boxes, T, e, t) {
+function fightRibbon(ctx, cam, ui, boxes, T, e, t, me) {
   if (t > RIBBON_MS) return;
   const where = placeName(e.place, ui.lang);
   // Geri çekilenler kayıp sayılmaz.
   const back = (who) => (e.retreat?.owner === who ? e.retreat.men : 0);
-  const lost = men(e.before.att) - men(e.after.att) - back(e.attacker), killed = men(e.before.def) - men(e.after.def) - back(e.defender);
+  // Oyuncu savunduysa (incoming.js) şerit onun gözünden: kazanmak saldırının püskürtülmesi.
+  const defending = e.defender === me && e.attacker !== me;
+  const won = defending ? !e.won : e.won;
+  const attLost = men(e.before.att) - men(e.after.att) - back(e.attacker), defLost = men(e.before.def) - men(e.after.def) - back(e.defender);
+  const lost = defending ? defLost : attLost, killed = defending ? attLost : defLost;
   const fled = e.retreat && e.retreat.owner === e.attacker && !e.won;
-  const head = e.bandits && e.won ? T.banditsWon : e.camp && e.won ? T.campWon : e.field ? (e.won ? T.fieldWon : fled ? T.fieldLostFled : T.fieldLost) : e.won ? T.won : fled ? T.lostFled : T.lost;
+  const head = defending ? (e.field ? (won ? T.defFieldWon : T.defFieldLost) : won ? T.defWon : e.sacked ? T.defSacked : T.defLost)
+    : e.bandits && e.won ? T.banditsWon : e.camp && e.won ? T.campWon : e.field ? (e.won ? T.fieldWon : fled ? T.fieldLostFled : T.fieldLost) : e.won ? T.won : fled ? T.lostFled : T.lost;
   const lines = [[e.drowned ? T.drowned : fill(T.fightLine, lost, killed), e.drowned ? "bad" : null]];
   if (!e.drowned && e.naval?.won && e.naval.sunk) lines.push([fill(T.navalWin, e.naval.sunk), "good"]);
   if (e.loot) lines.push([fill(T.lootLine, e.loot), "good"]);
-  if (e.retreat) lines.push(e.retreat.owner === e.attacker ? [fill(T.retreatYou, e.retreat.men), "warn"] : [fill(T.retreatThem, e.retreat.men), null]);
-  if (e.rankUp) lines.push([fill(T.rankUp, T.ranks[e.rankUp], Math.round(e.rankUp * N.veteran.per * 100)), "warn"]);
-  if (e.fallen) lines.push([fill(T.evFallen, civName(e.fallen, ui.lang)), "good"]);
-  if (e.gen?.up) lines.push([fill(T.genUp, e.gen.name, e.gen.up), "warn"]);
-  if (e.gen?.trait) lines.push([fill(T.genSkill, T.skills[e.gen.trait][0], T.skills[e.gen.trait][1]), "warn"]);
-  if (e.genFell) lines.push([fill(T.genFell, e.genFell), "bad"]);
+  // Geri çekilen, rütbe ve general satırları: kimin olduklarına göre (savunurken saldıranınkiler senin değil).
+  if (e.retreat) lines.push(e.retreat.owner === me ? [fill(T.retreatYou, e.retreat.men), "warn"] : [fill(T.retreatThem, e.retreat.men), null]);
+  if (e.rankUp && !defending) lines.push([fill(T.rankUp, T.ranks[e.rankUp], Math.round(e.rankUp * N.veteran.per * 100)), "warn"]);
+  if (e.fallen) lines.push([fill(T.evFallen, civName(e.fallen, ui.lang)), e.fallen === me ? "bad" : "good"]);
+  if (e.gen?.up && !defending) lines.push([fill(T.genUp, e.gen.name, e.gen.up), "warn"]);
+  if (e.gen?.trait && !defending) lines.push([fill(T.genSkill, T.skills[e.gen.trait][0], T.skills[e.gen.trait][1]), "warn"]);
+  if (e.genFell) lines.push([fill(T.genFell, e.genFell), defending ? "good" : "bad"]);
   const W = Math.min(cam.w - 80, 560), H = 52 + lines.length * 20;
   const x = Math.round((cam.w - W) / 2), y = TOP + 16;
   // Belirir (yukarıdan iner), sonunda söner.
@@ -1537,13 +1544,13 @@ function fightRibbon(ctx, cam, ui, boxes, T, e, t) {
   ctx.fillStyle = "rgba(22,18,14,0.94)";
   ctx.fill();
   ctx.shadowColor = "transparent";
-  ctx.strokeStyle = e.won ? GOLD : "#a2412f";
+  ctx.strokeStyle = won ? GOLD : "#a2412f";
   ctx.lineWidth = 2;
   ctx.stroke();
   // Kazananın renginde ince şerit.
   ctx.fillStyle = colorOf(e.won ? e.attacker : e.defender);
   ctx.fillRect(x + 8, y + 5, W - 16, 3);
-  fit(ctx, fill(head, where).toLocaleUpperCase(ui.lang), cam.w / 2, y + 32, W - 40, { title: true, bold: true, size: 18, align: "center", color: e.won ? GOLD_LIGHT : TONE.bad });
+  fit(ctx, fill(head, where).toLocaleUpperCase(ui.lang), cam.w / 2, y + 32, W - 40, { title: true, bold: true, size: 18, align: "center", color: won ? GOLD_LIGHT : TONE.bad });
   lines.forEach(([s, tone], i) => text(ctx, s, cam.w / 2, y + 54 + i * 20, { size: 14, align: "center", color: TONE[tone] ?? CREAM, bold: !!tone }));
   ctx.restore();
   boxes.push({ x: x - n, y, w: W + 2 * n, h: H, act: { do: "fightOff" } });
@@ -1810,7 +1817,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const m = ui.modal;
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
-    menu: menuModal, slots: slotsModal, trade: tradeModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
+    menu: menuModal, slots: slotsModal, trade: tradeModal, incoming: incomingModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
     armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
@@ -2363,6 +2370,53 @@ function tradeModal(ctx, cam, game, ui, boxes, T, m) {
     button(ctx, boxes, { x: x + w - 96, y: y + 6, w: 96, h: 32, label: T.tradeGo, main: true, size: 13, act: { do: "openRoute", from: id, to: c.to }, tip: [placeName(c.to, ui.lang), fill(T.tradeLine, c.value)] });
   });
   button(ctx, boxes, { x: r.x + r.w / 2 - 80, y: r.y + r.h - 52, w: 160, h: 36, label: T.closeBtn, size: 14, act: { do: "close" } });
+}
+
+/**
+ * Sana saldırı (incoming.js; kullanıcı 27.10: "biri kaleme saldırdığında bildirim gelsin, simüle et ya da savaş
+ * desin"): kim, nereye; iki tarafın askerleri; senin şansın; Sonucu gör ya da Savaş (savunmayı sen yönetirsin).
+ * Akın mektubunda "garnizonla savaş" da buraya gelir.
+ */
+function incomingModal(ctx, cam, game, ui, boxes, T, m) {
+  let title, them, mine, owner, sd, sea = false;
+  if (m.letter) {
+    const it = game.inbox.find((x) => x.id === m.letter);
+    if (!it) return;
+    const pl = game.places[it.place];
+    them = { inf: it.raiders };
+    mine = defenders(game, it.place);
+    owner = null;
+    sd = { att: { civ: null, inf: it.raiders }, def: { ...mine, civ: pl.owner }, walls: wallsOf(game, it.place) };
+    title = fill(T.incomingTitle, T.raiders, placeName(it.place, ui.lang));
+  } else {
+    const it = (game.incoming ?? []).find((x) => x.id === m.id);
+    if (!it) return;
+    sd = incomingSides(game, it);
+    const a = sd.attacker;
+    owner = a.owner;
+    them = a;
+    mine = sd.def;
+    sea = !!sd.sea;
+    const who = a.bandit ? T.bandits : a.horde ? T.horde : a.barbarian ? T.barbarians : civName(a.owner, ui.lang);
+    title = sd.field ? fill(T.incomingArmy, who, placeName(nearestPlace(sd.target), ui.lang)) : fill(T.incomingTitle, who, placeName(it.target, ui.lang));
+  }
+  const r = modalFrame(ctx, cam, boxes, 236, 520);
+  const x = r.x + 26, w = r.w - 52;
+  // Üstte: saldıranın rengi.
+  ctx.fillStyle = colorOf(owner);
+  ctx.fillRect(r.x + 10, r.y + 10, r.w - 20, 4);
+  wrap(ctx, title, w, { title: true, bold: true, size: 19 }).slice(0, 2).forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 44 + i * 24, { title: true, bold: true, size: 19, align: "center" }));
+  fit(ctx, fill(T.incomingThem, troops(T, them, owner)), x, r.y + 100, w, { size: 13, color: INK.bad, bold: true });
+  fit(ctx, fill(T.incomingSub, men(mine) ? troops(T, mine, game.player) : T.undefended), x, r.y + 122, w, { size: 13, bold: true });
+  // Şans: saldıranın tahmininin tersi.
+  const e = estimate(sd.att, sd.def, sd.walls).odds;
+  const mineOdds = e === "easy" ? "hopeless" : e === "hopeless" ? "easy" : "risky";
+  const [label, color] = oddsLabel(mineOdds, T);
+  const lw = text(ctx, `${T.incomingOdds}: `, x, r.y + 150, { size: 14 });
+  text(ctx, label, x + lw, r.y + 150, { size: 14, bold: true, color });
+  const bw = (r.w - 60) / 2, by = r.y + r.h - 62;
+  button(ctx, boxes, { x: r.x + 24, y: by, w: bw, h: 44, size: 15, label: T.incomingSee, act: { do: "incomingSee" }, tip: [T.incomingSee, T.seeResultTip] });
+  button(ctx, boxes, { x: r.x + 36 + bw, y: by, w: bw, h: 44, size: 15, main: true, label: T.incomingFight, off: sea, act: { do: "incomingFight" }, tip: [T.incomingFight, T.incomingFightTip] });
 }
 
 /**
