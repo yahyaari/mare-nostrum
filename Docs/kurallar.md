@@ -1158,6 +1158,9 @@ arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar".
   surundan, yukarıdakiler kuzeyden, aşağıdakiler güneyden (deniz yanına değil), her yanda sur boyunca eşit
   aralıkla; makineler batı suruna. Denge değişmedi: surlu yerde kazanan %88 otomatik savaşla aynı.
 
+**Öğretici haydutlar** her yeni oyunda (ipuçları açıksa) çıkar - kullanıcı 27.10 "öğretici savaşı kaldırmışsın": önceden öğretici bir kez
+bitince tarayıcı bunu saklıyor ve sonraki oyunlarda haydutlar hiç çıkmıyordu. İstemeyen menüden ipuçlarını kapatır.
+
 ### 29c. Dizilme, bilgisayarın tavrı, sana saldırılar
 
 Kullanıcı 27.10: "savaşa başlarken ekranın ortasında yazı duruyor, diziliş yapamıyorum; düşmanın ve benim sınır

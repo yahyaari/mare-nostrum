@@ -694,11 +694,11 @@ function dispatch(act) {
       game = newGame(who, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level);
       game.defer = true;
       ui.picks = [];
-      // Öğretici açıksa (ve bitirilmediyse) başkentin yanında haydutlar: ilk ordu, ilk savaş.
-      // Zincirin balonları baştan: önceki oyunlarda görülmüş olsalar da (öğretici bitene kadar).
-      // Birkaç oyuncuda öğretici yok.
-      if (!many && !ui.coach.off && !ui.coach.done.has("loot") && spawnBandits(game)) {
-        for (const id of ["city", "recruit", "garrison", "pick", "form", "hunt", "strike", "preview", "camp", "raid"]) ui.coach.done.delete(id);
+      // İpuçları açıksa her yeni oyunda başkentin yanında haydutlar: ilk ordu, ilk savaş; zincirin balonları baştan.
+      // (Kullanıcı 27.10: "öğretici savaşı kaldırmışsın" - önceden öğretici bir kez bitince bir daha hiç çıkmıyordu.)
+      // İstemeyen menüden ipuçlarını kapatır. Birkaç oyuncuda öğretici yok.
+      if (!many && !ui.coach.off && spawnBandits(game)) {
+        for (const id of ["bandits", "city", "recruit", "garrison", "pick", "form", "hunt", "strike", "preview", "attack", "loot", "camp", "raid"]) ui.coach.done.delete(id);
         saveCoach();
       }
       ui.screen = "game";
