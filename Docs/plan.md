@@ -7,7 +7,7 @@
 
 ## NEREDE KALDIK (27.10 akşam) - önce bunu oku
 
-Son commit **e5540a0**, hepsi push'lu, **2347 test** geçiyor, kayıt sürümü **19**. Kullanıcı son durum için
+Son commit **ca6f0b7**, hepsi push'lu, **2351 test** geçiyor, kayıt sürümü **19**. Kullanıcı son durum için
 "tamam şimdi çok güzel olmuş" dedi. Sırada: kullanıcı oynayıp söyleyecek.
 
 **Bu iki günün özü (ayrıntı aşağıdaki 10-27. maddelerde ve kurallar.md'de):**
@@ -146,7 +146,7 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     artık Asker bas sekmesini açıyor (asker basma ayrı sekmeye geçince hiç asker basmıyordu).
 26. **Öğretici her yeni oyunda** (94669f6) ve **dar geçitte kola dönme** (0e705a6): kurallar.md 29a "Dar geçit".
 27. **Toplu ve dağınık birlikler, dizilmede görünen ışınlanma** (e5540a0): kurallar.md 29a "Toplu ve dağınık".
-28. **Takılmaz, geçidin ortasından** (bu adım; kullanıcı: "otomatik savaşta nehir kenarında gitmiyorlar, önce başka
+28. **Takılmaz, geçidin ortasından** (ca6f0b7; kullanıcı: "otomatik savaşta nehir kenarında gitmiyorlar, önce başka
     yere tıklıyorum; daralan geçitte tam ortadan, en geniş şekilde gitsinler"): kurallar.md 29a "Takılmaz" ve
     "Geçidin tam ortasından". field.js `pathOn` 1 birimlik hücrelerde, köşeden kesmeyen, ikili yığınlı A*; `grids`
     (engelden uzaklık + bölgeler, gedikte yenilenir: `F.rev`), `onMain`, `nearestOpen`, `nearestMain`, `lineFree`.
