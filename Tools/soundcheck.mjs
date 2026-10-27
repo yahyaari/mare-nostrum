@@ -24,6 +24,7 @@ const run = async (label, body) => {
 
 await run("sessiz", `S.setMusic(false); S.wake();`);
 await run("efektler", `S.setMusic(false); S.wake(); S.click(); S.build(); S.recruit(); S.muster(); S.launch(); S.march(2); S.row(2); S.clash(); S.horn(true); S.turnCall(); S.victory(); S.chime(); S.scroll(); S.war(); S.cheer(); S.defeat();`);
+await run("taktik", `S.setMusic(false); S.wake(); S.battleOpen(-0.5); S.charge(-0.5); for (let i = 0; i < 6; i++) { S.tramp(200, 0.3); S.hooves(60, -0.4); S.melee(300, 0.1); } S.battleEnd(true); S.battleEnd(false);`);
 await run("kapalı", `S.setMusic(false); S.setSound(false); S.wake(); S.clash(); S.build(); S.victory();`);
 await run("müzik", `S.setSound(false); S.setMusic(true); S.wake();`);
 await run("savaş", `S.setSound(false); S.setMusic(true); S.setMood("war"); S.wake();`);

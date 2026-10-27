@@ -6,6 +6,11 @@
 // çekil); bir birlik seçiliyken sahanın altında Böl, Birleştir, Genişlet, Derinleştir. Sağ sürüklerken çizilen
 // hat ve birliklerin orada alacağı yer soluk dikdörtgenlerle görünür. Savaş duraklatılmış başlar: önce
 // emirler, sonra Başlat. Bitince sonuç panosu.
+//
+// Giriş (kullanıcı 27.10: "savaş alanı bulutlardan açılsın, biraz kamera oyunu"): ekran bulutla kaplı açılır,
+// bulutlar iki yana dağılırken kamera yakından kendi ordunun üstünden düşmana kayar, sonra bütün sahayı görecek
+// kadar geri çekilir; ortada savaşın adı belirip söner, üst ve alt bantlar kenarlardan kayarak gelir. Tıklamak
+// ya da bir tuş girişi geçer. Bitişte saha kararır, sonuç panosu aşağıdan yavaşça çıkar.
 
 import { N } from "../rules/numbers.js";
 import { deployZone, extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
@@ -46,14 +51,40 @@ export function unitAt(b, p, side = null) {
 export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   const b = B.b;
   const f = fieldRect(cam);
+  const dpr = ctx.getTransform().a;
+  // Giriş sürüyor mu (sn); bitince kamera yerinde, bantlar yerinde.
+  // İlk karede arazinin iki resmi hazırlanır (ekran bulutla kaplı); giriş ondan sonra başlar, yoksa ağır ilk kare girişin
+  // başını yutar.
+  if (B.intro && !B.intro.warm) {
+    terrainLayer(f, b, T, lang, dpr);
+    terrainLayer(f, b, T, lang, Math.min(dpr * INTRO.zoom, 3200 / f.w), "zoom");
+    puffSprite();
+    B.intro.warm = true;
+    B.intro.t0 = performance.now();
+  }
+  const t = B.intro ? Math.max(0, (now - B.intro.t0) / 1000) : Infinity;
+  if (t >= INTRO.end) { B.intro = null; layers.zoom = null; }
   // Arka plan: koyu çerçeve, ortada saha.
   ctx.fillStyle = "#2a2016";
   ctx.fillRect(0, 0, cam.w, cam.h);
-  // Arazi bir kere çizilir (saha boyutu ya da dil değişince yeniden).
-  ctx.drawImage(terrainLayer(f, b, T, lang, ctx.getTransform().a), f.x, f.y, f.w, f.h);
+  // Girişte kamera: sahanın bir yerine yakından bakar (saha bütün ekranı kaplayabilir).
+  const view = B.intro ? introCamera(cam, f, B, t) : null;
+  if (view) {
+    ctx.save();
+    ctx.translate(f.x + f.w / 2, f.y + f.h / 2);
+    ctx.scale(view.z, view.z);
+    ctx.translate(-view.x, -view.y);
+  }
+  // Arazi bir kere çizilir (saha boyutu ya da dil değişince yeniden); girişte yakından bakılırken keskin kalsın
+  // diye daha büyük çizilmiş bir kopyası.
+  const zoomScale = Math.min(dpr * INTRO.zoom, 3200 / f.w);
+  ctx.drawImage(B.intro ? terrainLayer(f, b, T, lang, zoomScale, "zoom") : terrainLayer(f, b, T, lang, dpr), f.x, f.y, f.w, f.h);
   if (b.field.city) wall(ctx, f, b);
   // Dizilirken iki tarafın bölgesi (kullanıcı 27.10: "düşmanın ve benim sınır çizgilerim olsun").
-  if (B.deploy) for (const s of ["att", "def"]) zone(ctx, f, deployZone(b, s), B.owners[s], s === B.me);
+  if (B.deploy) {
+    const k = B.intro ? ramp(t, INTRO.bars) : 1;
+    if (k > 0) for (const s of ["att", "def"]) zone(ctx, f, deployZone(b, s), B.owners[s], s === B.me, k);
+  }
   // Yerdeki ölüler.
   corpses(ctx, f, B);
   // Askerler kendi yerlerine yürür (duraklatılınca durur).
@@ -91,18 +122,175 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   }
   // Sağ sürükleme: çizilen hat ve birliklerin orada alacağı yer.
   if (B.plan?.length) plan(ctx, f, B);
-  topBar(ctx, cam, B, T, lang);
-  bottomBar(ctx, cam, B, T, boxes);
+  if (view) {
+    ctx.restore();
+    clouds(ctx, cam, B, t);
+    introTitle(ctx, cam, B, t);
+  }
+  // Bantlar girişin sonunda kenarlardan kayarak gelir (gelene kadar düğmeleri basılmaz).
+  const bars = B.intro ? easeOut(ramp(t, INTRO.bars)) : 1;
+  if (bars > 0) {
+    ctx.save();
+    ctx.translate(0, -(TOP_H + 6) * (1 - bars));
+    topBar(ctx, cam, B, T, lang);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, (BOTTOM_H + 6) * (1 - bars));
+    bottomBar(ctx, cam, B, T, bars < 1 ? [] : boxes);
+    ctx.restore();
+  }
+  if (B.intro) return;
   if (B.sel.size && !b.over) formationBar(ctx, cam, f, B, T, boxes);
-  if (b.over) endPanel(ctx, cam, B, T, lang, boxes);
+  if (b.over) endPanel(ctx, cam, B, T, lang, boxes, now);
   else if (B.deploy) deployBar(ctx, cam, f, T);
 }
 
-let layer = null; // { key, canvas }
+// ---- giriş ----
+
+/**
+ * Girişin zamanları (sn): bulut örtüsü kalkar (`cover`), bulutlar iki yana dağılır (`part`) ve söner (`fade`);
+ * kamera `zoom` kat yakından kendi ordunun üstünden düşmana kayar (`pan`), sonra geri çekilir (`back`); ad görünür
+ * (`title`); bantlar gelir (`bars`).
+ */
+const INTRO = { cover: [0, 0.35], part: [0.1, 1.3], fade: [0.7, 1.6], pan: [0.6, 2.3], back: [2.3, 3.6], title: [0.4, 0.9, 2.4, 2.9], bars: [3.1, 3.7], end: 3.75, zoom: 2 };
+const ramp = (t, [a, b]) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+const easeInOut = (s) => (s < 0.5 ? 4 * s * s * s : 1 - (-2 * s + 2) ** 3 / 2);
+const easeOut = (s) => 1 - (1 - s) ** 3;
+/** Biraz öteye taşıp yerine yumuşakça oturan (pano aşağıdan gelirken). */
+const backOut = (s) => 1 + 1.8 * (s - 1) ** 3 + 0.8 * (s - 1) ** 2;
+
+/** Girişte kameranın baktığı yer (ekranda, sahanın yakınlaştırılmamış hâlinde) ve yakınlığı. */
+function introCamera(cam, f, B, t) {
+  const { w: W, h: H } = N.tactics;
+  const centre = (side) => {
+    const us = B.b.units.filter((u) => u.side === side && !u.dead && !u.gone);
+    const n = us.reduce((s, u) => s + u.men, 0) || 1;
+    return us.length ? { x: us.reduce((s, u) => s + u.x * u.men, 0) / n, y: us.reduce((s, u) => s + u.y * u.men, 0) / n } : { x: W / 2, y: H / 2 };
+  };
+  B.intro.mine ??= centre(B.me);
+  B.intro.foe ??= centre(B.foe);
+  const a = easeInOut(ramp(t, INTRO.pan)), c = easeInOut(ramp(t, INTRO.back));
+  const lerp = (p, q, k) => ({ x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k });
+  const p = lerp(lerp(B.intro.mine, B.intro.foe, a), { x: W / 2, y: H / 2 }, c);
+  const z = INTRO.zoom - 0.2 * a + (1 - (INTRO.zoom - 0.2 * a)) * c;
+  // Sahanın dışı görünmesin (ekranın göstereceği kadarı sahaya sığdıkça).
+  const hx = Math.min(W / 2, cam.w / 2 / (f.k * z)), hy = Math.min(H / 2, cam.h / 2 / (f.k * z));
+  return { z, x: f.x + Math.max(hx, Math.min(W - hx, p.x)) * f.k, y: f.y + Math.max(hy, Math.min(H - hy, p.y)) * f.k };
+}
+
+let puff = null;
+/** Bir bulut öbeği: üst üste yumuşak beyaz yuvarlaklar, altı gölgeli. */
+function puffSprite() {
+  if (puff) return puff;
+  const s = 160, c = document.createElement("canvas");
+  c.width = c.height = s;
+  const g = c.getContext("2d");
+  const blob = (x, y, r, a) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgba(255,255,255,${a})`);
+    gr.addColorStop(0.7, `rgba(248,250,252,${a * 0.92})`);
+    gr.addColorStop(1, "rgba(240,244,248,0)");
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(x, y, r, 0, TAU);
+    g.fill();
+  };
+  // Karnabahar gibi: ortada büyük bir öbek, üstünde ve yanlarında küçükleri.
+  blob(80, 92, 62, 1);
+  blob(46, 92, 38, 0.95);
+  blob(116, 90, 36, 0.95);
+  blob(62, 64, 34, 0.95);
+  blob(98, 60, 32, 0.95);
+  blob(80, 46, 26, 0.9);
+  g.globalCompositeOperation = "source-atop";
+  const sh = g.createLinearGradient(0, 40, 0, s - 10);
+  sh.addColorStop(0, "rgba(150,160,176,0)");
+  sh.addColorStop(0.55, "rgba(140,150,168,0.18)");
+  sh.addColorStop(1, "rgba(96,108,130,0.6)");
+  g.fillStyle = sh;
+  g.fillRect(0, 0, s, s);
+  // Gölgesi: aynı biçim, koyu ve yumuşak.
+  const d = document.createElement("canvas");
+  d.width = d.height = s;
+  const q = d.getContext("2d");
+  q.filter = "blur(6px)";
+  q.drawImage(c, 0, 0);
+  q.filter = "none";
+  q.globalCompositeOperation = "source-in";
+  q.fillStyle = "rgba(30,26,20,1)";
+  q.fillRect(0, 0, s, s);
+  puff = { img: c, shadow: d };
+  return puff;
+}
+
+/** Bulutlar: önce ekranı kaplar, sonra ortadan iki yana açılıp söner. */
+function clouds(ctx, cam, B, t) {
+  B.intro.puffs ??= Array.from({ length: 70 }, () => {
+    const x = Math.random();
+    return { x: x * 1.2 - 0.1, y: Math.random() * 1.2 - 0.1, r: 0.11 + Math.random() * 0.15, dir: x < 0.5 ? -1 : 1, v: 0.55 + Math.random() * 0.6, dy: (Math.random() - 0.5) * 0.3, late: Math.random() * 0.3 };
+  });
+  const cover = 1 - ramp(t, INTRO.cover), fade = 1 - ramp(t, INTRO.fade);
+  if (cover > 0) {
+    ctx.fillStyle = `rgba(222,228,234,${cover})`;
+    ctx.fillRect(0, 0, cam.w, cam.h);
+  }
+  if (fade <= 0) return;
+  const sprite = puffSprite(), s = Math.max(cam.w, cam.h);
+  const at = B.intro.puffs.map((p) => {
+    const m = easeInOut(ramp(t - p.late, INTRO.part));
+    // Ortadakiler daha çok yol alır: bulut ortadan yırtılır.
+    return { m, a: fade * (1 - m * 0.35), x: (p.x + p.dir * m * p.v * (1.2 - Math.abs(p.x - 0.5))) * cam.w, y: (p.y + p.dy * m) * cam.h, r: p.r * s * (1 + m * 0.35) };
+  });
+  // Önce yere düşen gölgeler (güneş sol üstte), sonra bulutlar.
+  for (const q of at) {
+    if (q.a < 0.01) continue;
+    ctx.globalAlpha = q.a * 0.28;
+    ctx.drawImage(sprite.shadow, q.x - q.r + q.r * 0.35, q.y - q.r + q.r * 0.5, q.r * 2, q.r * 2);
+  }
+  for (const q of at) {
+    if (q.a < 0.01) continue;
+    ctx.globalAlpha = q.a;
+    ctx.drawImage(sprite.img, q.x - q.r, q.y - q.r, q.r * 2, q.r * 2);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** Savaşın adı ve iki taraf, ekranın ortasında koyu bir şeridin üstünde: belirir, söner. */
+function introTitle(ctx, cam, B, t) {
+  const [a0, a1, b0, b1] = INTRO.title;
+  const a = Math.min(ramp(t, [a0, a1]), 1 - ramp(t, [b0, b1]));
+  if (a <= 0) return;
+  const y = cam.h * 0.3;
+  ctx.save();
+  ctx.globalAlpha = a;
+  const band = ctx.createLinearGradient(0, 0, cam.w, 0);
+  band.addColorStop(0, "rgba(20,14,8,0)");
+  band.addColorStop(0.25, "rgba(20,14,8,0.62)");
+  band.addColorStop(0.75, "rgba(20,14,8,0.62)");
+  band.addColorStop(1, "rgba(20,14,8,0)");
+  ctx.fillStyle = band;
+  ctx.fillRect(0, y - 46, cam.w, 84);
+  ctx.fillStyle = GOLD_DARK;
+  ctx.fillRect(cam.w * 0.3, y - 46, cam.w * 0.4, 1.5);
+  ctx.fillRect(cam.w * 0.3, y + 36.5, cam.w * 0.4, 1.5);
+  // Ad biraz büyükten yerine oturur.
+  const k = 1 + 0.08 * (1 - easeOut(ramp(t, [a0, a1 + 0.3])));
+  ctx.translate(cam.w / 2, y);
+  ctx.scale(k, k);
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 10;
+  text(ctx, B.title, 0, 0, { title: true, bold: true, size: 38, color: GOLD_LIGHT, align: "center" });
+  text(ctx, `${B.names.att}   ⚔   ${B.names.def}`, 0, 26, { italic: true, size: 16, color: CREAM, align: "center" });
+  ctx.restore();
+}
+
+/** Araziyi önbelleğe alınmış resimler: `main` her zamanki, `zoom` girişte yakından bakmak için büyük çizilmiş. */
+const layers = { main: null, zoom: null };
 
 /** Arazinin önbellek resmi: toprak, tepeler, su ve nehirler, orman, köprüler, evler, adlar. */
-function terrainLayer(f, b, T, lang, dpr) {
+function terrainLayer(f, b, T, lang, dpr, slot = "main") {
   const key = `${Math.round(f.w)}|${Math.round(f.h)}|${dpr}|${b.seed}|${lang}`;
+  const layer = layers[slot];
   if (layer?.key === key && layer.field === b.field) return layer.canvas;
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(f.w * dpr);
@@ -112,7 +300,7 @@ function terrainLayer(f, b, T, lang, dpr) {
   const g = { x: 0, y: 0, w: f.w, h: f.h, k: f.k };
   field(c, g, b);
   terrain(c, g, b.field, T, lang);
-  layer = { key, canvas, field: b.field };
+  layers[slot] = { key, canvas, field: b.field };
   return canvas;
 }
 
@@ -918,13 +1106,13 @@ function deployBar(ctx, cam, f, T) {
 }
 
 /** Dizilme bölgesi: tarafın renginde soluk zemin, kesik çizgili sınır; oyuncununki daha belirgin. */
-function zone(ctx, f, Z, owner, mine) {
+function zone(ctx, f, Z, owner, mine, k = 1) {
   const x = f.x + Z.x0 * f.k, y = f.y + Z.y0 * f.k, w = (Z.x1 - Z.x0) * f.k, h = (Z.y1 - Z.y0) * f.k;
   ctx.save();
   ctx.fillStyle = colorOf(owner);
-  ctx.globalAlpha = mine ? 0.12 : 0.07;
+  ctx.globalAlpha = (mine ? 0.12 : 0.07) * k;
   ctx.fillRect(x, y, w, h);
-  ctx.globalAlpha = mine ? 0.9 : 0.55;
+  ctx.globalAlpha = (mine ? 0.9 : 0.55) * k;
   ctx.strokeStyle = colorOf(owner);
   ctx.lineWidth = mine ? 2.5 : 1.8;
   ctx.setLineDash([10, 6]);
@@ -932,10 +1120,22 @@ function zone(ctx, f, Z, owner, mine) {
   ctx.restore();
 }
 
-/** Sonuç panosu: zafer ya da yenilgi, iki tarafın kaybı, haritaya dön. */
-function endPanel(ctx, cam, B, T, lang, boxes) {
+/**
+ * Sonuç panosu: zafer ya da yenilgi, iki tarafın kaybı, haritaya dön. Kullanıcı 27.10: "bir anda çıkmasın, aşağıdan
+ * yavaşça gelsin" - saha yavaşça kararır, pano biraz sonra aşağıdan kayıp yerine oturur.
+ */
+function endPanel(ctx, cam, B, T, lang, boxes, now) {
+  B.endAt ??= now;
+  const t = (now - B.endAt) / 1000;
+  ctx.fillStyle = `rgba(12,8,4,${0.5 * easeOut(ramp(t, [0.1, 1.1]))})`;
+  ctx.fillRect(0, 0, cam.w, cam.h);
+  const s = ramp(t, [0.5, 1.7]);
+  if (s <= 0) return;
   const won = B.b.over.winner === B.me;
-  const w = Math.min(460, cam.w - 40), h = 176, x = (cam.w - w) / 2, y = (cam.h - h) / 2 - 20;
+  const w = Math.min(460, cam.w - 40), h = 176, x = (cam.w - w) / 2, rest = (cam.h - h) / 2 - 20;
+  const y = rest + (cam.h - rest + 12) * (1 - backOut(s));
+  // Gelirken düğmesi basılmaz.
+  if (s < 1) boxes = [];
   panel(ctx, x, y, w, h);
   text(ctx, won ? T.tacWon : B.b.over.retreat ? T.tacFled : T.tacLost, cam.w / 2, y + 42, { title: true, bold: true, size: 24, align: "center", color: won ? INK.good : INK.bad });
   const lost = (s) => Math.round(B.b.units.filter((u) => u.side === s).reduce((n, u) => n + (u.start - Math.floor(u.dead ? 0 : u.men)), 0));

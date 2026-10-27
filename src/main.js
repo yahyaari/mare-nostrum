@@ -220,15 +220,47 @@ function battleFrame() {
       stepBattle(b, d);
       left -= d;
     }
-    // Sesler: ok yağmuru ve çarpışma (arada bir), sonunda zafer ya da yenilgi.
+    // Sesler: ok yağmuru ve çarpışma (arada bir), sonunda boru ve zafer ya da yenilgi.
     if (b.shots.length > shots && now - (B.volleyAt ?? 0) > 1400) { B.volleyAt = now; sound.volley(); }
     if (b.units.filter((u) => u.engaged).length > engaged && now - (B.clashAt ?? 0) > 900) { B.clashAt = now; sound.clash(); }
-    if (b.over) (b.over.winner === B.me ? sound.victory : sound.defeat)();
+    battleSounds(B, now);
+    if (b.over) sound.battleEnd(b.over.winner === B.me);
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   boxes = [];
   drawTactics(ctx, cam, B, T(), ui.lang, boxes, now);
   redraw();
+}
+
+/**
+ * Savaşın sürekli sesleri (kullanıcı 27.10: "adım sesleri, kılıç kalkan sesleri"): yürüyen piyadenin adımları,
+ * atlıların nalları, dövüşenlerin kılıç ve kalkanları - asker sayısı oranında yüksek, sahadaki yerlerine göre
+ * soldan ya da sağdan. Hızlandırılınca biraz sıklaşır.
+ */
+function battleSounds(B, now) {
+  const live = B.b.units.filter((u) => !u.dead && !u.gone && !u.routed);
+  const men = (us) => us.reduce((s, u) => s + u.men, 0);
+  const pan = (us) => (us.reduce((s, u) => s + u.x * u.men, 0) / Math.max(1, men(us)) / N.tactics.w) * 1.6 - 0.8;
+  const pace = Math.sqrt(B.speed);
+  const walking = live.filter((u) => u.wasMoving && !u.engaged && !u.climbing);
+  const foot = walking.filter((u) => !u.mounted && u.type !== "cav"), horse = walking.filter((u) => u.mounted || u.type === "cav");
+  const fighting = live.filter((u) => u.engaged || u.climbing);
+  if (foot.length && now >= (B.stepAt ?? 0)) { B.stepAt = now + (440 + Math.random() * 80) / pace; sound.tramp(men(foot), pan(foot)); }
+  if (horse.length && now >= (B.hoofAt ?? 0)) { B.hoofAt = now + (330 + Math.random() * 60) / pace; sound.hooves(men(horse), pan(horse)); }
+  if (fighting.length && now >= (B.meleeAt ?? 0)) { B.meleeAt = now + (200 + Math.random() * 260) / pace; sound.melee(men(fighting), pan(fighting)); }
+}
+
+/** Girişte tıklamak ya da bir tuş girişi geçer (kamera, bulutlar, bantlar yerine). Geçtiyse true. */
+function skipIntro() {
+  if (!ui.battle?.intro) return false;
+  ui.battle.intro = null;
+  return true;
+}
+
+/** Saldırı: dizilme biter, boru çalar (oyuncunun ordusunun yanından). */
+function beginBattle(B) {
+  if (B.deploy) sound.charge(B.me === "att" ? -0.5 : 0.5);
+  B.deploy = false;
 }
 
 /** Taktik savaşta bir birliğin adı ("Lejyoner", "Okçu"). */
@@ -242,6 +274,7 @@ function unitLabel(u, owner) {
  * tıklanan yere ışınlanır (kendi bölgende); savaşta boşa tıklamak seçimi kaldırır.
  */
 function battleClick(p, add) {
+  if (skipIntro()) return;
   for (let i = boxes.length - 1; i >= 0; i--) {
     const bx = boxes[i];
     if (p.x >= bx.x && p.x <= bx.x + bx.w && p.y >= bx.y && p.y <= bx.y + bx.h) {
@@ -264,6 +297,7 @@ function inZone(B, p) {
 
 /** Sürükleyerek seçim kutusu: içindeki kendi birlikleri. */
 function battleBox(d, add) {
+  if (skipIntro()) return;
   const B = ui.battle, a = toField(cam, Math.min(d.x0, d.x1), Math.min(d.y0, d.y1)), c = toField(cam, Math.max(d.x0, d.x1), Math.max(d.y0, d.y1));
   const ids = B.b.units.filter((u) => u.side === B.me && !u.dead && !u.gone && !u.routed && u.x >= a.x && u.x <= c.x && u.y >= a.y && u.y <= c.y).map((u) => u.id);
   B.sel = new Set([...(add ? B.sel : []), ...ids]);
@@ -274,6 +308,7 @@ function battleBox(d, add) {
  * oraya ışınlanır.
  */
 function battleOrder(p) {
+  if (skipIntro()) return;
   const B = ui.battle, b = B.b;
   const sel = b.units.filter((u) => B.sel.has(u.id) && !u.dead && !u.gone && !u.routed);
   if (!sel.length) return;
@@ -302,12 +337,14 @@ function openBattle(o) {
     me: o.me, foe: o.me === "att" ? "def" : "att", deploy: true, finish: o.finish, army: o.army ?? null,
     sel: new Set(), speed: 1, paused: true, auto: false, last: performance.now(), aiAt: 0, drag: null,
     owners: o.owners, names: o.names, title: o.title,
+    // Giriş: saha bulutlardan açılır, kamera dolaşır (view/tactics.js).
+    intro: { t0: performance.now() },
   };
   ui.battle.unitName = (u) => unitLabel(u, ui.battle.owners[u.side]);
   ui.modal = null;
   ui.tip = null;
   ui.screen = "battle";
-  sound.war();
+  sound.battleOpen(o.me === "att" ? -0.5 : 0.5);
 }
 
 /** Bir savaş bittikten sonra (saldırı, gelen saldırı, taktik savaş): kroniğe yaz, haritada oynat, sonuç şeridi. */
@@ -1227,17 +1264,17 @@ function dispatch(act) {
     }
     case "tacPause":
       // İlk başlatma dizilmeyi bitirir.
-      if (ui.battle && !ui.battle.b.over) { ui.battle.paused = !ui.battle.paused; if (!ui.battle.paused) ui.battle.deploy = false; }
+      if (ui.battle && !ui.battle.b.over) { ui.battle.paused = !ui.battle.paused; if (!ui.battle.paused) beginBattle(ui.battle); }
       break;
     case "tacSpeed":
       if (ui.battle) ui.battle.speed = ui.battle.speed >= 4 ? 1 : ui.battle.speed * 2;
       break;
     case "tacAuto":
-      if (ui.battle) { ui.battle.auto = !ui.battle.auto; if (ui.battle.auto) { ui.battle.paused = false; ui.battle.deploy = false; } }
+      if (ui.battle) { ui.battle.auto = !ui.battle.auto; if (ui.battle.auto) { ui.battle.paused = false; beginBattle(ui.battle); } }
       break;
     case "tacRetreat":
       // Geri çekil: savaş kaybedilir, sahada kalanlar kaçar (geri çekilen ordu olurlar).
-      if (ui.battle && !ui.battle.b.over) { ui.battle.b.over = { winner: ui.battle.foe, retreat: true }; sound.defeat(); }
+      if (ui.battle && !ui.battle.b.over) { ui.battle.b.over = { winner: ui.battle.foe, retreat: true }; sound.battleEnd(false); }
       break;
     case "tacSplit": {
       // Seçili birlik ikiye bölünür; iki yarısı da seçili kalır.
@@ -1768,8 +1805,8 @@ window.addEventListener("keydown", (e) => {
     ArrowUp: () => panBy(cam, 0, step),
     ArrowDown: () => panBy(cam, 0, -step),
     // Taktik savaş: Boşluk duraklatır / sürdürür.
-    " ": () => { if (ui.screen === "battle") dispatch({ do: "tacPause" }); },
-    Escape: () => { if (ui.screen === "battle" && ui.battle) { ui.battle.sel = new Set(); return; } if (ui.modal) dispatch({ do: "close" }); else if (ui.aim) ui.aim = null; else { ui.sel = null; ui.army = null; } },
+    " ": () => { if (ui.screen === "battle" && !skipIntro()) dispatch({ do: "tacPause" }); },
+    Escape: () => { if (ui.screen === "battle" && ui.battle) { if (!skipIntro()) ui.battle.sel = new Set(); return; } if (ui.modal) dispatch({ do: "close" }); else if (ui.aim) ui.aim = null; else { ui.sel = null; ui.army = null; } },
     // Başlangıç ekranında oklar medeniyetler arasında gezer.
     ...(ui.screen === "start" && !ui.modal ? {
       ArrowLeft: () => stepCiv(-1), ArrowRight: () => stepCiv(1), ArrowUp: () => stepCiv(-1), ArrowDown: () => stepCiv(1),
@@ -1844,6 +1881,8 @@ window.MareNostrum = {
   /** Animasyon bitince açılacak bir pencere bekliyor mu (savaş sonucu, karar). */
   get waiting() { return !!pending; },
   boxes: () => boxes,
+  /** Taktik savaşı doğrudan aç (araçlar girişi ve bitişi fotoğraflayabilsin: Tools/battlefilm.mjs). */
+  battle(o) { openBattle(o); redraw(); },
 };
 
 requestAnimationFrame(() => console.log(`[MareNostrum] ready · ${Math.round(performance.now() - started)}ms`));

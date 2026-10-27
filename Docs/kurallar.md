@@ -1243,3 +1243,27 @@ Kullanıcı 26.10 (bir görsel gönderdi: ağaçlı kıyılarıyla bir nehir, ya
 - **Görünüm:** tepeler iç içe gürültülü halkalar (dağ kalın, kayalık kenarlı), su kıyı rengiyle, nehir
   üç katlı çizgi, orman tek tek ağaç tepeleri, köprüler tahta, evler, köy ve dağ adları altın yazıyla.
 - Hız: saha ~0.1-0.3 sn'de kurulur; engelli sahada 880 askerlik bir savaşın tamamı 0.35 sn'de hesaplanır.
+
+### 29d. Savaşın girişi, sesleri ve bitişi
+
+Kullanıcı 27.10: "savaş girişlerine animasyon ekleyelim, savaş alanı bulutlardan açılsın, biraz kamera oyunu
+yapalım; borozan sesleri, adım sesleri, kılıç kalkan sesleri; savaş bittiğinde çıkan ekran bir anda çıkmasın,
+aşağıdan yavaşça gelsin".
+
+- **Giriş (3.75 sn, `view/tactics.js INTRO`):** ekran bulutla kaplı açılır; bulutlar (karnabahar gibi öbekler, altı
+  gölgeli, yere gölgesi düşen) ortadan iki yana yırtılıp söner. Kamera 2 kat yakından önce kendi ordunun üstündedir,
+  düşmana kayar, sonra bütün sahayı görecek kadar geri çekilir (yakından bakılırken arazinin büyük çizilmiş bir
+  kopyası, keskin kalsın diye). Ortada koyu bir şeridin üstünde savaşın adı ve iki taraf belirip söner; en sonda üst
+  ve alt bantlar kenarlardan kayarak gelir, dizilme bölgeleri belirir. Tıklamak, Boşluk ya da Esc girişi geçer.
+- **Sesler (`view/sound.js`, kodla üretilir):** savaş açılırken alçak davullar hızlanır, bizim borozan uzun bir
+  çağrı çalar, karşıdan düşmanın borusu (uzaktan, boğuk) cevap verir - ses kendi ordunun yanından, düşmanınki
+  öbür yandan gelir. Başlat'a basınca kısa kısa yükselen saldırı borusu, hızlı davul ve savaş naraları. Savaş
+  sürerken: yürüyen piyadenin adımları (birçok ayak, arada zırh şıngırtısı), atlıların dörtnal nalları, dövüşenlerin
+  kılıç çınlamaları ve kalkan vuruşları, altta kalabalığın uğultusu - asker sayısı oranında yüksek (bir tavanla),
+  sahadaki yerlerine göre soldan ya da sağdan; eskisi gibi ok yağmuru ve ilk çarpışma. Bitince zaferde parlak,
+  yükselen bir boru; yenilgide (geri çekilmede de) uzaktan, inen bir boru; ardından zafer ya da yenilgi ezgisi.
+  Borular açık arazinin yankısıyla.
+- **Bitiş:** saha yavaşça kararır, sonuç panosu yarım saniye sonra aşağıdan kayarak gelir, biraz öteye taşıp yerine
+  oturur (1.2 sn); gelirken düğmesi basılmaz.
+- Görmek için: `node Tools/battlefilm.mjs` (girişin ve bitişin kareleri Logs/battlefilm'e); sesleri ölçmek için
+  `node Tools/soundcheck.mjs` ("taktik" satırı).

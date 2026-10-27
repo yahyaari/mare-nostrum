@@ -152,6 +152,10 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     (engelden uzaklık + bölgeler, gedikte yenilenir: `F.rev`), `onMain`, `nearestOpen`, `nearestMain`, `lineFree`.
     tactics.js: köşeye sürtünen kayar, suya verilen emir kıyıya, dizilirken yalnız kendi tarafı açılır (savunanın
     açılması saldıranı suya itiyordu), cebe dizilen ana karaya; daralmış birlik dururken de ortaya kayar.
+29. **Savaşın girişi, sesleri, bitişi** (bu commit; kullanıcı: "savaş alanı bulutlardan açılsın, kamera oyunu, borozan,
+    adım, kılıç kalkan sesleri; bitiş ekranı aşağıdan yavaşça gelsin"): kurallar.md 29d. view/tactics.js `INTRO`,
+    `introCamera`, `clouds`, `introTitle`, `endPanel`; sound.js `battleOpen`, `charge`, `tramp`, `hooves`, `melee`,
+    `battleEnd`; main.js `battleSounds`, `skipIntro`, `beginBattle`; araç kapısında `MareNostrum.battle(o)`.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.
