@@ -95,6 +95,19 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   B.dotT = now;
   // Emir çizgileri (seçili birliklerin).
   for (const u of b.units) if (B.sel.has(u.id) && !u.dead && !u.gone && !u.routed && u.order) orderLine(ctx, f, b, u);
+  // Generalin yanı (bölüm 29e): soluk, tarafının renginde bir halka - içindekiler daha dirençli.
+  for (const u of b.units) {
+    if (u.type !== "gen" || u.dead || u.gone || u.routed) continue;
+    ctx.save();
+    ctx.strokeStyle = colorOf(B.owners[u.side]);
+    ctx.globalAlpha = B.sel.has(u.id) ? 0.55 : 0.25;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.arc(f.x + u.x * f.k, f.y + u.y * f.k, N.tactics.general.aura * f.k, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
   // Birlikler: önce bozulanlar (altta), sonra ötekiler.
   const owner = { att: B.owners.att, def: B.owners.def };
   for (const u of [...b.units].sort((a, c) => (a.routed ? 0 : 1) - (c.routed ? 0 : 1))) {
@@ -105,6 +118,7 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   if (b.walls) for (const u of b.units) if (u.climbing && u.ladder && !u.dead && !u.gone) ladder(ctx, f, u, B.owners[u.side], now);
   for (const s of b.shots) arrows(ctx, f, b, s);
   for (const e of b.fx) burst(ctx, f, b, e);
+  for (const e of b.fx) if (e.kind === "genFell" || e.kind === "genFled") fallen(ctx, f, B, e, T);
   for (const u of b.units) {
     if (u.dead || u.gone) continue;
     badge(ctx, f, u, owner[u.side], B.sel.has(u.id));
@@ -896,7 +910,7 @@ function badge(ctx, f, u, owner, selected) {
   ctx.strokeStyle = selected ? DARK : u.elite ? GOLD_LIGHT : "rgba(20,14,8,0.9)";
   ctx.lineWidth = 1.6;
   ctx.stroke();
-  glyph(ctx, u.elite ? "elite" : u.type, x, y, selected ? DARK : CREAM);
+  glyph(ctx, u.type === "gen" ? "gen" : u.elite ? "elite" : u.type, x, y, selected ? DARK : CREAM);
   // Moral (yeşil -> kızıl) ve sayı.
   const m = Math.max(0, Math.min(1, moraleOf(u) / 100));
   ctx.fillStyle = "rgba(20,14,8,0.7)";
@@ -931,6 +945,11 @@ function glyph(ctx, kind, x, y, color) {
     ctx.beginPath();
     ctx.moveTo(-3.6, 1.5); ctx.lineTo(-3.6, 4); ctx.moveTo(3.6, 1.5); ctx.lineTo(3.6, 4);
     ctx.stroke();
+  } else if (kind === "gen") {
+    // Taç: üç sivri uç.
+    ctx.moveTo(-5, 4); ctx.lineTo(-5, -2); ctx.lineTo(-2.5, 1); ctx.lineTo(0, -5); ctx.lineTo(2.5, 1); ctx.lineTo(5, -2); ctx.lineTo(5, 4);
+    ctx.closePath();
+    ctx.fill();
   } else if (kind === "siege") {
     ctx.arc(0, 0, 4.2, 0, TAU);
     for (let i = 0; i < 3; i++) { const a = (i * Math.PI) / 3; ctx.moveTo(-4.2 * Math.cos(a), -4.2 * Math.sin(a)); ctx.lineTo(4.2 * Math.cos(a), 4.2 * Math.sin(a)); }
@@ -986,7 +1005,26 @@ function arrows(ctx, f, b, s) {
 }
 
 /** Hücum tozu ve bozulma işareti. */
+/** General düştü ya da kaçtı: sahanın üst kısmında, tarafının renginde bir şerit; yavaşça söner. */
+function fallen(ctx, f, B, e, T) {
+  const age = B.b.t - e.t, a = Math.max(0, Math.min(1, age * 4, (4 - age) / 1.2));
+  if (a <= 0) return;
+  const s = (e.kind === "genFell" ? T.tacGenFell : T.tacGenFled).replace("{0}", e.name ?? T.tacGeneral);
+  const y = f.y + f.h * 0.18, mine = e.side === B.me;
+  ctx.save();
+  ctx.globalAlpha = a;
+  const w = Math.min(f.w - 40, measure(ctx, s, { title: true, bold: true, size: 24 }) + 80);
+  ctx.fillStyle = "rgba(20,14,8,0.72)";
+  roundRect(ctx, f.x + f.w / 2 - w / 2, y - 26, w, 40, 6);
+  ctx.fill();
+  ctx.fillStyle = colorOf(B.owners[e.side]);
+  ctx.fillRect(f.x + f.w / 2 - w / 2, y + 12, w, 2);
+  text(ctx, s, f.x + f.w / 2, y + 2, { title: true, bold: true, size: 24, color: mine ? "#e08a6a" : GOLD_LIGHT, align: "center" });
+  ctx.restore();
+}
+
 function burst(ctx, f, b, e) {
+  if (e.kind === "genFell" || e.kind === "genFled") return;
   const age = b.t - e.t;
   const a = Math.max(0, 1 - age / 1.6);
   if (a <= 0) return;
@@ -1062,7 +1100,7 @@ function bottomBar(ctx, cam, B, T, boxes) {
     ctx.strokeStyle = u.elite ? GOLD_LIGHT : "rgba(20,14,8,0.9)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    glyph(ctx, u.elite ? "elite" : u.type, x + cw / 2, gy, CREAM);
+    glyph(ctx, u.type === "gen" ? "gen" : u.elite ? "elite" : u.type, x + cw / 2, gy, CREAM);
     text(ctx, out ? (u.dead ? "✕" : "↩") : u.routed ? "!" : String(Math.ceil(u.men)), x + cw / 2, small ? y + 33 : y + 52, { bold: true, size: small ? 11 : 13, color: u.routed ? "#d97a5a" : CREAM, align: "center" });
     if (!small) {
       const nm = B.unitName(u);
@@ -1075,7 +1113,7 @@ function bottomBar(ctx, cam, B, T, boxes) {
     ctx.fillRect(x + 4, y + h - (small ? 6 : 12), cw - 8, small ? 3 : 5);
     ctx.fillStyle = m > 0.5 ? "#7fb85a" : m > 0.25 ? "#d6a63a" : "#c4523a";
     ctx.fillRect(x + 4, y + h - (small ? 6 : 12), (cw - 8) * m, small ? 3 : 5);
-    if (!out) boxes.push({ x, y, w: cw, h, act: { do: "tacPick", id: u.id }, tip: [B.unitName(u), `${Math.ceil(u.men)} / ${Math.round(u.start)}`] });
+    if (!out) boxes.push({ x, y, w: cw, h, act: { do: "tacPick", id: u.id }, tip: [B.unitName(u), `${Math.ceil(u.men)} / ${Math.round(u.start)}`, u.type === "gen" ? T.tacGeneralTip : null] });
   });
   // Düğmeler: sağda alt alta.
   const bx = right, by = y0 + 10;

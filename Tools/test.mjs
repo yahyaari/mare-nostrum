@@ -1291,6 +1291,54 @@ section("Taktik savaş: tavır ve dizilme (bölüm 29)");
   check("dizilirken hat çizimi birlikleri hatta ışınlar", zb.units.filter((u) => u.side === "att").every((u) => Math.abs(u.x - 25) < 6 && u.order == null));
 }
 
+section("Sahada komutan (bölüm 29e)");
+{
+  // Kullanıcı 27.10: komutan sahada - muhafızıyla, yanındakileri güçlendirir, düşerse ordu sarsılır.
+  const TC3 = await import("../src/rules/tactics.js"), GN3 = await import("../src/rules/generals.js");
+  const gb = TC3.setupBattle({ civ: "rome", inf: 80, arch: 30, gen: { name: "Marcellus", level: 2, traits: [] } }, { civ: "gaul", inf: 80 }, null, 3);
+  const gu = gb.units.find((u) => u.type === "gen");
+  const line = gb.units.filter((u) => u.side === "att" && u.type === "inf");
+  check("generalli tarafta muhafız birliği, hattın gerisinde", gu && gu.side === "att" && gu.men === N.tactics.general.guard && gu.name === "Marcellus" && gu.x < Math.min(...line.map((u) => u.x)), gu && `${gu.x} ${line.map((u) => u.x)}`);
+  check("generalsiz tarafta muhafız yok", !gb.units.some((u) => u.side === "def" && u.type === "gen"));
+  TC3.step(gb, 0.1);
+  const near = line.find((u) => Math.hypot(u.x - gu.x, u.y - gu.y) < N.tactics.general.aura);
+  check("generalin yanındaki birlik daha dirençli", !!near?.aura && TC3.moraleOf(near) >= near.morale + N.tactics.general.bonus - 1e-9);
+  const m0 = line.map((u) => u.morale);
+  gu.men = 0; gu.dead = true;
+  TC3.step(gb, 0.1);
+  check("general düşünce bütün ordusu sarsılır", line.every((u, i) => u.morale <= m0[i] - N.tactics.general.shock + 1) && gb.fx.some((e) => e.kind === "genFell" && e.name === "Marcellus"));
+  gb.over = { winner: "att" };
+  const o = TC3.outcome(gb);
+  check("sonuçta sahada ölen general; muhafız sağ kalanlara sayılmaz", o.genFell.att && !o.genFell.def && o.att.inf === 80 && o.att.gen === undefined);
+  // Bilgisayarın generali geride durur: ilk çarpışmada dövüşen o değil.
+  const ab = TC3.setupBattle({ civ: "rome", inf: 120, gen: { name: "X", level: 1, traits: [] } }, { civ: "gaul", inf: 120, gen: { name: "Y", level: 1, traits: [] } }, null, 5);
+  let first = null;
+  for (let i = 0; i < 900 && !ab.over && !first; i++) {
+    if (i % 7 === 0) { TC3.aiOrders(ab, "att", true); TC3.aiOrders(ab, "def", true); }
+    TC3.step(ab, 0.1);
+    if (ab.units.some((u) => u.engaged)) first = ab.units.filter((u) => u.engaged);
+  }
+  check("bilgisayarın generali geride durur, ilk çarpışmaya girmez", first && first.every((u) => u.type !== "gen"));
+  // Haritada: sahada ölen general ordusundan düşer, adı bir daha verilmez (kazanılsa da).
+  const g = S.newGame("rome", 7);
+  const army = before(S.formArmy(g, "ariminum", 10, 0), "mediolanum");
+  army.inf = 200;
+  g.civs.rome.money = 99;
+  const gen = GN3.appoint(g, army.id);
+  const res = { attWins: true, att: { inf: 150, arch: 0, cav: 0, siege: 0, elite: 0 }, def: { inf: 0, arch: 0, cav: 0, siege: 0, elite: 0 }, attPow: 150, defPow: 1, escaped: { inf: 0, arch: 0, cav: 0, siege: 0, elite: 0 }, tactical: true, genFell: { att: true, def: false } };
+  const ev = M.attack(g, army.id, "mediolanum", null, res);
+  check("sahada ölen general kazanılan savaşta da ölür", ev?.won && !S.armyById(g, army.id).general && g.fallenGenerals.rome.includes(gen.name));
+  // Şehrinde bekleyen komutan savunurken sahada ölürse listeden düşer.
+  const h = S.newGame("rome", 7);
+  h.civs.gaul.officers.push({ id: 1, name: "Brennus", level: 2, xp: 3, traits: [], from: "bibracte", at: "bibracte" });
+  const att = before(S.formArmy(h, "rome", 10, 0), "bibracte");
+  att.inf = 30;
+  h.relations[S.key("rome", "gaul")] = "war";
+  const lost = { attWins: false, att: { inf: 0, arch: 0, cav: 0, siege: 0, elite: 0 }, def: { inf: 20, arch: 0, cav: 0, siege: 0, elite: 0 }, attPow: 1, defPow: 20, escaped: { inf: 20, arch: 0, cav: 0, siege: 0, elite: 0 }, tactical: true, genFell: { att: false, def: true } };
+  M.attack(h, att.id, "bibracte", null, lost);
+  check("şehrini savunurken sahada ölen komutan listeden düşer", !h.civs.gaul.officers.length && (h.fallenGenerals?.gaul ?? []).includes("Brennus"));
+}
+
 section("Taktik savaş (bölüm 29)");
 
 {

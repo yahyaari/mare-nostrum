@@ -94,6 +94,11 @@ export const N = {
     // Bilgisayarın tavrı: savunan, gücü saldıranınkinin `ratio` katına yetiyorsa saldırır, yoksa savunur - kendi
     // yarısında yüksekliği `hill`i geçen bir tepe varsa oraya çıkar; `engage` (atlı `cavEngage`) birime gelen düşmanla dövüşür.
     defend: { ratio: 1, hill: 0.3, engage: 10, cavEngage: 16 },
+    // Sahada komutan (bölüm 29e; kullanıcı 27.10): generalin `guard` atlık muhafızı (atlının göğüs göğüse gücünün
+    // `melee` katı, hücumu `charge` katı, morali +`morale`); `aura` birim içindeki dostların morali +`bonus`, toparlanması
+    // x`recover`. General ölürse tarafının bütün birlikleri `shock` moral yitirir (kaçarsa yarısı). Bilgisayarın
+    // generali ordusunun ortasının `back` birim gerisinde durur, `engage` birime gelen düşmanla dövüşür.
+    general: { guard: 12, melee: 1.8, charge: 1.2, morale: 20, aura: 14, bonus: 12, recover: 2, shock: 25, back: 9, engage: 7 },
     // Sur (kullanıcı 27.10: "surlara tırmanıyormuş gibi, tek sıra"): her birlik merdivenden saniyede `rate`
     // asker tırmanır; merdivenin `guard` birim yakınındaki savunan tırmananları göğüs göğüse gücünün `repel`
     // katı düşürür; sura dayanan makine (her 10 asker 1/sn) `breach` puanda `gapHalf` x 2 genişliğinde gedik

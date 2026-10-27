@@ -64,8 +64,8 @@ function profile(type, s, defending, assault) {
 }
 
 /** Bir türün dizilişi: noktalar arası uzaklık ve varsayılan derinlik (sıra). */
-const SPACING = { inf: 0.9, arch: 1.25, cav: 1.35, siege: 2.4, elite: 1.0 };
-const ROWS = { inf: 5, arch: 4, cav: 4, siege: 2, elite: 5 };
+const SPACING = { inf: 0.9, arch: 1.25, cav: 1.35, siege: 2.4, elite: 1.0, gen: 1.5 };
+const ROWS = { inf: 5, arch: 4, cav: 4, siege: 2, elite: 5, gen: 2 };
 
 /** Birliğin kapladığı yer: cephe genişliği `w`, derinlik `d`, sıra ve sütun sayısı, kabaca yarıçap. */
 export function footprint(u) {
@@ -156,6 +156,18 @@ export function setupBattle(att, def, walls, seed = 1, field = null) {
         b.units.push(u);
       }
     }
+    // Sahada komutan (kullanıcı 27.10): generalli tarafın muhafız atlıları, ortada, hattın gerisinde.
+    if (s.gen) {
+      const G = K().general, m = 100 + 10 + (has(s.gen, "inspiring") ? N.officers.inspiringMorale : 0) + G.morale;
+      const u = {
+        id: b.nextId++, side, type: "gen", kind: "cav", elite: true, mounted: true, general: true, name: s.gen.name ?? null,
+        speed: K().speed.cav, melee: N.cavMelee * cavMul(s) * G.melee, shoot: 0, charge: cavMul(s) * G.charge, stop: 0,
+        men: G.guard, start: G.guard, cols: Math.ceil(G.guard / ROWS.gen), morale: m, moraleMax: m, x: 0, y: 0, facing: side === "att" ? 0 : Math.PI,
+        order: null, cool: 0, engaged: false, routed: false, gone: false, dead: false, wasMoving: false, inside: side === "def",
+      };
+      groups.gen = [u];
+      b.units.push(u);
+    }
     deploy(b, side, groups);
   }
   return b;
@@ -206,6 +218,8 @@ function deploy(b, side, g) {
     line(down, front - 15, h * 0.75);
   }
   line(g.siege ?? [], front - 15, h / 2);
+  // General hattın ortasının gerisinde (surlu şehirde içeride).
+  line(g.gen ?? [], C && side === "def" ? front - 10 : front - 13, mid);
   for (let pass = 0; pass < 4; pass++) separate(b, 1, true, side);
   // Su ya da ev üstüne düşen birlik en yakın yürünebilir yere (önce yanlara, sonra geriye).
   // Suyla çevrili küçük bir cebe düşen de (karşı ordu oraya varamaz): ana karaya.
@@ -556,12 +570,32 @@ function defendPlan(b, side) {
   return plan;
 }
 
+/**
+ * Bilgisayarın generali (bölüm 29e): ordusunun ortasının `back` birim gerisinde, düşmana dönük durur - muhafızı
+ * güçlü ama ölürse ordusu sarsılır; `engage` birime gelen düşmanla dövüşür, ordusu kalmadıysa kendisi saldırır.
+ */
+function generalOrder(b, u) {
+  const G = K().general, T = K();
+  const en = foes(b, u);
+  const near = en.reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
+  if (near && dist(u, near) < G.engage + footprint(near).r) return { unit: near.id };
+  const mine = b.units.filter((v) => v.side === u.side && v !== u && fighting(v) && !v.inside === !u.inside);
+  if (!mine.length) return near ? { unit: near.id } : null;
+  const n = mine.reduce((s, v) => s + v.men, 0);
+  const cx = mine.reduce((s, v) => s + v.x * v.men, 0) / n, cy = mine.reduce((s, v) => s + v.y * v.men, 0) / n;
+  const ex = near ? near.x : u.side === "att" ? T.w : 0, ey = near ? near.y : cy;
+  const d = Math.hypot(ex - cx, ey - cy) || 1;
+  const spot = { x: Math.max(2, Math.min(T.w - 2, cx - ((ex - cx) / d) * G.back)), y: Math.max(2, Math.min(T.h - 2, cy - ((ey - cy) / d) * G.back)), facing: Math.atan2(ey - cy, ex - cx) };
+  return dist(u, spot) > 2 ? spot : null;
+}
+
 /** Bilgisayarın emirleri (düşman tarafı; ya da Otomatik'te oyuncunun tarafı). Elle emir verilmiş birliğe dokunmaz. */
 export function aiOrders(b, side, all = false) {
+  for (const u of b.units.filter((v) => v.side === side && v.type === "gen" && alive(v) && !v.routed)) if (!u.manual || all) u.order = generalOrder(b, u);
   // Savunmada: tepede (ya da yerinde) hat kurar; yalnız yaklaşanla dövüşür, okçular atar.
   if (stanceOf(b, side) === "defend") {
     const plan = defendPlan(b, side), T = K();
-    for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed)) {
+    for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed && v.type !== "gen")) {
       if (u.manual && !all) continue;
       const en = foes(b, u);
       const near = en.reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
@@ -586,7 +620,7 @@ export function aiOrders(b, side, all = false) {
     const climbers = b.units.filter((v) => plan.has(v.id) && alive(v) && !v.routed && !v.inside);
     if (!climbers.length || climbers.every((v) => dist(v, post(v, T.climb.stage)) < 4) || b.t > T.climb.wait) b.assault = true;
   }
-  for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed)) {
+  for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed && v.type !== "gen")) {
     if (u.manual && !all) continue;
     // Sura saldıran: önce planındaki yanın önünde toplanır, sonra o yerde sura dayanır (dört yandan, sur boyunca).
     if (plan?.has(u.id) && !u.inside && !gapAt(b, u)) {
@@ -790,8 +824,20 @@ export function step(b, dt) {
   b.shots = b.shots.filter((x) => x.t1 > b.t);
   // 5. Moral: kayıp oranı (derin birlik daha dayanıklı, ince hat daha kırılgan), kuşatılma; dövüşmeyen
   // toparlanır. Biten bozulur, yakındaki dostlar sarsılır.
+  // Generalin yanı (bölüm 29e): `aura` içindeki dostlar daha dirençli, çabuk toparlanır.
+  const G = T.general;
+  const chiefs = b.units.filter((v) => v.type === "gen" && alive(v) && !v.routed);
+  for (const u of b.units) u.aura = u.type !== "gen" && alive(u) && chiefs.some((c) => c.side === u.side && !c.inside === !u.inside && dist(c, u) < G.aura);
+  // General düştü ya da kaçtı: bütün tarafı sarsılır (kaçarsa yarısı kadar), haritada da ölür.
+  for (const c of b.units.filter((v) => v.type === "gen" && !v.mourned && (v.dead || v.routed))) {
+    c.mourned = true;
+    const k = c.dead ? 1 : 0.5;
+    for (const v of b.units) if (v.side === c.side && alive(v) && !v.routed) v.morale -= G.shock * k;
+    if (c.dead) (b.genFell ??= {})[c.side] = true;
+    b.fx.push({ kind: c.dead ? "genFell" : "genFled", x: c.x, y: c.y, t: b.t, side: c.side, name: c.name });
+  }
   for (const u of b.units.filter((v) => alive(v) && !v.routed)) {
-    if (!u.engaged) u.morale = Math.min(u.moraleMax ?? 110, u.morale + T.morale.recover * dt);
+    if (!u.engaged) u.morale = Math.min(u.moraleMax ?? 110, u.morale + T.morale.recover * dt * (u.aura ? G.recover : 1));
     if (moraleOf(u) <= T.morale.rout || u.men < u.start * T.morale.floor) {
       u.routed = true;
       u.order = null;
@@ -802,12 +848,12 @@ export function step(b, dt) {
       for (const v of b.units.filter((x) => x.side === u.side && alive(x) && !x.routed && dist(x, u) < 15)) v.morale -= shake;
     }
   }
-  b.fx = b.fx.filter((e) => b.t - e.t < 2);
+  b.fx = b.fx.filter((e) => b.t - e.t < (e.kind === "genFell" || e.kind === "genFled" ? 4 : 2));
   // 6. Bitti mi: bir tarafın dövüşen birliği kalmadıysa; süre dolduysa savunan kazanır.
   const left = (side) => b.units.some((u) => u.side === side && fighting(u));
   // Surlu yerde okçular şehri alamaz: gedik yokken saldıranın elinde yalnız okçu ve makine kaldıysa (içeride
   // kimse yoksa) hücum başarısız.
-  const storm = !b.walls || b.gaps.length || b.units.some((u) => u.side === "att" && fighting(u) && (u.inside || u.kind !== "arch" || u.mounted));
+  const storm = !b.walls || b.gaps.length || b.units.some((u) => u.side === "att" && fighting(u) && (u.inside || (u.type !== "gen" && (u.kind !== "arch" || u.mounted))));
   if (!left("def")) b.over = { winner: "att" };
   else if (!left("att") || !storm) b.over = { winner: "def", ...(left("att") ? { repelled: true } : {}) };
   else if (b.t >= (b.walls ? T.timeWalls : T.time)) b.over = { winner: "def", timeout: true };
@@ -820,7 +866,7 @@ export function step(b, dt) {
  */
 function siegePlan(b) {
   const C = b.field.city;
-  const want = (v) => v.side === "att" && alive(v) && !v.routed && !v.inside && !v.from && (v.type === "siege" || v.kind !== "arch" || v.mounted);
+  const want = (v) => v.side === "att" && alive(v) && !v.routed && !v.inside && !v.from && v.type !== "gen" && (v.type === "siege" || v.kind !== "arch" || v.mounted);
   if (b.plan && [...b.units].every((v) => !want(v) || b.plan.has(v.id))) return b.plan;
   const land = ["W", "N", "S", "E"].filter((s) => wallShare(b.field, C, s) > 0.5);
   const pick = (s) => (land.includes(s) ? s : land[0] ?? "W");
@@ -861,7 +907,7 @@ function walls(b, dt) {
       u[ax] = to;
     }
   }
-  for (const u of b.units.filter((v) => alive(v) && !v.routed && v.side === "att" && !v.inside)) {
+  for (const u of b.units.filter((v) => alive(v) && !v.routed && v.side === "att" && !v.inside && v.type !== "gen")) {
     const q = wallPoint(W, u), ex = Math.abs(q.nx) * extent(u).x + Math.abs(q.ny) * extent(u).y;
     // Köşelerde merdiven kurulmaz.
     const atWall = q.d - ex <= 1.2 && q.t > 0.06 && q.t < 0.94 && wallAt(b.field, q) && !gapAt(b, u);
@@ -929,9 +975,9 @@ function walls(b, dt) {
 /** Birliğin kalan morali (kayıplar düşülmüş): 0 ve altı bozulma; derinlik kaybın etkisini değiştirir. */
 export function moraleOf(u) {
   const rows = footprint(u).rows;
-  // Surun üstünde tutunanlar (köprübaşı) dirençli: kaçacak yerleri yok.
-  const depth = u.from ? K().climb.steady : rows >= 4 ? K().morale.deep : rows <= 2 ? K().morale.thin : 1;
-  return u.morale - (1 - u.men / u.start) * 100 * K().morale.loss * depth;
+  // Surun üstünde tutunanlar (köprübaşı) dirençli: kaçacak yerleri yok. Generalin muhafızı ince ama seçkin.
+  const depth = u.from ? K().climb.steady : u.type === "gen" ? 1 : rows >= 4 ? K().morale.deep : rows <= 2 ? K().morale.thin : 1;
+  return u.morale - (1 - u.men / u.start) * 100 * K().morale.loss * depth + (u.aura ? K().general.bonus : 0);
 }
 
 /** Bir birlikten asker düşer (kesirli; sayılırken aşağı yuvarlanır). */
@@ -944,7 +990,7 @@ function hurt(b, u, k) {
 /** Bir tarafın sağ kalanları, türleriyle (bozulup kaçanlar dahil). */
 function survivors(b, side) {
   const out = Object.fromEntries(UNITS.map((k) => [k, 0]));
-  for (const u of b.units) if (u.side === side && !u.dead) out[u.type] += Math.floor(u.men);
+  for (const u of b.units) if (u.side === side && !u.dead && u.type !== "gen") out[u.type] += Math.floor(u.men);
   return out;
 }
 
@@ -960,6 +1006,8 @@ export function outcome(b) {
   return {
     attWins, att: attWins ? att : none, def: attWins ? none : def,
     attPow: Math.max(1, sum(att)), defPow: Math.max(1, sum(def)), escaped: attWins ? def : att, tactical: true,
+    // Sahada ölen general haritada da ölür (bölüm 29e).
+    genFell: { att: !!b.genFell?.att, def: !!b.genFell?.def },
   };
 }
 

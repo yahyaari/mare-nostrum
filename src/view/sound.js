@@ -336,6 +336,14 @@ export function battleEnd(won) {
   (won ? victory : defeat)(won ? 2.1 : 2.9);
 }
 
+/** Bir general düştü: uzaktan, alçak ve inen iki uzun boru notası. */
+export function genFell(pan = 0) {
+  if (!ctx) return;
+  const out = panned(pan);
+  [[164.8, 0, 0.9], [130.8, 0.85, 1.6]].forEach(([f, d, s]) => hornNote(f, d, s, 0.06, out, true));
+  drum(0.05, 0.14, 60);
+}
+
 /** Kalabalığın sesi ne kadar yüksek: asker sayısının logaritmasıyla, bir tavanla. */
 const crowd = (men, base, per, max) => Math.min(max, base + per * Math.log2(1 + men / 10));
 

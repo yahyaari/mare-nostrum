@@ -417,6 +417,10 @@ export function attack(state, armyId, id, luck = null, result = null) {
   const def = sd.def, walls = sd.walls, defGen = def.gen;
   // Taktik savaş (tactics.js) bittiyse onun sonucu; yoksa otomatik savaş.
   const r = result ?? fight(sd.att, def, walls, luck ?? rollLuck(state));
+  // Taktik savaşta sahada ölen generaller (bölüm 29e): saldıranınki ordudan, savunanınki (ordusu ya da şehrinde
+  // bekleyen komutan) yerinden düşer.
+  if (r.genFell?.att && army.general) { bury(state, army.owner, army.general); army.general = null; }
+  if (r.genFell?.def && defGen) dropGeneral(state, pl.owner, defGen);
   const ev = {
     type: "battle", turn: state.turn, attacker: army.owner, defender: pl.owner, place: id,
     won: r.attWins, before: { att: pickUnits(army), def: pickUnits(def) },
@@ -460,7 +464,7 @@ export function attack(state, armyId, id, luck = null, result = null) {
       bury(state, army.owner, army.general);
       if (army.general) ev.genFell = army.general.name;
     }
-    if (defGen) learn(state, defGen, true, pl.owner);
+    if (defGen && !r.genFell?.def) learn(state, defGen, true, pl.owner);
     // Yerleşimini tutan içerideki ordular tecrübe kazanır.
     for (const a of armiesAt(state, id)) if (a.owner === pl.owner) a.xp = (a.xp ?? 0) + N.veteran.held;
     for (const a of state.armies) if (a.at === id && a.owner === pl.owner && empty(a)) bury(state, a.owner, a.general);
@@ -524,6 +528,12 @@ export function strike(state, armyId, targetId, luck = null, result = null) {
     ev.power = won ? r.defPow / Math.max(1e-6, r.attPow) : r.attPow / Math.max(1e-6, r.defPow);
     for (const k of UNITS) (won ? army : b)[k] = (won ? r.att : r.def)[k];
     ev.after = { att: r.att, def: r.def };
+    for (const [side, x] of [["att", army], ["def", b]]) {
+      if (!r.genFell?.[side] || !x.general) continue;
+      (ev.genDied ??= []).push(x.general.name);
+      bury(state, x.owner, x.general);
+      x.general = null;
+    }
   }
   ev.won = won;
   const trace = { type: "attack", army: army.id, owner: army.owner, men: men(army), ships: fleetOf(army), path: [[army.x, army.y], [at.x, at.y]], at: null, point: at, won, oldOwner: b.owner };
@@ -564,6 +574,13 @@ export function strike(state, armyId, targetId, luck = null, result = null) {
 }
 
 const pickUnits = (u) => Object.fromEntries(UNITS.map((k) => [k, u[k] ?? 0]));
+
+/** Sahada ölen savunan general: ordusundan ya da şehirde bekleyen komutanlar arasından düşer. */
+function dropGeneral(state, owner, gen) {
+  for (const a of state.armies) if (a.general === gen) a.general = null;
+  if (owner && state.civs[owner]) state.civs[owner].officers = (state.civs[owner].officers ?? []).filter((o) => o !== gen);
+  bury(state, owner, gen);
+}
 
 /**
  * Yenilen ordu geri çekilir (kullanıcı 23.10 önerilerden: "kaybeden kaçmıyor, yok oluyor"):

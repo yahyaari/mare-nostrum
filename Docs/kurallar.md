@@ -1307,3 +1307,21 @@ aşağıdan yavaşça gelsin".
   oturur (1.2 sn); gelirken düğmesi basılmaz.
 - Görmek için: `node Tools/battlefilm.mjs` (girişin ve bitişin kareleri Logs/battlefilm'e); sesleri ölçmek için
   `node Tools/soundcheck.mjs` ("taktik" satırı).
+
+### 29e. Sahada komutan
+
+Kullanıcı 27.10 (önerilerden ilki): komutan taktik savaşta görünmüyordu, yalnız +10 moral sayılıyordu.
+
+- **Muhafız birliği:** generalli tarafın sahasında generalin 12 atlık muhafızı (atlının göğüs göğüse gücünün 1.8
+  katı, hücumu 1.2 katı, morali +20), hattın ortasının gerisinde dizilir; rozeti taç, kartında generalin adı. Muhafız
+  ordunun askeri sayılmaz (sağ kalanlara katılmaz).
+- **Yanı:** generalin 14 birim çevresindeki dost birliklerin morali +12, toparlanması iki kat (sahada kesik çizgili,
+  tarafın renginde bir halka).
+- **Düşerse:** bütün tarafı 25 moral yitirir (kaçarsa yarısı), sahanın üstünde "Brennus düştü!" şeridi ve alçak bir
+  boru; **haritada da ölür** - savaş kazanılsa bile (saldıranınki ordudan, savunanınki ordusundan ya da şehrinde
+  bekleyen komutanlar arasından düşer, adı bir daha verilmez).
+- **Bilgisayarın generali** ordusunun ortasının 9 birim gerisinde, düşmana dönük durur; 7 birime gelen düşmanla
+  dövüşür, ordusu kalmadıysa kendisi saldırır. Sura tırmanmaz; sur dışında tek başına kalan general hücumu sürdürmez.
+  Oyuncunun generali öteki birlikler gibi seçilip yönetilir (Otomatik'te bilgisayar yönetir).
+- Ayar (yalnız bir tarafı generalli 144 savaş): generalli taraf otomatik savaşta 75, taktik savaşta 78 kez kazanır;
+  kazanan aynı %88.

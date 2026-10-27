@@ -248,6 +248,8 @@ function battleSounds(B, now) {
   if (foot.length && now >= (B.stepAt ?? 0)) { B.stepAt = now + (440 + Math.random() * 80) / pace; sound.tramp(men(foot), pan(foot)); }
   if (horse.length && now >= (B.hoofAt ?? 0)) { B.hoofAt = now + (330 + Math.random() * 60) / pace; sound.hooves(men(horse), pan(horse)); }
   if (fighting.length && now >= (B.meleeAt ?? 0)) { B.meleeAt = now + (200 + Math.random() * 260) / pace; sound.melee(men(fighting), pan(fighting)); }
+  // General düştü: alçak, inen bir boru.
+  for (const e of B.b.fx) if (e.kind === "genFell" && !e.heard) { e.heard = true; sound.genFell(e.side === B.me ? -0.3 : 0.3); }
 }
 
 /** Girişte tıklamak ya da bir tuş girişi geçer (kamera, bulutlar, bantlar yerine). Geçtiyse true. */
@@ -265,6 +267,7 @@ function beginBattle(B) {
 
 /** Taktik savaşta bir birliğin adı ("Lejyoner", "Okçu"). */
 function unitLabel(u, owner) {
+  if (u.type === "gen") return `★ ${u.name ?? T().tacGeneral}`;
   const s = u.type === "elite" ? T().eliteOf[owner]?.[0] ?? T().elite : T()[u.type];
   return s[0].toLocaleUpperCase() + s.slice(1);
 }
