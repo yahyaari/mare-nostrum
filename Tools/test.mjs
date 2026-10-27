@@ -1366,6 +1366,18 @@ section("Takviye (bölüm 7b)");
   check("meydan muharebesinde iki tarafın takviyesi", sf.att.help.includes(y) && sf.def.help.includes(u) && sf.att.inf === 100 + half(100) && sf.def.inf === 60 + half(60));
   const ev3 = M.strike(e, x.id, t.id, [1, 1]);
   check("meydanda kazanan takviye sağ, yenilen takviye kaçabildiyse yerinde", ev3.won && y.inf > 0 && x.inf > 0 && (S.armyById(e, u.id) ? u.at === null && u.inf >= N.retreat.min : true));
+  // Müttefik de katılır - düşmanla savaştaysa (kullanıcı 27.10: eğlenceli olsun; ittifak savaşta işe yarasın).
+  const al = S.newGame("rome", 7);
+  const am = S.formArmy(al, "rome", 10, 0), ag = S.formArmy(al, "bibracte", 10, 0);
+  Object.assign(am, near("mediolanum", 0), { at: null, mp: 4, inf: 60 });
+  Object.assign(ag, near("mediolanum", 1), { at: null, inf: 40 });
+  al.relations[S.key("rome", "gaul")] = "ally";
+  check("bağımsıza saldırıda müttefikin yakındaki ordusu da katılır", M.sides(al, am, "rome", "mediolanum").att.help.includes(ag));
+  al.places.mediolanum.owner = "carthage";
+  al.relations[S.key("rome", "carthage")] = "war";
+  check("müttefik, savaşmadığı birine saldırıda katılmaz", !M.sides(al, am, "rome", "mediolanum").att.help.includes(ag));
+  al.relations[S.key("gaul", "carthage")] = "war";
+  check("müttefik, onunla da savaştaysa katılır", M.sides(al, am, "rome", "mediolanum").att.help.includes(ag));
   // Taktik savaş: takviye sonra girer; gelene kadar savaş bitmez, sağ kalanlara sayılır.
   const b = TC4.setupBattle({ civ: "rome", inf: 80, help: [{ id: 9, x: 0.6, y: 0, inf: 40, arch: 0, cav: 0, siege: 0, elite: 0 }], near: { x: 0, y: 0 } }, { civ: "gaul", inf: 60 }, null, 3);
   const men0 = b.units.filter((v) => v.side === "att").reduce((n, v) => n + v.men, 0);

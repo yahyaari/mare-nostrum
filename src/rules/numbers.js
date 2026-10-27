@@ -301,6 +301,10 @@ export const N = {
   aiGreed: 0.005, // eşik her tur bu kadar düşer ...
   aiWarRatioMin: 1.1, // ... ama bundan aşağı değil
   aiWarChance: 0.15,
+  // Bilgisayarın bir yerde tuttuğu asker: yakındaki düşman ordularının hepsi + düşman garnizonlarının bir payı (x1.1) -
+  // `aiGarrisonThreat`[0] `aiLate`[0]. tura kadar, sonra `aiLate`[1]. tura doğru [1]e iner. Pay hep 0.5 iken geç oyunda herkesin
+  // garnizonu birbirini büyütüyor, ordular sefere çıkmıyordu; hep 0.2 olunca da erken oyun fazla kanlıydı.
+  aiGarrisonThreat: [0.5, 0.2], aiLate: [60, 100],
   aiElite: 0.2, // ordunun özel birlik payı ...
   aiEliteFrom: 15, // ... bu turdan sonra (erken basınca yayılma yavaşlıyordu)
 

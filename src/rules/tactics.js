@@ -170,6 +170,8 @@ export function setupBattle(att, def, walls, seed = 1, field = null) {
     help.forEach((h, i) => {
       const R = N.reinforce, d = s.near ? Math.hypot(h.x - s.near.x, h.y - s.near.y) : R.reach;
       const units = troops(side, s, part[i] ?? h, false);
+      // Müttefikin askerleri kendi sahibinin renginde (ekran).
+      if (h.owner && h.owner !== s.civ) for (const u of units) u.owner = h.owner;
       if (units.length) b.reserve.push({ side, army: h.id ?? null, arrive: R.delay + R.late * Math.min(1, d / R.reach), lane: (i + 1) / (help.length + 1), units, men: units.reduce((n, u) => n + u.men, 0) });
     });
     // Sahada komutan (kullanıcı 27.10): generalli tarafın muhafız atlıları, ortada, hattın gerisinde.

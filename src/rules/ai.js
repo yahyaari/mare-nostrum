@@ -348,12 +348,19 @@ function recruitAll(state, civ) {
  * ve yakındaki garnizonlarının yarısı - bir garnizon aynı tur ordu olup saldırabiliyor.
  * Bağımsızlar saldırmaz.
  */
+/** Düşman garnizonunun tehdit payı: erken oyunda büyük, geç oyunda küçük (kale kale bekleşme olmasın). */
+function garrisonThreat(state) {
+  const [a, b] = N.aiGarrisonThreat, [t0, t1] = N.aiLate;
+  const k = Math.max(0, Math.min(1, (state.turn - t0) / (t1 - t0)));
+  return a + (b - a) * k;
+}
+
 function threat(state, civ, id) {
   let n = 0;
   for (const a of state.armies) if (!a.at && (relation(state, civ, a.owner) === "war" || a.raider) && dist(a, POS[id]) <= N.reach.threat) n += men(a);
   for (const [o, pl] of Object.entries(state.places)) {
     if (o === id || !pl.owner || relation(state, civ, pl.owner) !== "war") continue;
-    if (dist(POS[o], POS[id]) <= N.reach.threat) n += (men(pl) + armiesAt(state, o).reduce((k, a) => k + men(a), 0)) * 0.5;
+    if (dist(POS[o], POS[id]) <= N.reach.threat) n += (men(pl) + armiesAt(state, o).reduce((k, a) => k + men(a), 0)) * garrisonThreat(state);
   }
   return n;
 }

@@ -350,6 +350,9 @@ katılsın; iki orduyu yan yana yürütmenin anlamı olsun".
 - Bir savaşa iki tarafın da **yakındaki orduları katılır**: savaşın yerine 1.2 birimden (kabaca bir saldırı menzili ve
   yarısı) yakın, karada duran, askeri olan en yakın 3 ordu. Savunulan yerin içindekiler zaten savunan; dışarıdaki
   orduları takviye. Denizden saldırıda saldıranın takviyesi yok; haydut ve barbarın takviyesi yok.
+- **Müttefikler de katılır** (kullanıcı 27.10: "eğlenceli hale getirecek şeyler" - ittifak savaşta işe yarasın): yakındaki
+  müttefik ordusu, karşı tarafla o da savaştaysa (ya da karşı taraf bağımsız, haydut, barbarsa) takviye olur; taktik
+  savaşta kendi renginde, oyuncunun yönettiği birlik olarak girer.
 - Her takviyenin **yarısı savaşa yetişir** (her türden; `N.reinforce.part`), kalanı yerinde kalır ve kayıp vermez.
   Otomatik savaşta yetişen kısım tarafa katılır (general, tecrübe ve arazi asıl ordununki). Sonra: kazananın sağ
   kalanları, yenilenin kaçabilenleri orduların her türden getirdiği oranda paylaşılır; asıl ordu (kazandıysa) yere
@@ -611,6 +614,13 @@ oyundan çıkar.
   - Güçlü komşuyla ittifak kur.
 
 ---
+
+- **Geç oyunda kale kale bekleşme bitti** (27.10): bilgisayar bir yerde tuttuğu askeri hesaplarken yakındaki düşman
+  garnizonlarının yarısını tehdit sayıyordu; herkesin garnizonu birbirini büyütüyor, 100. turdan sonra ordular
+  sefere çıkmıyordu (120. turda sahada ~1.700, garnizonlarda ~14.000 asker). Şimdi bu pay 60. tura kadar yarı, 100. tura
+  doğru beşte bire iner (`N.aiGarrisonThreat`, `N.aiLate`): 100. turda sahada ~7.500 (önce 3.800), 120. turda ~6.200
+  (1.700). Hep beşte bir olunca erken oyun fazla kanlıydı (ilk düşüş 43 -> 35); evreye bağlı olunca ilk düşüş aynı (43),
+  ayakta kalan 318 -> 295 (geç oyunda yine savaşılıyor). 160. turdan sonra garnizonlar yeniden birikiyor (açık konu).
 
 ## 12. Ekran
 

@@ -177,7 +177,9 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     Tools/naval-cal.mjs %85.
     Kullanıcı 27.10: "savaş öncesi nutuk, zafer alayı gibi şeyler istemiyorum, oyunu boşuna çorba yapmaya gerek yok;
     istediğim insanların eğlenebileceği build ve savaş ortamı" - süs sistemleri (nutuk, alay, hırslı komutanlar) yok.
-    Açık konu (savaşı ilgilendiriyor): geç oyunda (100. turdan sonra) bilgisayar ordularını sahaya çıkarmayı bırakıyor.
+35. **Geç oyun canlı, müttefikler savaşa katılır** (bu adım; kullanıcı: "hadi eğlenceli hale getirecek şeyler yapalım"):
+    kurallar.md 11 (ai.js garrisonThreat, N.aiGarrisonThreat / aiLate), 7b (moves.js helpersOf müttefik). Denge: ilk düşüş 43,
+    ayakta 295. Açık: 160. turdan sonra garnizonlar yine birikiyor.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

@@ -162,7 +162,7 @@ function landField(ctx, f, B, T, lang, now, t, dpr) {
   const owner = { att: B.owners.att, def: B.owners.def };
   for (const u of [...b.units].sort((a, c) => (a.routed ? 0 : 1) - (c.routed ? 0 : 1))) {
     if (u.dead || u.gone) continue;
-    block(ctx, f, B, u, owner[u.side], B.sel.has(u.id), dt);
+    block(ctx, f, B, u, u.owner ?? owner[u.side], B.sel.has(u.id), dt);
   }
   // Merdivenler (askerlerin üstünde): sura dayanıp tırmanan birliklerin yerinde, üstünde tek sıra askerler.
   if (b.walls) for (const u of b.units) if (u.climbing && u.ladder && !u.dead && !u.gone) ladder(ctx, f, u, B.owners[u.side], now);
@@ -171,7 +171,7 @@ function landField(ctx, f, B, T, lang, now, t, dpr) {
   for (const e of b.fx) if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce") fallen(ctx, f, B, e, T);
   for (const u of b.units) {
     if (u.dead || u.gone) continue;
-    badge(ctx, f, u, owner[u.side], B.sel.has(u.id), b);
+    badge(ctx, f, u, u.owner ?? owner[u.side], B.sel.has(u.id), b);
   }
 }
 

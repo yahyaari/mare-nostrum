@@ -314,9 +314,9 @@ export function sides(state, unit, civ, id) {
   const sea = !!from && bySea(from, POS[id]);
   return {
     att: withHelp({ civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, elite: unit.elite ?? 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
-      sea ? [] : helpersOf(state, civ, POS[id], [unit]), POS[id], state),
+      sea ? [] : helpersOf(state, civ, POS[id], [unit], null, pl.owner), POS[id], state),
     def: withHelp({ ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
-      helpersOf(state, pl.owner, POS[id], [unit], id), POS[id], state),
+      helpersOf(state, pl.owner, POS[id], [unit], id, civ), POS[id], state),
     walls: wallsOf(state, id), ter, sea,
   };
 }
@@ -332,14 +332,17 @@ function insideVet(state, id) {
 
 /**
  * Takviye (bölüm 7b; kullanıcı 27.10: "yakındaki dost ordular savaşın ortasında sahanın kenarından girip katılsın"):
- * `owner`ın, savaşın yerine (`at`) `N.reinforce.reach` birimden yakın, karada, askeri olan ordularından en yakın
- * `max` tanesi - `skip`tekiler (savaşan ordular, numarasıyla) ve savunulan yerin (`inside`) içindekiler hariç.
+ * `owner`ın - ve müttefiklerinin, `foe` ile savaştaysalar ya da `foe` bağımsız / haydut ise (kullanıcı 27.10: "eğlenceli
+ * hale getirecek şeyler": ittifak savaşta da işe yarasın) - savaşın yerine (`at`) `N.reinforce.reach` birimden yakın,
+ * karada, askeri olan ordularından en yakın `max` tanesi; `skip`tekiler (savaşan ordular, numarasıyla) ve savunulan
+ * yerin (`inside`) içindekiler hariç.
  */
-export function helpersOf(state, owner, at, skip = [], inside = null) {
+export function helpersOf(state, owner, at, skip = [], inside = null, foe = undefined) {
   if (!owner) return [];
   const R = N.reinforce, ids = new Set(skip.map((x) => x?.id).filter((v) => v != null));
+  const friend = (o) => o === owner || (foe !== undefined && o && relation(state, owner, o) === "ally" && (!foe || relation(state, o, foe) === "war"));
   return state.armies
-    .filter((a) => a.owner === owner && !ids.has(a.id) && !skip.includes(a) && men(a) > 0 && !a.bandit && !a.barbarian && (inside == null || a.at !== inside)
+    .filter((a) => friend(a.owner) && !ids.has(a.id) && !skip.includes(a) && men(a) > 0 && !a.bandit && !a.barbarian && (inside == null || a.at !== inside)
       && isLand(cellOf(a.x, a.y)) && dist(a, at) <= R.reach + 1e-9)
     .sort((a, b) => dist(a, at) - dist(b, at))
     .slice(0, R.max);
@@ -394,9 +397,9 @@ function dropEmpty(state, list, minMen = 1) {
 
 /** Meydan muharebesinin iki tarafı: { att, def }. Dağda duran savunan dağ geçidi gibi güçlü. */
 export const fieldSides = (state, army, b) => ({
-  att: withHelp({ civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp), mods: modsOf(state, army.owner) }, helpersOf(state, army.owner, b, [army, b]), b, state),
+  att: withHelp({ civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp), mods: modsOf(state, army.owner) }, helpersOf(state, army.owner, b, [army, b], null, b.owner ?? null), b, state),
   def: withHelp({ civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp), mods: modsOf(state, b.owner),
-    terrain: isMountain(cellOf(b.x, b.y)) ? N.ground.pass : 1 }, helpersOf(state, b.owner, b, [army, b]), b, state),
+    terrain: isMountain(cellOf(b.x, b.y)) ? N.ground.pass : 1 }, helpersOf(state, b.owner, b, [army, b], null, army.owner), b, state),
 });
 
 /**
