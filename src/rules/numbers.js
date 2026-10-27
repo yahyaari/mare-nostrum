@@ -220,7 +220,7 @@ export const N = {
   // Şehir binaları (bölüm 4b; Yapılar sekmesi): her seviye tapınak sadakat turda +temple, pazar
   // şehrin parası +market, okul +school bilim, hamam nüfus artışı +baths. Seviye şehir seviyesine
   // kadar; pazar Sikke, okul Yazı, hamam Mühendislik ister.
-  buildings: { temple: 2, market: 0.1, school: 1, baths: 0.1, needs: { market: "currency", school: "writing", baths: "engineering" } },
+  buildings: { temple: 2, market: 0.1, school: 1, baths: 0.1, needs: { market: "currency", school: "writing", baths: "engineering", academy: "ironWorking" } },
   // Barbarlar (bölüm 26, barbarians.js): oyun başında `camps` kamp (her başkentin `minDist`-`nearMax`
   // yakınında bir tane), kamplar arası en az `spacing`; kamp `start` piyadeyle başlar, turda `grow`
   // büyür (en çok `cap`); `from`. turdan sonra `raidMin` askeri olan kamp her tur 1/`raidEvery`
@@ -291,6 +291,15 @@ export const N = {
 
   // Generaller (bölüm 14)
   generals: { cost: 30, perLevel: 0.06, xpWin: 3, xpLoss: 1 },
+  // Şehirde yetişen komutanlar (bölüm 14b; kullanıcı 27.10: "komutanları şehirlerde eğitelim, şehrin özelliklerine
+  // göre rastgele oluşsunlar; okçulara, süvarilere artı gibi özellikler"). `from`. turdan sonra her şehirde turda
+  // `chance` + şehir seviyesi başına `perLevel` + okul başına `school` + akademi başına `academy` ihtimalle (kalede
+  // x`castle`) bir komutan yetişir; medeniyetin komutanı (ordudakiler ve bekleyenler) `cap.base` + her `cap.perPlaces`
+  // yer için 1 (+1 `cap.academy`. seviye bir akademi varsa) ama en çok `cap.max`. Akademi 3'te 2., 5'te 3. seviyeden başlar; `second`. seviyede iki
+  // yetenekle. Yetenekler: süvari ustası atlılar x`cavalry`, piyade ustası piyade x`infantry`, ilham veren kazanınca
+  // kayıp x`inspiring` (taktik savaşta moral +`inspiringMorale`), amiral filo x`admiral`.
+  officers: { from: 3, chance: 0.004, perLevel: 0.003, school: 0.004, academy: 0.025, castle: 0.6, cap: { base: 1, perPlaces: 3, academy: 3, max: 7 }, second: 4,
+    cavalry: 1.2, infantry: 1.12, inspiring: 0.75, inspiringMorale: 15, admiral: 1.25 },
 
   // Bilgisayarın oyuncuya teklifleri (bölüm 8)
   offers: { spacing: 6, truce: 8, tributeRatio: 1.8 },

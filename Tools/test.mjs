@@ -622,7 +622,7 @@ section("Tecrübe: rütbeler ve savaşın dökümü");
   const { TEXT } = await import("../src/text.js");
   const src = readFileSync(new URL("../src/rules/combat.js", import.meta.url), "utf8");
   const body = src.slice(src.indexOf("export function explain"));
-  const used = [...new Set([...body.matchAll(/"(\w+)"/g)].map((x) => x[1]))].filter((k) => !["castle", "siege", "city", "defInf", "walls", "Tech"].includes(k)).concat(["cityWallsTech", "castleWallsTech"]);
+  const used = [...new Set([...body.matchAll(/"(\w+)"/g)].map((x) => x[1]))].filter((k) => !["castle", "siege", "city", "defInf", "walls", "Tech", "infantry", "cavalry"].includes(k)).concat(["cityWallsTech", "castleWallsTech"]);
   for (const lang of ["en", "tr"]) check(`${lang}: dökümün her anahtarının yazısı var`, used.every((k) => TEXT[lang].mods?.[k]), used.filter((k) => !TEXT[lang].mods?.[k]).join());
   check("rütbe adları iki dilde dört", ["en", "tr"].every((l) => TEXT[l].ranks?.length === 4));
 }
@@ -1956,6 +1956,86 @@ const GN = await import("../src/rules/generals.js");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Şehirde yetişen komutanlar (bölüm 14b)");
+
+{
+  // Kullanıcı 27.10: "komutanları şehirlerde eğitelim; şehrin özelliklerine göre rastgele oluşsunlar, okçulara,
+  // süvarilere artı gibi özellikler".
+  const F = GN.features();
+  check("arazi: Bibracte ormanlık, Mediolanum dağlık, her yerin yolu var", F.bibracte.forest > 0.5 && F.mediolanum.mountain > 0.5 && Object.values(F).every((x) => x.roads >= 1));
+  const s = S.newGame("gaul", 7);
+  const L = GN.leanings(s, "bibracte");
+  check("ormanlık şehrin en olası komutanı okçu ustası", Object.entries(L).sort((x, y) => y[1] - x[1])[0][0] === "archer", JSON.stringify(L));
+  s.places.bibracte.temple = 5;
+  check("tapınak ilham veren komutana yatırır", GN.leanings(s, "bibracte").inspiring > L.inspiring + 3);
+  check("limanı olmayan şehirde amiral yetişmez", GN.leanings(s, "bibracte").admiral === 0);
+  const c0 = GN.chanceOf(s, "bibracte");
+  s.places.bibracte.academy = 2;
+  check("akademi yetişme ihtimalini artırır", Math.abs(GN.chanceOf(s, "bibracte") - c0 - 2 * N.officers.academy) < 1e-9);
+  // Tavan: 1 + her 3 yer için 1; büyük akademi +1.
+  const n = S.placesOf(s, "gaul").length;
+  check("komutan tavanı yer sayısıyla", GN.capOf(s, "gaul") === Math.min(N.officers.cap.max, 1 + Math.floor(n / 3)));
+  s.places.bibracte.academy = N.officers.cap.academy;
+  check("büyük akademi tavana bir ekler", GN.capOf(s, "gaul") === Math.min(N.officers.cap.max, 2 + Math.floor(n / 3)));
+  // Çok tur boyunca: tavana kadar yetişir, aşmaz; yetenekler şehrin yatkınlığından; dünyanın zarı değişmez.
+  const t = S.newGame("gaul", 9);
+  for (const id of S.placesOf(t, "gaul")) { t.places[id].academy = 5; t.places[id].level = 5; }
+  t.turn = 10;
+  const rng0 = t.rng;
+  const evs = [];
+  for (let k = 0; k < 60; k++) GN.raiseOfficers(t, evs);
+  const born = evs.filter((e) => e.type === "officer" && e.civ === "gaul");
+  check("akademili şehirlerde komutan yetişir, tavanı aşmaz", born.length === GN.capOf(t, "gaul") && t.civs.gaul.officers.length === GN.capOf(t, "gaul"), `${born.length} / ${GN.capOf(t, "gaul")}`);
+  check("5. seviye akademi: 3. seviyeden ve iki yetenekle başlar", born.every((e) => e.level === 3 && e.traits.length === 2 && e.traits.every((x) => GN.TRAITS.includes(x))));
+  check("komutanın zarı dünyanın zarını değiştirmez", t.rng === rng0);
+  check("haberi: yeri, adı, yetenekleri", born.every((e) => S.placesOf(t, "gaul").includes(e.place) && GN.NAMES.gaul.some((x) => e.name.startsWith(x))));
+  // İstatistik: ormanlık şehrin komutanlarında okçu ustası, ovadakinde süvari ustası sık.
+  const count = (id, trait) => {
+    let hit = 0;
+    for (let k = 0; k < 400; k++) {
+      const u = S.newGame("gaul", 100 + k);
+      for (const p of S.placesOf(u, "gaul")) if (p !== id) u.places[p].owner = null;
+      u.places[id].academy = 5; u.places[id].level = 5; u.turn = 10;
+      const e2 = [];
+      GN.raiseOfficers(u, e2);
+      for (const e of e2) if (e.traits.includes(trait)) hit++;
+    }
+    return hit;
+  };
+  check("ormanlık şehirden okçu ustası sık çıkar", count("bibracte", "archer") > count("bibracte", "admiral") + 20);
+  // Atama: bekleyen komutan orduya bedava; orduya uyanı seçilir; bekleyen şehri savunur.
+  const g = S.newGame("rome", 7);
+  g.civs.rome.officers.push({ id: 1, name: "Marcellus", level: 2, xp: 3, traits: ["cavalry"], from: "rome", at: "rome" }, { id: 2, name: "Fabius", level: 2, xp: 3, traits: ["archer"], from: "capua", at: "rome" });
+  check("bekleyen komutan şehrini savunur", GN.bestAt(g, "rome", "rome")?.name !== undefined);
+  const army = S.formArmy(g, "rome", 30, 0);
+  army.cav = 40;
+  check("atlısı çok orduya süvari ustası seçilir", GN.officerFor(g, army).name === "Marcellus");
+  const m0 = g.civs.rome.money;
+  const gen = GN.appoint(g, army.id, 1);
+  check("bekleyen komutan bedava atanır, listeden düşer", gen?.name === "Marcellus" && gen.traits[0] === "cavalry" && g.civs.rome.money === m0 && g.civs.rome.officers.length === 1);
+  // El değiştiren şehirde bekleyen komutan başkente kaçar.
+  g.civs.rome.officers[0].at = "tarentum";
+  g.places.tarentum.owner = "carthage";
+  GN.raiseOfficers(g, []);
+  check("şehri düşen komutan başkente kaçar", g.civs.rome.officers[0].at === "rome");
+  // Yeteneklerin savaşta etkisi.
+  const fightWith = (gen, side) => C.fight({ civ: null, inf: 100, cav: side === "cav" ? 60 : 0, gen }, { civ: null, inf: side === "cav" ? 180 : 110 }, null);
+  check("süvari ustası atlılarla kazandırır", !fightWith(null, "cav").attWins && fightWith({ level: 1, traits: ["cavalry"] }, "cav").attWins);
+  check("piyade ustası piyadeyle kazandırır", !fightWith(null, "inf").attWins && fightWith({ level: 1, traits: ["infantry"] }, "inf").attWins);
+  const toll = (gen) => { const r = C.fight({ civ: null, inf: 150, gen }, { civ: null, inf: 100 }, null); return 150 - r.att.inf; };
+  check("ilham veren: kazanınca daha az kayıp", toll({ level: 1, traits: ["inspiring"] }) < toll(null) * 0.8, `${toll(null)} ${toll({ level: 1, traits: ["inspiring"] })}`);
+  const sea = (gen) => C.naval({ civ: null, ships: 10, gen }, { civ: null, ships: 11 }).attWins;
+  check("amiral filoyu güçlendirir", !sea(null) && sea({ level: 1, traits: ["admiral"] }));
+  // Kayıt 20: eski oyunda akademi yok, bekleyen yok.
+  const old = JSON.parse(JSON.stringify(S.newGame("rome", 3)));
+  old.version = 19;
+  for (const p of Object.values(old.places)) delete p.academy;
+  for (const c of Object.values(old.civs)) delete c.officers;
+  const mg = S.migrate(old);
+  check("19. sürüm kayıt yükseltiliyor: akademi 0, bekleyen yok", mg.version === S.VERSION && mg.places.rome.academy === 0 && Array.isArray(mg.civs.rome.officers));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Süvari ve kuşatma makinesi (bölüm 5, 7)");
 
 {
@@ -3135,7 +3215,7 @@ section("Bot: oyun boyunca değişmezler");
       if (!(a.mp >= -1e-9) || a.route.some((c) => !Number.isInteger(c))) bad.push(`t${s.turn} ordu ${a.id} hareketi bozuk ${a.mp}`);
       if (a.owner && !s.civs[a.owner].alive) bad.push(`t${s.turn} ölü ordu`);
       const g = a.general;
-      if (g && !(g.level >= 1 && g.level <= 5 && g.xp >= 0 && g.traits.every((t) => GN.TRAITS.includes(t)) && g.traits.length <= 2)) {
+      if (g && !(g.level >= 1 && g.level <= 5 && g.xp >= 0 && g.traits.every((t) => GN.TRAITS.includes(t)) && g.traits.length <= 3 && new Set(g.traits).size === g.traits.length)) {
         bad.push(`t${s.turn} bozuk general ${JSON.stringify(g)}`);
       }
       if (g) generals++;

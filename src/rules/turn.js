@@ -23,6 +23,7 @@ import { isWinter } from "./season.js";
 import { techMul, tickResearch } from "./research.js";
 import { tickBarbarians } from "./barbarians.js";
 import { replenish } from "./refill.js";
+import { raiseOfficers } from "./generals.js";
 import { tickCrises } from "./crises.js";
 import { tickTrade } from "./trade.js";
 import { incomingFor, resolveIncoming } from "./incoming.js";
@@ -106,6 +107,8 @@ export function endTurn(state) {
   replenish(state, events);
   // Bilim araştırmaya akar (üretimden sonra: bu turun nüfusuyla).
   tickResearch(state, events);
+  // Şehirlerde komutan yetişir (bölüm 14b).
+  raiseOfficers(state, events);
   // Son ödemesini yapan ticaret anlaşmaları düşer (oyuncununki habere).
   for (const d of (state.deals ?? []).filter((x) => x.until <= state.turn + 1)) {
     for (const h of [d.a, d.b].filter((c) => isHuman(state, c))) events.push({ type: "dealEnded", turn: state.turn, civ: h === d.a ? d.b : d.a, to: h });

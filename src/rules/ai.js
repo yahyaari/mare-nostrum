@@ -7,9 +7,9 @@
 import { CIVS } from "../data/world.js";
 import { angerOf, canDeclare, canPropose, declareWar, proposeAlliance, proposePeace } from "./diplomacy.js";
 import { offer } from "./events.js";
-import { appoint, appointInfo } from "./generals.js";
+import { appoint, appointInfo, officerFor } from "./generals.js";
 import { rebels } from "./loyalty.js";
-import { neighbours } from "./graph.js";
+import { byId, neighbours } from "./graph.js";
 import {
   access, advance, attack, avoidFor, bySea, canAttack, canStrike, defenders, forecast, forecastField, hostile, nearest, order, reachOf, refresh, routeTo, strike,
 } from "./moves.js";
@@ -218,6 +218,16 @@ function build(state, civ) {
 }
 
 /** Bir yere bir inşaat başlat: en çok istenene para yetmiyorsa biriktirir. Başladıysa true. */
+/**
+ * Bilgisayar akademiyi az yapar (bölüm 14b): başkentte, imparatorluk büyüdükçe her 6 yer için bir tane daha - ve
+ * yalnız büyük şehirde. (Her şehre yapınca oyun başına yüz komutan yetişiyordu.)
+ */
+function academyWanted(state, civ, id) {
+  const own = placesOf(state, civ), have = own.filter((x) => x !== id && (state.places[x].academy ?? 0) > 0).length;
+  if ((state.places[id].academy ?? 0) > 0) return true;
+  return (byId[id].capital || state.places[id].level >= 4) && have < 1 + Math.floor(own.length / 6);
+}
+
 function buildOne(state, civ, id, mine, reserve) {
   const pl = state.places[id];
   const b = budget(state, civ);
@@ -236,7 +246,7 @@ function buildOne(state, civ, id, mine, reserve) {
   if (port && pl.trade < 1) wish.push("trade");
   // Huzursuz şehre tapınak.
   if (pl.loyalty < 60) wish.push("temple");
-  wish.push("farms", ...(port ? ["fishery", "trade"] : []), "level", "market", "school", "industry", "barracks", "baths", "temple", ...(port ? ["shipyard", "fort"] : []));
+  wish.push("farms", ...(port ? ["fishery", "trade"] : []), "level", "market", "school", ...(academyWanted(state, civ, id) ? ["academy"] : []), "industry", "barracks", "baths", "temple", ...(port ? ["shipyard", "fort"] : []));
   for (const w of wish) {
     const u = upgradeInfo(state, id, w);
     if (u.why === "max" || u.why === "needLevel" || u.why === "notPort" || u.why === "building" || u.why?.startsWith("tech_")) continue;
@@ -431,9 +441,12 @@ function military(state, civ, events) {
     }
   }
 
-  // 1b. Büyük ordulara general (para varsa).
+  // 1b. Ordulara general: şehirlerde yetişip bekleyen komutan (bedava, en uygunu), yoksa büyük orduya parayla.
   for (const a of mine()) {
-    if (men(a) >= 80 && !appointInfo(state, a.id).why && state.civs[civ].money >= N.generals.cost + 25) appoint(state, a.id);
+    if (a.general) continue;
+    const o = men(a) >= 40 ? officerFor(state, a) : null;
+    if (o) appoint(state, a.id, o.id);
+    else if (men(a) >= 80 && !appointInfo(state, a.id).why && state.civs[civ].money >= N.generals.cost + 25) appoint(state, a.id);
   }
 
   // 2. Her ordu: bu tur yetişebildiği kolay hedefe saldır; yoksa yanındaki surlu bir yeri kuşat

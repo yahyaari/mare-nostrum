@@ -14,7 +14,7 @@ import { dealMoney } from "./leaders.js";
 import { tradeIncome } from "./trade.js";
 import { spawnCamps } from "./barbarians.js";
 
-export const VERSION = 19;
+export const VERSION = 20;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
@@ -137,6 +137,12 @@ export function migrate(s) {
     for (const u of [...Object.values(s.places), ...s.armies]) u.elite ??= 0;
     s.version = 19;
   }
+  if (s.version === 19) {
+    // Şehirde yetişen komutanlar: akademi yok, bekleyen komutan yok (bölüm 14b).
+    for (const p of Object.values(s.places)) p.academy ??= 0;
+    for (const c of Object.values(s.civs)) c.officers ??= [];
+    s.version = 20;
+  }
   return s;
 }
 
@@ -150,7 +156,7 @@ export function newGame(player, seed = 1, level = "normal") {
   const players = Array.isArray(player) ? player : [player];
   player = players[0];
   const civs = {};
-  for (const c of CIVS) civs[c.id] = { ...N.start.stock, alive: true, techs: [], progress: {}, research: null, bank: 0 };
+  for (const c of CIVS) civs[c.id] = { ...N.start.stock, alive: true, techs: [], progress: {}, research: null, bank: 0, officers: [] };
   // (state.built: inşa edilen harikalar - yeri; aşağıda nesneyle birlikte.)
   for (const [c, e] of Object.entries(N.start.extra ?? {})) civs[c].food += e.food ?? 0;
   const places = {};
@@ -165,7 +171,7 @@ export function newGame(player, seed = 1, level = "normal") {
       // Liman yapıları (sadece limanda kullanılır). Tersane 1 ile başlar: gemi yapılabilsin.
       fishery: 0, shipyard: p.port ? 1 : 0, trade: 0, fort: 0, built: 0,
       // Şehir binaları.
-      temple: 0, market: 0, school: 0, baths: 0,
+      temple: 0, market: 0, school: 0, baths: 0, academy: 0,
       loyalty: 100, games: false,
     };
     place.pop = Math.round(popCap(place, p.kind) * N.startPop);
@@ -366,6 +372,8 @@ export const UPGRADES = ["level", "farms", "industry", "barracks"];
 export const PORT_UPGRADES = ["fishery", "shipyard", "trade", "fort"];
 /** Şehir binaları: Yapılar sekmesi (kullanıcı 23.10, önerilen küçük işlerin ilki). */
 export const BUILDINGS = ["temple", "market", "school", "baths"];
+/** Komutanlar sekmesindeki bina (bölüm 14b): akademi komutan yetiştirir. */
+export const ACADEMY = "academy";
 
 /** Bir yükseltmenin fiyatı ve yapılıp yapılamayacağı. `why`: neden olmuyor. */
 /** İnşaatçı sayısı: şehirde 2, kalede 1. */

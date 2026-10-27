@@ -111,6 +111,39 @@ const SCENE = {
     scroll(ctx, cx + 16 * s, g + 10 * s, s);
     if (n >= 3) scroll(ctx, cx - 22 * s, g + 11 * s, 0.8 * s);
   },
+  academy(ctx, cx, g, s, n, owner) {
+    temple(ctx, cx + 10 * s, g + 1 * s, 0.7 * s);
+    palisade(ctx, cx - 10 * s, g + 12 * s, 30 * s, s);
+    // Talim kuklası: direk, kollar, yuvarlak baş, kalkan.
+    ctx.strokeStyle = "#5a4028";
+    ctx.lineWidth = 1.6 * s;
+    ctx.beginPath();
+    ctx.moveTo(cx - 12 * s, g + 10 * s);
+    ctx.lineTo(cx - 12 * s, g - 6 * s);
+    ctx.moveTo(cx - 18 * s, g - 1 * s);
+    ctx.lineTo(cx - 6 * s, g - 1 * s);
+    ctx.stroke();
+    ctx.fillStyle = "#c9a56a";
+    ctx.beginPath();
+    ctx.arc(cx - 12 * s, g - 8 * s, 2.6 * s, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = colorOf(owner);
+    ctx.beginPath();
+    ctx.ellipse(cx - 6 * s, g + 2 * s, 2.4 * s, 3.6 * s, 0, 0, TAU);
+    ctx.fill();
+    outline(ctx, s);
+    // Seviyeyle çapraz mızraklar.
+    for (let i = 0; i < Math.max(1, Math.min(3, n)); i++) {
+      const sx = cx - 24 * s + i * 5 * s;
+      ctx.strokeStyle = "#6b5032";
+      ctx.lineWidth = 1 * s;
+      ctx.beginPath();
+      ctx.moveTo(sx, g + 11 * s);
+      ctx.lineTo(sx + 4 * s, g - 9 * s);
+      ctx.stroke();
+    }
+    flag(ctx, cx + 22 * s, g + 2 * s, s, owner);
+  },
   baths(ctx, cx, g, s, n) {
     // Kubbe, havuz, buhar.
     ctx.fillStyle = "#4f8fa0";

@@ -333,7 +333,7 @@ export const fieldSides = (state, army, b) => ({
 });
 
 /** Deniz savaşının bir tarafı: gemileri ve araştırması. */
-const fleetSide = (state, civ, u, extra = {}) => ({ civ, ...shipsOnly(u), mods: modsOf(state, civ), ...extra });
+const fleetSide = (state, civ, u, extra = {}) => ({ civ, ...shipsOnly(u), mods: modsOf(state, civ), gen: u?.general ?? null, ...extra });
 
 /**
  * Bir saldırının tahmini, generaller ve tecrübe dahil: `unit` bir ordu ya da { inf, arch, at, general? }.

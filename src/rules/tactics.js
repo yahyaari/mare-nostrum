@@ -27,6 +27,7 @@
 // bonusuyla, içerideki sursuz dövüşür.
 
 import { archMul, cavMul, eliteMelee, eliteMul, infMul, sideMuls } from "./combat.js";
+import { has } from "./generals.js";
 import { N, UNITS, uniqueOf } from "./numbers.js";
 import { FOREST, WALL, addCity, breach as openBreach, flatField, heightAt, insideCity, kindAt, lineFree, nearestMain, nearestOpen, onMain, passable, pathOn, sidePoint, wallAt, wallPoint, wallShare, waterBetween } from "./field.js";
 
@@ -147,7 +148,7 @@ export function setupBattle(att, def, walls, seed = 1, field = null) {
         const p = profile(type, s, side === "def", side === "att" && !!walls);
         const u = {
           id: b.nextId++, side, type, ...p, men, start: men, cols: Math.ceil(men / Math.min(ROWS[type], men)),
-          morale: 100 + (s.gen ? 10 : 0), moraleMax: 100 + (s.gen ? 10 : 0), x: 0, y: 0, facing: side === "att" ? 0 : Math.PI,
+          morale: 100 + (s.gen ? 10 : 0) + (has(s.gen, "inspiring") ? N.officers.inspiringMorale : 0), moraleMax: 100 + (s.gen ? 10 : 0) + (has(s.gen, "inspiring") ? N.officers.inspiringMorale : 0), x: 0, y: 0, facing: side === "att" ? 0 : Math.PI,
           order: null, cool: b.rand() * K().volley.every, engaged: false, routed: false, gone: false, dead: false, wasMoving: false,
           inside: side === "def",
         };

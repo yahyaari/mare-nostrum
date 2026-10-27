@@ -29,12 +29,12 @@ import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait, uniqueOf } from "../rules/numbers.js";
 import {
-  BUILDINGS, PORT_UPGRADES, UPGRADES, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  ACADEMY, BUILDINGS, PORT_UPGRADES, UPGRADES, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
 import { drift } from "../rules/loyalty.js";
-import { appointInfo } from "../rules/generals.js";
+import { appointInfo, capOf, chanceOf, features, generalsOf, leanings, officerFor } from "../rules/generals.js";
 import { options as letterOptions, ownerOf } from "../rules/events.js";
 import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
 import {
@@ -541,7 +541,7 @@ function gridHead(ctx, boxes, T, u, of, title, x, y, w, g, mine) {
  */
 function cityCard(ctx, cam, game, ui, boxes, T) {
   const id = ui.sel.id, pl = game.places[id], p = byId[id];
-  const tabs = ["city", "troops", ...(p.port ? ["port"] : []), "buildings", ...(p.kind === "castle" ? [] : ["wonders"]), "garrison"];
+  const tabs = ["city", "troops", ...(p.port ? ["port"] : []), "buildings", "officers", ...(p.kind === "castle" ? [] : ["wonders"]), "garrison"];
   const tab = tabs.includes(ui.cardTab) ? ui.cardTab : "city";
   const wonder = wondersAt(game, id)[0] ?? null;
   const A = 214, B = 265, C = 265, BC = B + GAP + C;
@@ -599,7 +599,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   // Sekmeler: ikinci ve üçüncü sütunun üstünde.
   x += A + GAP;
   vrule(ctx, x - GAP / 2, y + 14, y + H - 14);
-  const label = { city: T.tabCity, troops: "⚑ " + T.tabTroops, port: "⚓ " + T.tabPort, buildings: "⌂ " + T.tabBuildings, wonders: "✦ " + T.tabWonders, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
+  const label = { city: T.tabCity, troops: "⚑ " + T.tabTroops, port: "⚓ " + T.tabPort, buildings: "⌂ " + T.tabBuildings, officers: "★ " + T.tabOfficers, wonders: "✦ " + T.tabWonders, garrison: "⚔ " + T.tabGarrison + (cardsOf(pl).length ? ` · ${cardsOf(pl).length}` : "") };
   // Sekme genişliği yazısına göre; artan yer eşit dağılır.
   const tsize = tabs.length > 4 ? 12 : 13, tgap = tabs.length > 5 ? 6 : 8;
   const natural = tabs.map((k) => measure(ctx, label[k], { bold: true, size: tsize }) + 16);
@@ -612,6 +612,7 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
   });
   const top = y + 50;
   if (tab === "wonders") wondersTab(ctx, game, ui, boxes, T, id, x, top, BC, y + H - 12 - top);
+  else if (tab === "officers") officersTab(ctx, game, boxes, T, ui, id, x, top, BC, y + H - 12 - top);
   else if (tab === "buildings") {
     // Yapılar: dört bina solda (kartlarında etkileri), sağda şehrin ticaret yolları (pazar yol açar).
     buildersRow(ctx, game, boxes, T, id, x, top, B);
@@ -670,6 +671,61 @@ function tradeBlock(ctx, game, boxes, T, ui, id, x, y, w, h) {
   for (const r of inn) if (ly + 34 < y + h - 34) row(r, false);
   const free = out.length < slots;
   if (slots) button(ctx, boxes, { x, y: y + h - 32, w, h: 30, label: T.tradeOpen, size: 13, main: free, off: !free, act: { do: "open", modal: "trade", id }, tip: [T.tradeOpen, T.tradeTip, free ? null : [T.tradeFull, "bad"]] });
+}
+
+/**
+ * Komutanlar sekmesi (bölüm 14b; kullanıcı 27.10: "komutanları şehirlerde eğitelim, şehrin özelliklerine göre
+ * rastgele oluşsunlar"): solda akademi kartı; sağda burada her tur komutan yetişme ihtimali, medeniyetin komutanı ve
+ * tavanı, şehrin çevresi, yetişecek komutanın en olası yetenekleri (çubukla) ve burada bekleyenler.
+ */
+function officersTab(ctx, game, boxes, T, ui, id, x, y, w, h) {
+  const pl = game.places[id], owner = pl.owner, AW = 150;
+  buildersRow(ctx, game, boxes, T, id, x, y, AW);
+  buildingCard(ctx, game, boxes, T, id, ACADEMY, x, y + 26, AW, h - 26);
+  const rx = x + AW + GAP, rw = w - AW - GAP;
+  vrule(ctx, rx - GAP / 2, y + 4, y + h - 2);
+  let ly = y + 15;
+  const pct = (v) => String(Math.round(v * 1000) / 10);
+  text(ctx, T.officersHead, rx, ly, { bold: true, size: 13 });
+  ly += 18;
+  text(ctx, fill(T.officerChance, pct(chanceOf(game, id))), rx, ly, { size: 12, color: INK.soft });
+  if (owner) {
+    const cs = fill(T.officerCap, generalsOf(game, owner), capOf(game, owner));
+    const cw = text(ctx, cs, rx + rw, ly, { size: 12, bold: true, color: INK.soft, align: "right" });
+    boxes.push({ x: rx + rw - cw, y: ly - 13, w: cw, h: 17, act: null, tip: [cs, T.officerCapTip] });
+  }
+  ly += 17;
+  const f = features()[id];
+  const feats = [f.forest >= 0.3 ? T.featForest : null, f.open >= 0.5 ? T.featOpen : null, f.mountain >= 0.3 ? T.featMountain : null, f.roads >= 3 ? T.featRoads : null, byId[id].port ? T.featCoast : null].filter(Boolean);
+  fit(ctx, fill(T.officerFeatures, feats.join(", ") || "—"), rx, ly, rw, { italic: true, size: 11.5, color: INK.soft });
+  ly += 21;
+  // Yatkınlık: en olası üç yetenek, payıyla.
+  const lw = text(ctx, T.officerLeans, rx, ly, { bold: true, size: 12.5 });
+  boxes.push({ x: rx, y: ly - 13, w: lw, h: 17, act: null, tip: [T.officerLeans, T.officerLeansTip] });
+  const L = Object.entries(leanings(game, id)).filter(([, v]) => v > 0);
+  const tot = L.reduce((n, [, v]) => n + v, 0);
+  for (const [t, v] of L.sort((a, b) => b[1] - a[1]).slice(0, 3)) {
+    ly += 17;
+    fit(ctx, T.skills[t][0], rx + 6, ly, 108, { size: 12 });
+    const bx = rx + 118, bw = rw - 118 - 40, k = v / tot;
+    ctx.fillStyle = "rgba(90,70,40,0.18)";
+    ctx.fillRect(bx, ly - 8, bw, 7);
+    ctx.fillStyle = INK.warn;
+    ctx.fillRect(bx, ly - 8, bw * Math.min(1, k * 2), 7);
+    text(ctx, fill(T.pct, Math.round(k * 100)), rx + rw, ly, { size: 11.5, bold: true, color: INK.soft, align: "right" });
+    boxes.push({ x: rx, y: ly - 13, w: rw, h: 17, act: null, tip: [T.skills[t][0], T.skills[t][1]] });
+  }
+  ly += 23;
+  // Burada bekleyenler.
+  const here = (owner ? game.civs[owner].officers ?? [] : []).filter((o) => o.at === id);
+  text(ctx, T.officersWaiting, rx, ly, { bold: true, size: 12.5 });
+  if (!here.length) text(ctx, T.officersNone, rx + rw, ly, { italic: true, size: 11.5, color: INK.faint, align: "right" });
+  for (const o of here.slice(0, 2)) {
+    ly += 17;
+    const sw = text(ctx, "★".repeat(o.level), rx + 6, ly, { size: 11, bold: true, color: INK.warn });
+    fit(ctx, `${o.name} · ${o.traits.map((t) => T.skills[t][0]).join(", ")}`, rx + 10 + sw, ly, rw - 14 - sw, { size: 12, bold: true });
+    boxes.push({ x: rx, y: ly - 13, w: rw, h: 17, act: null, tip: [o.name, ...o.traits.map((t) => `${T.skills[t][0]}: ${T.skills[t][1]}`), T.officerWaitTip] });
+  }
 }
 
 /** Sadakat: değer, bu turki değişim, çubuk, Oyunlar düğmesi. */
@@ -930,6 +986,7 @@ function nowFx(game, id, what, T) {
     case "market": return fill(T.fxMoneyPct, Math.round(pl.market * N.buildings.market * 100));
     case "school": return fill(T.fxScience, pl.school * N.buildings.school);
     case "baths": return fill(T.fxGrowth, Math.round(pl.baths * N.buildings.baths * 100));
+    case "academy": return `★ %${Math.round(chanceOf(game, id) * 1000) / 10}`;
     default: return "";
   }
 }
@@ -1049,6 +1106,7 @@ function effect(game, id, what, T) {
   if (what === "market") return fill(T.marketFx, Math.round(N.buildings.market * 100));
   if (what === "school") return fill(T.schoolFx, N.buildings.school);
   if (what === "baths") return fill(T.bathsFx, Math.round(N.buildings.baths * 100));
+  if (what === "academy") return fill(T.academyFx, Math.round(N.officers.academy * 1000) / 10);
   if (what === "farms") return fill(T.farmsFx, r1(N.wheatPerFarm * castle * trait(c, "wheat")));
   if (what === "industry") return fill(T.industryFx, r1(castle * trait(c, "weapons"))) + (pl.industry + 1 === 3 ? " · " + T.industrySiege : "");
   if (what === "fishery") return fill(T.fisheryFx, r1(N.port.fishPerLevel * castle * trait(c, "fish")));
@@ -1130,6 +1188,15 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
     fit(ctx, `${fill(T.general, g.name)} · ${fill(T.rank, g.level)}`, x + sw + 6, ly, A - sw - 6, { size: 14, bold: true });
     if (g.traits.length) { ly += 18; fit(ctx, g.traits.map((t) => T.skills[t][0] + " (" + T.skills[t][1] + ")").join(", "), x, ly, A, { size: 12, italic: true, color: INK.soft }); }
     ly += 24;
+  } else if (mine && officerFor(game, a)) {
+    // Şehirde yetişip bekleyen komutan (bölüm 14b): orduya en uygunu, bedava; ötekiler ipucunda.
+    const o = officerFor(game, a), others = game.civs[a.owner].officers.filter((x) => x !== o);
+    const skills = o.traits.map((t) => T.skills[t][0]).join(", ");
+    const b = { x, y: ly - 18, w: A, h: 30, label: "", main: true, act: { do: "appoint", army: a.id, officer: o.id },
+      tip: [fill(T.appointOfficer, o.name), fill(T.tipAppointOfficer, o.name, placeName(o.from, ui.lang)), ...o.traits.map((t) => `${T.skills[t][0]}: ${T.skills[t][1]}`), others.length ? fill(T.officersElse, others.map((x) => x.name).join(", ")) : null] };
+    button(ctx, boxes, b);
+    fit(ctx, `${"★".repeat(o.level)} ${fill(T.appointOfficer, o.name)} · ${skills}`, b.x + 8, b.y + 20, b.w - 16, { bold: true, size: 12.5, color: CREAM });
+    ly += 30;
   } else if (mine) {
     // "General ata" ve fiyatı: yazı + para simgesi ortada.
     const ai = appointInfo(game, a.id);
@@ -2123,6 +2190,7 @@ export function eventLines(game, lang) {
     else if (e.type === "broke") out.push([fill(T.evBroke, name(e.by), name(e.with)), mine ? "bad" : null]);
     else if (e.type === "famine" && e.civ === me) out.push([fill(T.evFamine, e.lost), "bad"]);
     else if (e.type === "built" && e.civ === me) out.push([fill(T.evBuilt, placeName(e.place, lang), T[e.what], e.level), "good"]);
+    else if (e.type === "officer" && e.civ === me) out.push([fill(T.evOfficer, placeName(e.place, lang), `${"★".repeat(e.level)} ${e.name}`, e.traits.map((t) => T.skills[t][0]).join(", ")), "good"]);
     else if (e.type === "battle" && mine && e.field && e.bandits && e.won) out.push([fill(T.evBandits, name(e.attacker), placeName(e.place, lang)), "good"]);
     else if (e.type === "battle" && mine && e.field) {
       const [w, l] = e.won ? [e.attacker, e.defender] : [e.defender, e.attacker];

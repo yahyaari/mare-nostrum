@@ -424,7 +424,7 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
   Alp Er Tunga...
 - Savaş kazanınca +3, kaybettiği ama hayatta kaldığı savunmada +1 tecrübe. Seviye 1-5
   (3, 7, 12, 18 tecrübede). **Her seviye ordunun gücüne +%6.**
-- **2. ve 4. seviyede bir yetenek:**
+- **2. ve 4. seviyede bir yetenek** (en çok üç; şehirde yetişen komutan yeteneğiyle doğar, 14b):
 
 | Yetenek | Etkisi |
 |---|---|
@@ -440,6 +440,46 @@ Bilgisayarlar aynı olayları yaşar ve kendi kararını verir.
 - İki ordu birleşirse tecrübeli general komutayı alır; bölünen ordunun yeni yarısı generalsiz.
 - Bilgisayar 80+ askerlik ordularına parası varsa general atar.
 - Saldırı tahmini generalleri hesaba katar (iki taraf için de).
+
+### 14b. Şehirde yetişen komutanlar
+
+Kullanıcı 27.10: "komutanları şehirlerde eğitebilelim, üniversite, tapınak gibi binalarla; komutanlar kendileri
+oluşsun ama rastgele, şehrin özelliklerine göre; okçulara artı, süvarilere artı gibi özellikler çıkabilsin - dengeli
+bir şey bul".
+
+- **Kendiliğinden yetişirler:** 3. turdan sonra her şehirde her tur küçük bir ihtimalle bir komutan yetişir: %0.4 +
+  şehir seviyesi başına %0.3 + okul başına %0.4 + **akademi** başına %2.5 (kalede x0.6). Komutan şehrinde bekler,
+  beklerken o şehri savunur (savunmadaki en iyi general sayılır), bir ordunun kartından **bedava** atanır. Para
+  karşılığı general (30 para, yeteneksiz) eskisi gibi var.
+- **Tavan:** bir medeniyetin komutanı (ordudakiler ve bekleyenler) 1 + her 3 yer için 1'i geçmez; 3. seviye bir
+  akademi varsa +1; en çok 7. Ölen komutanın yerine yenisi yetişir.
+- **Akademi** (yeni bina, şehir kartının yeni **Komutanlar** sekmesinde; Demir İşleme ister, şehir seviyesine kadar):
+  her seviye ihtimale +%2.5; 3. seviyeden sonra komutan 2. rütbeden, 5. seviyede 3. rütbeden başlar; 4. seviyeden
+  sonra iki yetenekle yetişir.
+- **Yeteneği şehrin özelliğinden** (ağırlıklı rastgele; sekmede en olası üçü yüzdesiyle görünür):
+
+| Şehrin özelliği | Yatkın olduğu yetenek |
+|---|---|
+| Çevresi ormanlık (ağaç verisi); okçusu güçlü millet | Okçu ustası (ok yağmuru x1.5) |
+| Açık ova (orman da dağ da yok); kışla 3; atlısı güçlü millet | Süvari ustası (atlılar x1.2) - yeni |
+| Büyük kışla; piyadesi güçlü millet | Piyade ustası (piyade x1.12) - yeni |
+| Tapınak | İlham veren (kazanınca dörtte bir az kayıp; taktik savaşta +15 moral) - yeni |
+| Okul, akademi | Taktisyen (güç x1.1) |
+| Pazar, büyük tarla | İaşeci (ordu yarı yer) |
+| Sanayi 3+ | Kuşatma ustası |
+| Kale, dağlık çevre | Sert (+4 sadakat) |
+| Yol kavşağı (3+ yol) | Hızlı |
+| Tersane (yalnız liman) | Amiral (filo x1.25) - yeni |
+
+- Yeni yetenekler savaşta seviye atlarken de gelebilir. Savaş önizlemesi süvari ve piyade ustasını ayrı satırda
+  gösterir.
+- Ordu kartında **Ata: ad · yetenek** düğmesi: bekleyenler arasından orduya en uygunu (atlısı çok orduya süvari
+  ustası); ötekiler ipucunda. Generalli ordu çıkarırken de önce bekleyen komutan atanır.
+- Şehri düşen komutan başkente kaçar (yeri kalmadıysa ölür). Komutanın zarı kendi sayacından (`state.orng`):
+  yetişsin yetişmesin dünyanın zarları değişmez.
+- Bilgisayar akademiyi az yapar (başkentte, her 6 yer için bir tane daha, büyük şehirde); bekleyen komutanı 40+
+  askerlik ordusuna atar. Kayıt 20.
+- Tur haberi: "Capua şehrinde yeni bir komutan yetişti: ★★ Marcellus - Süvari ustası".
 
 ## 15. Donanma
 

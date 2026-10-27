@@ -156,6 +156,12 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     adım, kılıç kalkan sesleri; bitiş ekranı aşağıdan yavaşça gelsin"): kurallar.md 29d. view/tactics.js `INTRO`,
     `introCamera`, `clouds`, `introTitle`, `endPanel`; sound.js `battleOpen`, `charge`, `tramp`, `hooves`, `melee`,
     `battleEnd`; main.js `battleSounds`, `skipIntro`, `beginBattle`; araç kapısında `MareNostrum.battle(o)`.
+30. **Şehirde yetişen komutanlar** (bu adım; kullanıcı: "komutanları şehirlerde eğitelim; şehrin özelliklerine göre
+    rastgele oluşsunlar, okçulara, süvarilere artı gibi"): kurallar.md 14b. generals.js `features`, `leanings`, `chanceOf`,
+    `capOf`, `raiseOfficers` (kendi zarı `state.orng`), `officerFor`, `appoint(state, army, officer)`; yeni yetenekler
+    süvari / piyade ustası, ilham veren, amiral (combat.js); akademi (Komutanlar sekmesi, ui.js `officersTab`). Kayıt 20.
+    Denge (70 oyun): ilk düşüş 59, ayakta 339 (önce 58 / 347). Kullanıcı ayrıca istedi (sırada): sahada komutan, takviye,
+    medeniyete özgü dizilişler, hava ve gün saati, bilgisayarın biriken parası.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

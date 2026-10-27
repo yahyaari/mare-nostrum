@@ -15,7 +15,7 @@ import {
   VERSION, aliveHumans, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, holdGames, humansOf, merge, men, migrate, muster, newGame, placesOf, recruit, startWonder, station, upgrade,
 } from "./rules/state.js";
 import { ownerOf, resolve as answer } from "./rules/events.js";
-import { appoint } from "./rules/generals.js";
+import { appoint, officerFor } from "./rules/generals.js";
 import { accept as acceptMission, check as checkMissions, decline as declineMission } from "./rules/missions.js";
 import { blockaded } from "./rules/state.js";
 import { veteranRank } from "./rules/combat.js";
@@ -1000,7 +1000,7 @@ function dispatch(act) {
       break;
     }
     case "appoint": {
-      const g = appoint(game, act.army);
+      const g = appoint(game, act.army, act.officer ?? null);
       if (g) {
         sound.horn(true);
         const a = armyById(game, act.army);
@@ -1097,7 +1097,8 @@ function dispatch(act) {
       if (!a) break;
       coachDone("form");
       sound.muster();
-      const g = act.general ? appoint(game, a.id) : null;
+      // Generalli çıkış: bekleyen bir komutan varsa o (bedava), yoksa parayla.
+      const g = act.general ? appoint(game, a.id, officerFor(game, a)?.id ?? null) : null;
       if (g) anim.rise(a.at, fill(T().general, g.name), INK.warn);
       ui.cards = null;
       ui.sel = { kind: "army", id: a.id };

@@ -60,7 +60,9 @@ export function fight(att, def, walls, luck = [1, 1]) {
   const fighters = (u) => men(u) - u.siege;
   const attWins = fighters(d) === 0 ? fighters(a) > 0 : attPow > defPow;
   const [win, losePow, winPow] = attWins ? [a, defPow, attPow] : [d, attPow, defPow];
-  const toll = winPow > 0 ? Math.round(men(win) * (losePow / winPow) ** 2 * N.winnerLoss) : 0;
+  // İlham veren general: kazanan ordusu dağılmaz, daha az kaybeder.
+  const brave = has((attWins ? att : def).gen, "inspiring") ? N.officers.inspiring : 1;
+  const toll = winPow > 0 ? Math.round(men(win) * (losePow / winPow) ** 2 * N.winnerLoss * brave) : 0;
   lose(win, toll);
   for (const k of UNITS) (attWins ? d : a)[k] = 0;
 
@@ -74,8 +76,10 @@ export function fight(att, def, walls, luck = [1, 1]) {
  * `att`, `def`: { civ, ships, trireme, quinq, fort? }. Dönen: iki tarafın kalan gemileri.
  */
 export function naval(att, def, luck = [1, 1]) {
-  const a = fleetMight(att) * trait(att.civ, "navy") * tech(att, "navy") * luck[0];
-  const d = fleetMight(def) * trait(def.civ, "navy") * tech(def, "navy") * (def.fort ?? 1) * luck[1];
+  // Amiral general filosunu güçlendirir (bölüm 14b).
+  const adm = (s) => (has(s.gen, "admiral") ? N.officers.admiral : 1);
+  const a = fleetMight(att) * trait(att.civ, "navy") * tech(att, "navy") * adm(att) * luck[0];
+  const d = fleetMight(def) * trait(def.civ, "navy") * tech(def, "navy") * adm(def) * (def.fort ?? 1) * luck[1];
   const attWins = fleetCount(def) === 0 ? fleetCount(att) > 0 : a > d;
   const [win, losePow, winPow] = attWins ? [att, d, a] : [def, a, d];
   const left = pickShips(win);
@@ -131,8 +135,10 @@ const men = (u) => UNITS.reduce((n, k) => n + (u[k] ?? 0), 0);
 const tech = (s, k) => s.mods?.[k] ?? 1;
 const all = (s) => trait(s.civ, "all") * tech(s, "all");
 export const archMul = (s) => trait(s.civ, "arch") * tech(s, "arch") * all(s);
-export const cavMul = (s) => trait(s.civ, "cav") * tech(s, "cav") * all(s);
-export const infMul = (s, defending) => trait(s.civ, "inf") * tech(s, "inf") * all(s) * (defending ? trait(s.civ, "defInf") : 1);
+// Generalin yeteneği: süvari ustası atlıları, piyade ustası piyadeyi güçlendirir (bölüm 14b).
+const genMul = (s, t) => (has(s.gen, t) ? N.officers[t] : 1);
+export const cavMul = (s) => trait(s.civ, "cav") * tech(s, "cav") * all(s) * genMul(s, "cavalry");
+export const infMul = (s, defending) => trait(s.civ, "inf") * tech(s, "inf") * all(s) * (defending ? trait(s.civ, "defInf") : 1) * genMul(s, "infantry");
 // Özel birlik: dövüştüğü türün araştırması (lejyonere piyadeninki), milletin genel gücü.
 export const eliteMul = (s) => tech(s, uniqueOf(s.civ).as) * all(s);
 /** Özel birliğin adam başı göğüs göğüse gücü (saldırıda / savunmada). */
@@ -218,6 +224,9 @@ export function explain(att, def, walls) {
     if ((u.inf ?? 0) > 0) put(list, "techInf", tech(u, "inf"));
     if ((u.arch ?? 0) > 0) put(list, "techArch", tech(u, "arch"));
     if ((u.cav ?? 0) > 0) put(list, "techCav", tech(u, "cav"));
+    // Generalin yeteneği.
+    if ((u.inf ?? 0) > 0) put(list, "genInf", genMul(u, "infantry"));
+    if ((u.cav ?? 0) > 0) put(list, "genCav", genMul(u, "cavalry"));
   };
   put(A, "general", might(att.gen));
   put(A, "veteran", att.vet ?? 1);
