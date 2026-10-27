@@ -7,7 +7,7 @@
 
 ## NEREDE KALDIK (27.10 akşam) - önce bunu oku
 
-Son commit (34. madde), hepsi push'lu, **2424 test** geçiyor, kayıt sürümü **20**. Kullanıcı son durum için
+Son commit **bf0b56b**, hepsi push'lu, **2424 test** geçiyor, kayıt sürümü **20**. Kullanıcı son durum için
 "tamam şimdi çok güzel olmuş" dedi. Sırada: kullanıcı oynayıp söyleyecek.
 
 **Bu iki günün özü (ayrıntı aşağıdaki 10-27. maddelerde ve kurallar.md'de):**
@@ -171,9 +171,10 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     yarısı yetişsin diye `N.reinforce.part` 0.5. Dünya biraz daha kanlı: kullanıcı oynayıp söyleyecek.
 33. **Görselli bildirimler** (a665d78; kullanıcı: "akıncılar geldiğinde atlı adamlar çıksın, yazının arka planı görsel
     olsun, bütün bildirimlerde; görselleri sonra ben koyacağım"): kurallar.md 12d, Docs/gorseller.md (dosya adları), view/art.js
-    (, , , temsili sahneler), Tools/noticefilm.mjs.
-34. **Deniz savaşı sahada** (bu adım): kurallar.md 29h. rules/naval.js (, , , ),
-    view/naval.js, moves.js  ve strike'ta sahadaki sonuç, incoming.js denizde. Ayar: Tools/naval-cal.mjs %85.
+    (`artBox`, `pictureFrame`, `glassButton`, temsili sahneler), Tools/noticefilm.mjs.
+34. **Deniz savaşı sahada** (bf0b56b): kurallar.md 29h. rules/naval.js (`setupNaval`, `stepNaval`, `aiNaval`,
+    `navalOutcome`), view/naval.js, moves.js `navalSides` ve strike'ta sahadaki sonuç, incoming.js denizde. Ayar:
+    Tools/naval-cal.mjs %85.
     Kullanıcının bekleyenleri: savaş öncesi nutuk, zafer alayı, hırslı komutanlar, geç oyunda bilgisayarın uyuşması.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
