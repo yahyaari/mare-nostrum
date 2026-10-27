@@ -70,7 +70,9 @@ const ROWS = { inf: 5, arch: 4, cav: 4, siege: 2, elite: 5 };
 export function footprint(u) {
   const sp = SPACING[u.type] * (u.mounted ? 1.25 : 1);
   const n = Math.max(1, Math.ceil(u.men));
-  const cols = Math.max(1, Math.min(n, Math.round(u.cols ?? Math.ceil(n / Math.min(ROWS[u.type], n)))));
+  const base = Math.max(1, Math.min(n, Math.round(u.cols ?? Math.ceil(n / Math.min(ROWS[u.type], n)))));
+  // Dar yerde (geçit, köprü, surla kıyı arası) cephe geçici olarak daralır: birlik kola döner (squeeze).
+  const cols = u.march != null ? Math.max(1, Math.min(base, u.march)) : base;
   const rows = Math.ceil(n / cols);
   const w = cols * sp, d = rows * sp;
   return { w, d, r: Math.hypot(w, d) / 2, sp, rows, cols };
@@ -221,6 +223,43 @@ function deploy(b, side, g) {
 }
 
 const alive = (u) => !u.dead && !u.gone;
+
+/**
+ * Bir birliğin önündeki geçidin genişliği (kullanıcı 27.10: "dar geçitten okçularımın uzun hattı geçemiyor;
+ * haritanın daralıp kısalmasına göre kendi uzunluklarını ayarlayabilsinler"): yürüdüğü yöne dik, ortasından iki
+ * yana (`need`in yarısına kadar) su, ev, sur, saha kenarı ve - surun dışındaysa - şehrin kendisi; birkaç adım
+ * önünde de bakar. Dönen: ortalanmış serbest genişlik.
+ */
+function room(b, u, ang, need, reach = 4) {
+  const F = b.field, C = b.walls ? F.city : null, T = K();
+  const fx = Math.cos(ang), fy = Math.sin(ang), px = -fy, py = fx;
+  const blocked = (x, y) => {
+    if (x < 0.3 || y < 0.3 || x > T.w - 0.3 || y > T.h - 0.3 || !passable(F, x, y)) return true;
+    if (!C || gapAt(b, { x, y })) return false;
+    const pad = 0.4;
+    const near = x > C.x0 - pad && x < C.x1 + pad && y > C.y0 - pad && y < C.y1 + pad;
+    return u.inside ? !insideCity(C, { x, y }) : near;
+  };
+  let half = need / 2;
+  for (const ahead of [0, 2, 4]) {
+    // Yalnız gideceği yere bakar: hedefin ötesine ya da önü kapalıysa (sura dayanmış, kıyıda) daha ileriye değil.
+    if (ahead > reach || (ahead > 0 && blocked(u.x + fx * ahead, u.y + fy * ahead))) break;
+    for (const sgn of [-1, 1]) {
+      for (let d = 0.4; d <= half; d += 0.4) {
+        if (blocked(u.x + fx * ahead + px * sgn * d, u.y + fy * ahead + py * sgn * d)) { half = Math.min(half, d - 0.3); break; }
+      }
+    }
+  }
+  return Math.max(0, half * 2);
+}
+
+/** Dar yerde cepheyi daralt, genişleyince eski dizilişe aç (dövüşürken değişmez). */
+function squeeze(b, u, ang, reach) {
+  if (b.t - (u.roomAt ?? -9) < 0.25) return;
+  u.roomAt = b.t;
+  const full = footprint({ ...u, march: null }), r = room(b, u, ang, full.w + 1, reach);
+  u.march = r < full.w ? Math.max(1, Math.floor((r - 0.2) / full.sp)) : null;
+}
 const fighting = (u) => alive(u) && !u.routed && u.type !== "siege";
 const foes = (b, u) => b.units.filter((v) => v.side !== u.side && alive(v) && !v.routed);
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -243,7 +282,7 @@ export function command(b, ids, target) {
     if (target.unit) u.order = { unit: target.unit };
     else {
       u.order = { x: Math.max(1, Math.min(K().w - 1, target.x)), y: Math.max(1, Math.min(K().h - 1, target.y)), facing: target.facing ?? null };
-      if (target.cols) u.cols = Math.max(1, Math.min(Math.ceil(u.men), target.cols));
+      if (target.cols) { u.cols = Math.max(1, Math.min(Math.ceil(u.men), target.cols)); u.roomAt = -9; }
     }
     u.manual = true;
   }
@@ -604,6 +643,11 @@ export function step(b, dt) {
       } else goal = u.order;
     }
     u.wasMoving = false;
+    if (!u.engaged && !u.routed && u.type !== "siege" && (F.obstacles || b.walls)) {
+      const g2 = goal && u.path?.[0] ? u.path[0] : goal;
+      const moving = g2 && dist(u, g2) > 0.5;
+      squeeze(b, u, moving ? Math.atan2(g2.y - u.y, g2.x - u.x) : u.facing, moving ? Math.min(4, dist(u, goal)) : 0);
+    }
     if (goal) {
       const d = dist(u, goal);
       // Arazi: engel varsa yol (köprüyü bulur), ormanda ve yokuşta yavaş.

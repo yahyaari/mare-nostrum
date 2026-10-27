@@ -1200,6 +1200,39 @@ section("Taktik savaş: tavır ve dizilme (bölüm 29)");
   const WZ = TC2.deployZone(wz, "def"), WC2 = wz.field.city;
   check("surlu şehirde savunanın bölgesi şehrin içi", WZ.x0 > WC2.x0 && WZ.x1 < WC2.x1 && WZ.y0 > WC2.y0 && WZ.y1 < WC2.y1);
   TC2.placeLine(zb, zb.units.filter((u) => u.side === "att").map((u) => u.id), { x: 25, y: 10 }, { x: 25, y: 50 });
+  // Dar geçit (kullanıcı 27.10: "okçularımın uzun hattı dar geçitten geçemiyor; daralıp kısalmasına göre uzunluklarını
+  // ayarlasınlar"): şehrin kuzeyindeki koridorda geniş hat daralır, geçer.
+  const cb = TC2.setupBattle({ civ: "rome", inf: 40, arch: 40 }, { civ: "gaul", inf: 10 }, "city", 3);
+  const CC = cb.field.city, ca = cb.units.find((u) => u.side === "att" && u.type === "arch");
+  for (const u of cb.units.filter((v) => v.side === "def")) Object.assign(u, { x: CC.x1 - 4, y: CC.y1 - 4 });
+  ca.cols = 40;
+  Object.assign(ca, { x: CC.x0 - 10, y: CC.y0 - 7, facing: 0 });
+  TC2.command(cb, [ca.id], { x: CC.x1 + 6, y: CC.y0 - 7 });
+  let narrowest = 99;
+  for (let i = 0; i < 300; i++) { TC2.step(cb, 0.1); narrowest = Math.min(narrowest, TC2.footprint(ca).cols); }
+  check("geniş hat dar koridorda daralıp geçer", ca.x > CC.x1 && narrowest < 20, `${ca.x.toFixed(1)} cephe ${narrowest}`);
+  // Köprüde kola döner, karşıda yeniden açılır.
+  const FLq = await import("../src/rules/field.js");
+  const Fq = FLq.makeField({ at: { x: POS.bibracte.x - 0.75, y: POS.bibracte.y + 0.25 }, dir: 0, place: null, seed: 9 });
+  const brq = Fq.bridges[0], qc = Math.cos(brq.a), qs = Math.sin(brq.a);
+  const qb = TC2.setupBattle({ civ: "rome", arch: 20 }, { civ: "gaul", inf: 10 }, null, 3, Fq);
+  const qa = qb.units.find((u) => u.side === "att");
+  for (const u of qb.units.filter((v) => v.side === "def")) Object.assign(u, { x: 95, y: 55 });
+  qa.cols = 20;
+  Object.assign(qa, { x: brq.x - qc * 9, y: brq.y - qs * 9, facing: brq.a });
+  TC2.command(qb, [qa.id], { x: brq.x + qc * 22, y: brq.y + qs * 22 });
+  let onBridge = 99;
+  for (let i = 0; i < 120; i++) { TC2.step(qb, 0.1); if (Math.hypot(qa.x - brq.x, qa.y - brq.y) < 2) onBridge = Math.min(onBridge, TC2.footprint(qa).cols); }
+  check("köprüde kola döner, karşıda yeniden açılır", onBridge <= 3 && TC2.footprint(qa).cols === 20, `köprüde ${onBridge}, sonra ${TC2.footprint(qa).cols}`);
+  // Dost birlikler birbirinin içinden geçer: okçu hattının içinden piyade yürür.
+  const pb = TC2.setupBattle({ civ: "rome", inf: 40, arch: 30 }, { civ: "gaul", inf: 10 }, null, 3);
+  const [pi, pa] = [pb.units.find((u) => u.side === "att" && u.type === "inf"), pb.units.find((u) => u.side === "att" && u.type === "arch")];
+  for (const u of pb.units.filter((v) => v.side === "def")) Object.assign(u, { x: 95, y: 55 });
+  Object.assign(pa, { x: 30, y: 30, facing: 0, cols: 30 });
+  Object.assign(pi, { x: 22, y: 30, facing: 0 });
+  TC2.command(pb, [pi.id], { x: 40, y: 30 });
+  for (let i = 0; i < 60; i++) TC2.step(pb, 0.1);
+  check("piyade okçu hattının içinden geçer", pi.x > 39 && Math.abs(pa.x - 30) < 0.01);
   check("dizilirken hat çizimi birlikleri hatta ışınlar", zb.units.filter((u) => u.side === "att").every((u) => Math.abs(u.x - 25) < 6 && u.order == null));
 }
 

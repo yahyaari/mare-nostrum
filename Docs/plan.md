@@ -107,9 +107,10 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     geçsinler; surdan tek sıra tırmansınlar; arı kovanı gibi titriyorlar"): kurallar.md 29a.
 24. **Surla çevrili şehir** (686c7c7; "şehirlerin surlarla etrafı çevrili"): kurallar.md 29a sonu, `field.js addCity`.
     Dört yanı surlu şehir, kuleler, kapılar, sokaklar, evler, kale; bilgisayar şehri dört yandan sarar.
-25. **Dizilme, tavır, sana saldırılar** (bu adım): kurallar.md 29c, `src/rules/incoming.js`. Dizilme bölgeleri ve
+25. **Dizilme, tavır, sana saldırılar** (b2ab149): kurallar.md 29c, `src/rules/incoming.js`. Dizilme bölgeleri ve
     ışınlama; zayıf savunan tepede savunur; bilgisayarın sana saldırısında Sonucu gör / Savaş. Test oyuncusu (playtest)
     artık Asker bas sekmesini açıyor (asker basma ayrı sekmeye geçince hiç asker basmıyordu).
+26. **Öğretici her yeni oyunda** (94669f6) ve **dar geçitte kola dönme** (bu adım): kurallar.md 29a "Dar geçit".
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

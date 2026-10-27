@@ -1126,6 +1126,13 @@ arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar".
   yürür (birlik dönerken ya da kayıp verirken saflar akar). Dövüşte ön 3 sıra değdiği düşmanın kenarına yürür,
   iki taraf cephede karışır; cephesi taşan uçlar düşmanın yanına dolanır, arkadakiler ileri sıkışır. Titreme
   yok. Ölen asker düşmana en yakın olandan eksilir, yerde iz kalır.
+- **Dar geçit** (kullanıcı 27.10: "okçularımı tek sıra uzun hat yaptım, dar geçitten geçemiyorlar; haritanın daralıp
+  kısalmasına göre kendi uzunluklarını ayarlasınlar"): yürüyen (ya da duran, dövüşmeyen) birlik gittiği yöne dik, iki
+  yanındaki serbest genişliğe bakar - su, ev, sur, saha kenarı, surun dışındaysa şehrin kendisi; 2 ve 4 birim önüne de
+  (hedefin ötesine ve önü kapalıysa ileriye değil). Hattı sığmıyorsa cephesi geçici olarak daralır, kola döner; yer
+  açılınca eski dizilişine açılır (dövüşürken değişmez, kuşatma makinesi değişmez). Köprüde 20'lik okçu hattı 2'lik
+  kol olur, karşıda yeniden 20; şehrin kuzeyindeki koridorda 25 birimlik hat geçer. (Önce sur kuralı geniş birliği tüm
+  genişliğiyle surdan uzak tuttuğu için koridorun köşesinde takılıyordu.) Dost birlikler zaten birbirinin içinden geçer.
 - **Geniş hat sarar:** düşmandan geniş cephenin taşan payı önden vururken de x0.8 kadar yandan vurmuş sayılır.
 - **Sur:** dışarıdakiler surun önünde, içeridekiler ardında. Sura dayanan birlik **merdivenden tek sıra
   tırmanır**: saniyede 3 asker içeride ayrı bir birliğe (köprübaşı) geçer - kaç kişi olursa olsun; yan yana
