@@ -7,7 +7,7 @@
 
 ## NEREDE KALDIK (27.10 akşam) - önce bunu oku
 
-Son commit **ca6f0b7**, hepsi push'lu, **2351 test** geçiyor, kayıt sürümü **19**. Kullanıcı son durum için
+Son commit **2df6e9e**, hepsi push'lu, **2351 test** geçiyor, kayıt sürümü **19**. Kullanıcı son durum için
 "tamam şimdi çok güzel olmuş" dedi. Sırada: kullanıcı oynayıp söyleyecek.
 
 **Bu iki günün özü (ayrıntı aşağıdaki 10-27. maddelerde ve kurallar.md'de):**
@@ -152,7 +152,7 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     (engelden uzaklık + bölgeler, gedikte yenilenir: `F.rev`), `onMain`, `nearestOpen`, `nearestMain`, `lineFree`.
     tactics.js: köşeye sürtünen kayar, suya verilen emir kıyıya, dizilirken yalnız kendi tarafı açılır (savunanın
     açılması saldıranı suya itiyordu), cebe dizilen ana karaya; daralmış birlik dururken de ortaya kayar.
-29. **Savaşın girişi, sesleri, bitişi** (bu commit; kullanıcı: "savaş alanı bulutlardan açılsın, kamera oyunu, borozan,
+29. **Savaşın girişi, sesleri, bitişi** (2df6e9e; kullanıcı: "savaş alanı bulutlardan açılsın, kamera oyunu, borozan,
     adım, kılıç kalkan sesleri; bitiş ekranı aşağıdan yavaşça gelsin"): kurallar.md 29d. view/tactics.js `INTRO`,
     `introCamera`, `clouds`, `introTitle`, `endPanel`; sound.js `battleOpen`, `charge`, `tramp`, `hooves`, `melee`,
     `battleEnd`; main.js `battleSounds`, `skipIntro`, `beginBattle`; araç kapısında `MareNostrum.battle(o)`.
