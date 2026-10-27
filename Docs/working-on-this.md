@@ -66,6 +66,7 @@ node Tools/tutorial.mjs tr rome                     öğreticiyi tarayıcıda ge
 node Tools/experiment.mjs '{"victory.wonders":99}' 70   denge deneyi (sayıları değiştirerek 70 oyun)
 node Tools/tactics-cal.mjs                          taktik savaş otomatik savaşla tutarlı mı (açık / surlu)
 node Tools/tactics-stuck.mjs                        taktik savaşta takılan birlik var mı (engelli sahalar)
+node Tools/naval-cal.mjs                            deniz savaşı sahada otomatik deniz savaşıyla tutarlı mı
 node Tools/geo.mjs                                  kıyıları Natural Earth'ten yeniden üret
 node Tools/route.mjs                                denize giren yol için ara nokta öner
 ```

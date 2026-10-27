@@ -343,6 +343,32 @@ export function weather(kind) {
   else noise({ seconds: 1.4, loud: 0.03, type: "bandpass", from: 420, to: 600, q: 1.5, attack: 0.5 });
 }
 
+/** Kürekler: suya dalan küreklerin şıpırtısı (gemi sayısı kadar dolgun). */
+export function oars(n, pan = 0) {
+  const out = panned(pan);
+  if (!out) return;
+  const loud = Math.min(0.07, 0.025 + 0.008 * n);
+  noise({ seconds: 0.35, loud, type: "bandpass", from: 900, to: 400, q: 0.8, attack: 0.05, out });
+  noise({ seconds: 0.25, loud: loud * 0.6, type: "bandpass", from: 1400, to: 700, q: 1, delay: 0.12, attack: 0.03, out });
+}
+
+/** Mahmuz çarptı: ağır bir gümleme, kıymıkların çatırtısı. */
+export function ram(pan = 0) {
+  const out = panned(pan);
+  if (!out) return;
+  tone({ from: 90, to: 45, seconds: 0.45, kind: "sine", loud: 0.16, out });
+  noise({ seconds: 0.3, loud: 0.12, from: 1800, to: 300, attack: 0.002, out });
+  for (let i = 0; i < 5; i++) noise({ seconds: 0.05, loud: 0.05, type: "highpass", from: 2500, to: 1800, delay: 0.05 + i * 0.04 + Math.random() * 0.03, attack: 0.001, out });
+}
+
+/** Gemi batıyor: uzun, alçak bir gıcırtı ve köpüren su. */
+export function sink(pan = 0) {
+  const out = panned(pan);
+  if (!out) return;
+  tone({ from: 160, to: 70, seconds: 1.4, kind: "sawtooth", loud: 0.035, cut: 500, out });
+  noise({ seconds: 1.8, loud: 0.06, from: 700, to: 150, attack: 0.3, delay: 0.3, out });
+}
+
 /** Bir general düştü: uzaktan, alçak ve inen iki uzun boru notası. */
 export function genFell(pan = 0) {
   if (!ctx) return;

@@ -2052,7 +2052,8 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   text(ctx, b && sea ? T.seaFieldHint : fill(T.expect, e.lost, e.killed), r.x + r.w / 2, y, { size: 13, italic: true, color: b && sea ? INK.warn : INK.soft, align: "center" });
   hint.forEach((l, i) => text(ctx, l, x, y + 22 + i * 17, { size: 12, italic: true, color: INK.warn }));
   // Düğmeler: Sonucu gör (otomatik savaş), Savaş (taktik savaş; yalnız karada ve savunan varsa), Kuşat, Vazgeç.
-  const tactical = !sea && men(theirs) > 0;
+  // Taktik savaş: karada savunan varsa; denizde filo filoya (deniz savaşı sahada, bölüm 29h).
+  const tactical = (!sea && men(theirs) > 0) || (sea && !!b && fleetOf(b) > 0 && fleetOf(a) > 0);
   const btns = [
     { label: tactical ? T.seeResult : T.attack, main: true, act: { do: "attack" }, tip: [T.seeResult, T.seeResultTip] },
     ...(tactical ? [{ label: T.fightIt, main: true, act: { do: "battleStart" }, tip: [T.fightIt, T.fightItTip] }] : []),

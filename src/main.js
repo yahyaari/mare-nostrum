@@ -8,7 +8,7 @@ import { CIVS, PLACES } from "./data/world.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace, proposeTrade } from "./rules/diplomacy.js";
 import { roadBetween } from "./rules/graph.js";
 import {
-  access, attack, canAttack, canStrike, defenders, fieldSides, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, sides, strike, turnsFor, wallsOf,
+  access, attack, canAttack, canStrike, defenders, fieldSides, navalSides, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, sides, strike, turnsFor, wallsOf,
 } from "./rules/moves.js";
 import { PLACE_CELL, POS, cellOf, centre, dist, isLand, pathCost, regionOf, search, smooth, stepCost } from "./rules/map.js";
 import {
@@ -40,6 +40,7 @@ import { makeField } from "./rules/field.js";
 import { aiOrders, useAbility, command as tacCommand, deployZone, merge as tacMerge, orderLine, outcome, placeAt as tacPlace, placeLine, planLine, reshape, setupBattle, split as tacSplit, step as stepBattle } from "./rules/tactics.js";
 import { incomingFor, incomingSides, resolveIncoming } from "./rules/incoming.js";
 import { drawTactics, toField, unitAt } from "./view/tactics.js";
+import { aiNaval, navalCommand, navalOutcome, setupNaval, shipAt, stepNaval } from "./rules/naval.js";
 import { isWinter, seasonOf, yearOf } from "./rules/season.js";
 import { drawMap, drawOverlay, placeAt, placeOnScreen, reach } from "./view/draw.js";
 import { INK, civName, colorOf, pointer } from "./view/kit.js";
@@ -213,11 +214,11 @@ function battleFrame() {
     while (left > 1e-6 && !b.over) {
       const d = Math.min(0.05, left);
       if (b.t >= B.aiAt) {
-        aiOrders(b, B.foe);
-        if (B.auto) aiOrders(b, B.me, true);
+        (b.naval ? aiNaval : aiOrders)(b, B.foe);
+        if (B.auto) (b.naval ? aiNaval : aiOrders)(b, B.me, true);
         B.aiAt = b.t + 0.6;
       }
-      stepBattle(b, d);
+      (b.naval ? stepNaval : stepBattle)(b, d);
       left -= d;
     }
     // Sesler: ok yağmuru ve çarpışma (arada bir), sonunda boru ve zafer ya da yenilgi.
@@ -238,6 +239,7 @@ function battleFrame() {
  * soldan ya da sağdan. Hızlandırılınca biraz sıklaşır.
  */
 function battleSounds(B, now) {
+  if (B.b.naval) return navalSounds(B, now);
   const live = B.b.units.filter((u) => !u.dead && !u.gone && !u.routed);
   const men = (us) => us.reduce((s, u) => s + u.men, 0);
   const pan = (us) => (us.reduce((s, u) => s + u.x * u.men, 0) / Math.max(1, men(us)) / N.tactics.w) * 1.6 - 0.8;
@@ -256,6 +258,22 @@ function battleSounds(B, now) {
   for (const e of B.b.fx) if (e.kind === "reinforce" && !e.heard) { e.heard = true; sound.charge(e.side === "att" ? -0.8 : 0.8); }
 }
 
+/** Deniz savaşının sesleri: yürüyen gemilerin kürekleri, çarpma, gemiye çıkanların dövüşü, batan gemi. */
+function navalSounds(B, now) {
+  const live = B.b.units.filter((u) => !u.dead && !u.gone && !u.taken);
+  const pan = (us) => (us.reduce((s, u) => s + u.x, 0) / Math.max(1, us.length) / N.tactics.w) * 1.6 - 0.8;
+  const rowing = live.filter((u) => u.v > 1), boarding = live.filter((u) => u.grapple);
+  if (rowing.length && now >= (B.oarAt ?? 0)) { B.oarAt = now + 700 / Math.sqrt(B.speed); sound.oars(rowing.length, pan(rowing)); }
+  if (boarding.length && now >= (B.meleeAt ?? 0)) { B.meleeAt = now + (220 + Math.random() * 260) / Math.sqrt(B.speed); sound.melee(boarding.reduce((s, u) => s + u.men, 0), pan(boarding)); }
+  for (const e of B.b.fx) {
+    if (e.heard) continue;
+    e.heard = true;
+    const p = (e.x / N.tactics.w) * 1.6 - 0.8;
+    if (e.kind === "ram") sound.ram(p);
+    else if (e.kind === "sink") sound.sink(p);
+  }
+}
+
 /** Girişte tıklamak ya da bir tuş girişi geçer (kamera, bulutlar, bantlar yerine). Geçtiyse true. */
 function skipIntro() {
   if (!ui.battle?.intro) return false;
@@ -272,6 +290,7 @@ function beginBattle(B) {
 /** Taktik savaşta bir birliğin adı ("Lejyoner", "Okçu"). */
 function unitLabel(u, owner) {
   if (u.type === "gen") return `★ ${u.name ?? T().tacGeneral}`;
+  if (u.ship) return T().shipNames[u.type];
   const s = u.type === "elite" ? T().eliteOf[owner]?.[0] ?? T().elite : T()[u.type];
   return s[0].toLocaleUpperCase() + s.slice(1);
 }
@@ -289,7 +308,7 @@ function battleClick(p, add) {
       return;
     }
   }
-  const B = ui.battle, fp = toField(cam, p.x, p.y), u = unitAt(B.b, fp, B.me);
+  const B = ui.battle, fp = toField(cam, p.x, p.y), u = (B.b.naval ? shipAt : unitAt)(B.b, fp, B.me);
   if (u && !u.routed) {
     if (add) { if (B.sel.has(u.id)) B.sel.delete(u.id); else B.sel.add(u.id); } else B.sel = new Set([u.id]);
   } else if (B.deploy && B.sel.size && inZone(B, fp)) { tacPlace(B.b, [...B.sel], fp); sound.click(); }
@@ -324,11 +343,12 @@ function battleOrder(p) {
     if (inZone(B, fp)) { tacPlace(b, sel.map((u) => u.id), fp); sound.click(); }
     return;
   }
-  const foe = unitAt(b, fp, B.foe);
-  if (foe) tacCommand(b, sel.map((u) => u.id), { unit: foe.id });
+  const foe = (b.naval ? shipAt : unitAt)(b, fp, B.foe);
+  const order = b.naval ? navalCommand : tacCommand;
+  if (foe) order(b, sel.map((u) => u.id), { unit: foe.id });
   else {
     const cx = sel.reduce((n, u) => n + u.x, 0) / sel.length, cy = sel.reduce((n, u) => n + u.y, 0) / sel.length;
-    for (const u of sel) tacCommand(b, [u.id], { x: fp.x + (u.x - cx), y: fp.y + (u.y - cy) });
+    for (const u of sel) order(b, [u.id], { x: fp.x + (u.x - cx), y: fp.y + (u.y - cy) });
   }
   sound.click();
 }
@@ -338,10 +358,11 @@ function battleOrder(p) {
  * owners, names, title, finish(res) -> savaş olayı }. Savaş duraklatılmış, dizilme aşamasında başlar.
  */
 function openBattle(o) {
-  const field = makeField(o.field);
+  // Deniz savaşı (bölüm 29h): saha deniz, birlikler gemiler, dizilme yok.
+  const b = o.naval ? setupNaval(o.att, o.def, o.field.seed) : setupBattle(o.att, o.def, o.walls, o.field.seed, makeField(o.field));
   ui.battle = {
-    b: setupBattle(o.att, o.def, o.walls, o.field.seed, field),
-    me: o.me, foe: o.me === "att" ? "def" : "att", deploy: true, finish: o.finish, army: o.army ?? null,
+    b,
+    me: o.me, foe: o.me === "att" ? "def" : "att", deploy: !o.naval, finish: o.finish, army: o.army ?? null,
     sel: new Set(), speed: 1, paused: true, auto: false, last: performance.now(), aiAt: 0, drag: null,
     owners: o.owners, names: o.names, title: o.title,
     // Giriş: saha bulutlardan açılır, kamera dolaşır (view/tactics.js).
@@ -1216,6 +1237,17 @@ function dispatch(act) {
       coachDone("attack");
       coachDone("preview");
       if (m.target) coachDone("strike");
+      // Denizde filo filoya: deniz savaşı sahada (bölüm 29h).
+      if (t && !isLand(cellOf(t.x, t.y))) {
+        const ns = navalSides(game, a, t), np2 = nearestPlace(t), mm2 = { ...m };
+        openBattle({
+          naval: true, att: ns.att, def: ns.def, me: "att", field: { seed: ((game.turn * 7919 + a.id * 131) % 99991) + 1 },
+          owners: { att: me, def: t.owner }, names: { att: civName(me, ui.lang), def: armyName(t) },
+          title: fill(T().navalTitle, PLACES.find((p) => p.id === np2).name[ui.lang]),
+          finish: (res) => strike(game, mm2.army, mm2.target, null, res), army: mm2.army,
+        });
+        break;
+      }
       const sd = t ? fieldSides(game, a, t) : sides(game, a, me, m.id);
       const defOwner = t ? t.owner : game.places[m.id].owner;
       const np = t ? nearestPlace(t) : m.id;
@@ -1259,6 +1291,16 @@ function dispatch(act) {
         break;
       }
       const sd = incomingSides(game, it), a = sd.attacker;
+      if (sd.sea && sd.field) {
+        const np2 = nearestPlace(sd.target);
+        openBattle({
+          naval: true, att: sd.att, def: sd.def, me: "def", field: { seed: it.id * 977 + 13 },
+          owners: { att: a.owner, def: me }, names: { att: armyName(a), def: civName(me, ui.lang) },
+          title: fill(T().navalTitle, PLACES.find((p) => p.id === np2).name[ui.lang]),
+          finish: (res) => resolveIncoming(game, it, res),
+        });
+        break;
+      }
       const goal = sd.field ? { x: sd.target.x, y: sd.target.y } : POS[it.target];
       const np = sd.field ? nearestPlace(sd.target) : it.target;
       openBattle({
@@ -1327,7 +1369,7 @@ function dispatch(act) {
       // Savaş bitti: sonucu kuralların saldırısına ver, haritaya dön (sonuç şeridi orada).
       const B = ui.battle;
       if (!B?.b.over) break;
-      const res = outcome(B.b);
+      const res = B.b.naval ? navalOutcome(B.b) : outcome(B.b);
       ui.battle = null;
       ui.screen = "game";
       const [ev, trace] = traced(() => B.finish(res));
@@ -1736,7 +1778,7 @@ window.addEventListener("pointermove", (e) => {
       gesture.moved = Math.max(gesture.moved, Math.hypot(p.x - gesture.startX, p.y - gesture.startY));
       // Sol sürükleme: seçim kutusu. Sağ sürükleme: seçili birliklerin dizileceği hat (önizlemesiyle).
       if (gesture.moved > 6 && gesture.button === 0) ui.battle.drag = { x0: gesture.startX, y0: gesture.startY, x1: p.x, y1: p.y };
-      if (gesture.moved > 10 && gesture.button === 2 && ui.battle.sel.size) {
+      if (gesture.moved > 10 && gesture.button === 2 && ui.battle.sel.size && !ui.battle.b.naval) {
         const B = ui.battle;
         B.drawLine = { x0: gesture.startX, y0: gesture.startY, x1: p.x, y1: p.y };
         B.plan = planLine(B.b, [...B.sel], toField(cam, gesture.startX, gesture.startY), toField(cam, p.x, p.y));

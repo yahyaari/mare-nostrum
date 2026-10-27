@@ -1486,6 +1486,65 @@ section("Hava ve gün saati (bölüm 29g)");
   check("saldırının iki tarafı aynı havayı taşır", sd.att.weather && JSON.stringify(sd.att.weather) === JSON.stringify(sd.def.weather) && JSON.stringify(sd.att.weather) === JSON.stringify(WX.weatherAt(g, at)));
 }
 
+section("Deniz savaşı sahada (bölüm 29h)");
+{
+  // Kullanıcı 27.10 (önerilerden 4.): "deniz savaşları sahada - gemiler, mahmuzla çarpma, gemiye çıkma".
+  const NV = await import("../src/rules/naval.js"), MAP4 = await import("../src/rules/map.js");
+  const b = NV.setupNaval({ civ: "rome", ships: 2, trireme: 1, troops: { inf: 50, arch: 0 } }, { civ: "carthage", quinq: 1 }, 3);
+  const att = b.units.filter((u) => u.side === "att");
+  check("her gemi bir birlik, askerler taşıma güçleri oranında tayfaya katılır", att.length === 3 && b.units.filter((u) => u.side === "def").length === 1
+    && att.reduce((n, u) => n + u.men - N.tactics.naval.types[u.type].crew, 0) === 50 && att.every((u) => u.x < 30));
+  // Mahmuz: hızlı trireme bir kadırgaya bordadan çarpınca gövdeyi deler, kancalanırlar.
+  const r = NV.setupNaval({ civ: null, trireme: 1 }, { civ: null, ships: 1 }, 3);
+  const [tr, gl] = [r.units[0], r.units[1]];
+  Object.assign(gl, { x: 50, y: 30, facing: Math.PI / 2, v: 0 });
+  Object.assign(tr, { x: 50 - 4, y: 30, facing: 0, v: N.tactics.naval.types.trireme.speed });
+  const hull0 = gl.hull;
+  NV.navalCommand(r, [tr.id], { unit: gl.id });
+  for (let i = 0; i < 5 && !tr.grapple; i++) NV.stepNaval(r, 0.1);
+  check("trireme tam hızla bordadan çarpınca kadırgayı batırır", gl.dead && gl.hull <= 0, `${hull0} -> ${gl.hull.toFixed(1)}`);
+  // Burun burna çarpma çok daha zayıf: kancalanırlar, gemi yüzer.
+  const h2 = NV.setupNaval({ civ: null, trireme: 1 }, { civ: null, ships: 1 }, 3);
+  const [tr2, gl2] = [h2.units[0], h2.units[1]];
+  Object.assign(gl2, { x: 50, y: 30, facing: Math.PI, v: 0 });
+  Object.assign(tr2, { x: 50 - 6.6, y: 30, facing: 0, v: N.tactics.naval.types.trireme.speed });
+  NV.navalCommand(h2, [tr2.id], { unit: gl2.id });
+  for (let i = 0; i < 5 && !tr2.grapple; i++) NV.stepNaval(h2, 0.1);
+  check("burun burna çarpma zayıf: gemi yüzer, kancalanırlar", !gl2.dead && gl2.hull > 0 && tr2.grapple === gl2.id, `${gl2.hull.toFixed(1)}`);
+  // Gemiye çıkma: kalabalık tayfa öbürünü ele geçirir.
+  const q = NV.setupNaval({ civ: null, quinq: 1, troops: { inf: 40 } }, { civ: null, ships: 1 }, 3);
+  const [qq, sh] = [q.units[0], q.units[1]];
+  Object.assign(sh, { x: 50, y: 30, facing: Math.PI / 2, v: 0 });
+  Object.assign(qq, { x: 50 - 2, y: 30, facing: 0, v: 0, grapple: sh.id });
+  sh.grapple = qq.id;
+  for (let i = 0; i < 900 && !q.over; i++) NV.stepNaval(q, 0.1);
+  check("kancalanan küçük geminin tayfası yenilir, gemi ele geçer, savaş biter", sh.taken && q.over?.winner === "att");
+  const o = NV.navalOutcome(q);
+  check("sonuç otomatik deniz savaşının biçiminde", o.naval && o.attWins && o.att.quinq === 1 && o.def.ships === 0);
+  // Bilgisayara oynatılan deniz savaşı otomatik savaşla çoğunlukla aynı kazananı bulur.
+  const C2 = await import("../src/rules/combat.js");
+  let same = 0, n = 0, sd = 9;
+  const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 60; i++) {
+    const fa = { civ: null, ships: Math.floor(rr() * 4), trireme: Math.floor(rr() * 3), quinq: Math.floor(rr() * 2) }, fd = { civ: null, ships: Math.floor(rr() * 4), trireme: Math.floor(rr() * 3), quinq: Math.floor(rr() * 2) };
+    if (!(fa.ships + fa.trireme + fa.quinq) || !(fd.ships + fd.trireme + fd.quinq)) continue;
+    n++;
+    if (C2.naval(fa, fd).attWins === NV.navalOutcome(NV.autoplayNaval(NV.setupNaval(fa, fd, i + 1))).attWins) same++;
+  }
+  check("deniz savaşı sahada otomatik savaşla çoğunlukla aynı", same / n > 0.75, `${same}/${n}`);
+  // Haritada: denizdeki filoya saldırıda sahadaki sonuç uygulanır.
+  const g = S.newGame("rome", 7);
+  const sea = (k) => MAP4.centre(MAP4.around(MAP4.PLACE_CELL.syracuse).map(([x]) => x).filter((x) => !MAP4.isLand(x))[k]);
+  const x1 = S.formArmy(g, "rome", 10, 0), y1 = S.formArmy(g, "carthage", 10, 0);
+  Object.assign(x1, { ...sea(0), at: null, mp: 4, inf: 20, ships: 3 });
+  Object.assign(y1, { ...sea(1), at: null, mp: 4, inf: 20, ships: 2 });
+  g.relations[S.key("rome", "carthage")] = "war";
+  const ns = M.navalSides(g, x1, y1);
+  check("denizde iki tarafın filosu ve askerleri", ns.sea && ns.att.ships === 3 && ns.att.troops.inf === 20 && ns.def.ships === 2);
+  const ev = M.strike(g, x1.id, y1.id, null, { attWins: true, att: { ships: 2, trireme: 0, quinq: 0 }, def: { ships: 0, trireme: 0, quinq: 0 }, naval: true, tactical: true });
+  check("sahadaki deniz savaşının sonucu haritaya yazılır", ev?.won && S.armyById(g, x1.id).ships === 2 && !S.armyById(g, y1.id));
+}
+
 section("Sahada komutan (bölüm 29e)");
 {
   // Kullanıcı 27.10: komutan sahada - muhafızıyla, yanındakileri güçlendirir, düşerse ordu sarsılır.

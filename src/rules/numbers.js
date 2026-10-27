@@ -104,6 +104,21 @@ export const N = {
     // `time` sn süren, `cooldown` sn'de bir kullanılan yetenek. Çarpanlar: `speed` hız, `turn` dönüş, `melee` vuruş,
     // `charge` hücum, `volley` ok, `arrows` yediği ok, `front` / `flank` önden / yandan yediği darbe, `taken` bütün
     // yediği darbe, `stop` hücum durdurma (eklenir), `arrowMorale` okunun moral etkisi; `radius` içindeki düşmana `shock` moral.
+    // Deniz savaşı sahada (bölüm 29h, naval.js): her geminin boyu (`len`), eni (`beam`), gövdesi, hızı, dönüşü (radyan/sn),
+    // tayfası, mahmuzu (`bow`), gemiye çıkma gücü (`board`), güvertedeki okçusu. Mahmuz: `bow` x hız x `ram` x (yandan
+    // `ramSide`, burundan `ramHead`); çarpan da `recoil` kadarını yer. Gemiye çıkma: tayfa x `board` x `melee`/sn. Taşınan
+    // okçuların `marineArchers` payı atar. Moral: kayıp tayfa x `lossMorale`, delik gövde x `hullMorale`; `rout`un altında
+    // kaçar, kancalıyken `surrender`ın altında ele geçer. `time` sn sonunda savunan kazanır.
+    naval: {
+      types: {
+        ships: { len: 6, beam: 1.6, hull: 40, speed: 5.5, turn: 0.9, crew: 20, bow: 0.6, board: 1, archers: 0.3 },
+        trireme: { len: 7, beam: 1.6, hull: 55, speed: 7.5, turn: 1.25, crew: 30, bow: 1.8, board: 1, archers: 0.4 },
+        quinq: { len: 8.5, beam: 2.4, hull: 110, speed: 5, turn: 0.65, crew: 45, bow: 1.1, board: 1.3, archers: 1 },
+      },
+      accel: 2, brake: 3, ram: 3, ramSide: 1.6, ramHead: 0.5, recoil: 0.15, ramMorale: 0.4, melee: 0.02, boardMorale: 0.6,
+      volley: { range: 22, every: 3, kill: 2.2 }, marineArchers: 0.05, arrowMorale: 1.5, sinkMorale: 10, lossMorale: 1,
+      hullMorale: 0.5, surrender: 10, rout: 5, recover: 1, time: 240,
+    },
     abilities: {
       testudo: { civ: "rome", who: ["inf", "elite"], toggle: true, arrows: 0.25, speed: 0.5, melee: 0.85 },
       phalanx: { civ: "macedon", who: ["inf", "elite"], toggle: true, front: 0.6, flank: 1.25, speed: 0.6, turn: 0.4, stop: 1 },

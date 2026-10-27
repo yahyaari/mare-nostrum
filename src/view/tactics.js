@@ -18,6 +18,8 @@ import { BRIDGE, FOREST, WATER, insideCity, passable, placeName, sidePoint, wall
 import { TITLE_FONT } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shade } from "./pieces.js";
 import { INK, TAU, button, colorOf, measure, panel, text, wrap } from "./kit.js";
+import { boat, drawNavalField } from "./naval.js";
+import { shipMorale } from "../rules/naval.js";
 
 const TOP_H = 58, BOTTOM_H = 120;
 
@@ -56,8 +58,10 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   // İlk karede arazinin iki resmi hazırlanır (ekran bulutla kaplı); giriş ondan sonra başlar, yoksa ağır ilk kare girişin
   // başını yutar.
   if (B.intro && !B.intro.warm) {
-    terrainLayer(f, b, T, lang, dpr);
-    terrainLayer(f, b, T, lang, Math.min(dpr * INTRO.zoom, 3200 / f.w), "zoom");
+    if (!b.naval) {
+      terrainLayer(f, b, T, lang, dpr);
+      terrainLayer(f, b, T, lang, Math.min(dpr * INTRO.zoom, 3200 / f.w), "zoom");
+    }
     puffSprite();
     B.intro.warm = true;
     B.intro.t0 = performance.now();
@@ -75,6 +79,50 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
     ctx.scale(view.z, view.z);
     ctx.translate(-view.x, -view.y);
   }
+  // Deniz savaşı (bölüm 29h): deniz ve gemiler (view/naval.js); kara savaşında arazi ve birlikler.
+  if (b.naval) drawNavalField(ctx, f, B, T, now);
+  else landField(ctx, f, B, T, lang, now, t, dpr);
+  // Seçim kutusu.
+  if (B.drag) {
+    const x = Math.min(B.drag.x0, B.drag.x1), y = Math.min(B.drag.y0, B.drag.y1);
+    ctx.strokeStyle = GOLD_LIGHT;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(B.drag.x1 - B.drag.x0), Math.abs(B.drag.y1 - B.drag.y0));
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(236,212,154,0.08)";
+    ctx.fillRect(x, y, Math.abs(B.drag.x1 - B.drag.x0), Math.abs(B.drag.y1 - B.drag.y0));
+  }
+  // Sağ sürükleme: çizilen hat ve birliklerin orada alacağı yer.
+  if (B.plan?.length) plan(ctx, f, B);
+  // Hava (bölüm 29g): yağmur çizgileri, kar taneleri, sis (askerlerin üstünde).
+  sky(ctx, f, b, now, "air");
+  if (view) {
+    ctx.restore();
+    clouds(ctx, cam, B, t);
+    introTitle(ctx, cam, B, t);
+  }
+  // Bantlar girişin sonunda kenarlardan kayarak gelir (gelene kadar düğmeleri basılmaz).
+  const bars = B.intro ? easeOut(ramp(t, INTRO.bars)) : 1;
+  if (bars > 0) {
+    ctx.save();
+    ctx.translate(0, -(TOP_H + 6) * (1 - bars));
+    topBar(ctx, cam, B, T, lang);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, (BOTTOM_H + 6) * (1 - bars));
+    bottomBar(ctx, cam, B, T, bars < 1 ? [] : boxes);
+    ctx.restore();
+  }
+  if (B.intro) return;
+  if (B.sel.size && !b.over && !b.naval) formationBar(ctx, cam, f, B, T, boxes);
+  if (b.over) endPanel(ctx, cam, B, T, lang, boxes, now);
+  else if (B.deploy) deployBar(ctx, cam, f, T);
+}
+
+/** Kara savaşının sahası: arazi, sur, dizilme bölgeleri, ölüler, birlikler, merdivenler, oklar, rozetler. */
+function landField(ctx, f, B, T, lang, now, t, dpr) {
+  const b = B.b;
   // Arazi bir kere çizilir (saha boyutu ya da dil değişince yeniden); girişte yakından bakılırken keskin kalsın
   // diye daha büyük çizilmiş bir kopyası.
   const zoomScale = Math.min(dpr * INTRO.zoom, 3200 / f.w);
@@ -125,42 +173,6 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
     if (u.dead || u.gone) continue;
     badge(ctx, f, u, owner[u.side], B.sel.has(u.id), b);
   }
-  // Seçim kutusu.
-  if (B.drag) {
-    const x = Math.min(B.drag.x0, B.drag.x1), y = Math.min(B.drag.y0, B.drag.y1);
-    ctx.strokeStyle = GOLD_LIGHT;
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([5, 4]);
-    ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(B.drag.x1 - B.drag.x0), Math.abs(B.drag.y1 - B.drag.y0));
-    ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(236,212,154,0.08)";
-    ctx.fillRect(x, y, Math.abs(B.drag.x1 - B.drag.x0), Math.abs(B.drag.y1 - B.drag.y0));
-  }
-  // Sağ sürükleme: çizilen hat ve birliklerin orada alacağı yer.
-  if (B.plan?.length) plan(ctx, f, B);
-  // Hava (bölüm 29g): yağmur çizgileri, kar taneleri, sis (askerlerin üstünde).
-  sky(ctx, f, b, now, "air");
-  if (view) {
-    ctx.restore();
-    clouds(ctx, cam, B, t);
-    introTitle(ctx, cam, B, t);
-  }
-  // Bantlar girişin sonunda kenarlardan kayarak gelir (gelene kadar düğmeleri basılmaz).
-  const bars = B.intro ? easeOut(ramp(t, INTRO.bars)) : 1;
-  if (bars > 0) {
-    ctx.save();
-    ctx.translate(0, -(TOP_H + 6) * (1 - bars));
-    topBar(ctx, cam, B, T, lang);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(0, (BOTTOM_H + 6) * (1 - bars));
-    bottomBar(ctx, cam, B, T, bars < 1 ? [] : boxes);
-    ctx.restore();
-  }
-  if (B.intro) return;
-  if (B.sel.size && !b.over) formationBar(ctx, cam, f, B, T, boxes);
-  if (b.over) endPanel(ctx, cam, B, T, lang, boxes, now);
-  else if (B.deploy) deployBar(ctx, cam, f, T);
 }
 
 // ---- giriş ----
@@ -1198,7 +1210,8 @@ function bottomBar(ctx, cam, B, T, boxes) {
     ctx.strokeStyle = u.elite ? GOLD_LIGHT : "rgba(20,14,8,0.9)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    glyph(ctx, u.type === "gen" ? "gen" : u.elite ? "elite" : u.type, x + cw / 2, gy, CREAM);
+    if (u.ship) boat(ctx, x + cw / 2, gy, CREAM, u.type);
+    else glyph(ctx, u.type === "gen" ? "gen" : u.elite ? "elite" : u.type, x + cw / 2, gy, CREAM);
     text(ctx, out ? (u.dead ? "✕" : "↩") : u.routed ? "!" : String(Math.ceil(u.men)), x + cw / 2, small ? y + 33 : y + 52, { bold: true, size: small ? 11 : 13, color: u.routed ? "#d97a5a" : CREAM, align: "center" });
     if (!small) {
       const nm = B.unitName(u);
@@ -1206,7 +1219,8 @@ function bottomBar(ctx, cam, B, T, boxes) {
       while (size > 7 && measure(ctx, nm, { size }) > cw - 4) size -= 0.5;
       text(ctx, nm, x + cw / 2, y + 66, { size, color: "rgba(243,231,201,0.75)", align: "center" });
     }
-    const m = out || u.routed ? 0 : Math.max(0, Math.min(1, moraleOf(u) / 100));
+    const out2 = out || u.taken;
+    const m = out2 || u.routed ? 0 : Math.max(0, Math.min(1, (u.ship ? shipMorale(u) : moraleOf(u)) / 100));
     ctx.fillStyle = "rgba(255,255,255,0.12)";
     ctx.fillRect(x + 4, y + h - (small ? 6 : 12), cw - 8, small ? 3 : 5);
     ctx.fillStyle = m > 0.5 ? "#7fb85a" : m > 0.25 ? "#d6a63a" : "#c4523a";
@@ -1274,9 +1288,9 @@ function endPanel(ctx, cam, B, T, lang, boxes, now) {
   if (s < 1) boxes = [];
   panel(ctx, x, y, w, h);
   text(ctx, won ? T.tacWon : B.b.over.retreat ? T.tacFled : T.tacLost, cam.w / 2, y + 42, { title: true, bold: true, size: 24, align: "center", color: won ? INK.good : INK.bad });
-  const lost = (s) => Math.round(B.b.units.filter((u) => u.side === s).reduce((n, u) => n + (u.start - Math.floor(u.dead ? 0 : u.men)), 0));
+  const lost = (s) => B.b.naval ? B.b.units.filter((u) => u.side === s && (u.dead || u.taken)).length : Math.round(B.b.units.filter((u) => u.side === s).reduce((n, u) => n + (u.start - Math.floor(u.dead ? 0 : u.men)), 0));
   const fled = (s) => B.b.units.filter((u) => u.side === s && (u.routed || u.gone) && !u.dead).reduce((n, u) => n + Math.floor(u.men), 0);
-  text(ctx, `${T.tacYourLoss}: ${lost(B.me)}  ·  ${T.tacTheirLoss}: ${lost(B.foe)}`, cam.w / 2, y + 74, { size: 14, align: "center" });
+  text(ctx, `${B.b.naval ? T.navalYourLoss : T.tacYourLoss}: ${lost(B.me)}  ·  ${B.b.naval ? T.navalTheirLoss : T.tacTheirLoss}: ${lost(B.foe)}`, cam.w / 2, y + 74, { size: 14, align: "center" });
   const note = B.b.over.timeout ? (B.me === "def" ? T.tacTimeoutHeld : T.tacTimeout) : won ? (fled(B.foe) ? `${T.tacTheyFled}: ${fled(B.foe)}` : "") : fled(B.me) ? `${T.tacWeFled}: ${fled(B.me)}` : "";
   if (note) text(ctx, note, cam.w / 2, y + 98, { italic: true, size: 12, color: INK.soft, align: "center" });
   button(ctx, boxes, { x: cam.w / 2 - 110, y: y + h - 52, w: 220, h: 38, label: T.tacBack, main: true, size: 15, act: { do: "tacEnd" } });

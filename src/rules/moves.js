@@ -399,6 +399,16 @@ export const fieldSides = (state, army, b) => ({
     terrain: isMountain(cellOf(b.x, b.y)) ? N.ground.pass : 1 }, helpersOf(state, b.owner, b, [army, b]), b, state),
 });
 
+/**
+ * Denizde meydan muharebesinin iki tarafı (taktik deniz savaşı, naval.js): filolar, taşıdıkları askerler, generaller,
+ * hava.
+ */
+export function navalSides(state, army, b) {
+  const at = { x: b.x, y: b.y }, w = weatherAt(state, at), wx = weatherMods(w);
+  const side = (u) => ({ ...fleetSide(state, u.owner, u), troops: pickUnits(u), weather: w, wx });
+  return { att: side(army), def: side(b), sea: true, field: true };
+}
+
 /** Deniz savaşının bir tarafı: gemileri ve araştırması. */
 const fleetSide = (state, civ, u, extra = {}) => ({ civ, ...shipsOnly(u), mods: modsOf(state, civ), gen: u?.general ?? null, ...extra });
 
@@ -606,7 +616,8 @@ export function strike(state, armyId, targetId, luck = null, result = null) {
   let won;
   if (!isLand(cellOf(b.x, b.y))) {
     // Denizde: filo filoya; yenilen filo askerleriyle batar.
-    const nr = naval(fleetSide(state, army.owner, army), fleetSide(state, b.owner, b), luck ?? rollLuck(state));
+    // Taktik deniz savaşı (naval.js) bittiyse onun sonucu; yoksa otomatik.
+    const nr = result?.naval ? result : naval(fleetSide(state, army.owner, army), fleetSide(state, b.owner, b), luck ?? rollLuck(state));
     won = nr.attWins;
     ev.naval = { won, sunk: fleetOf(b) - fleetOf(nr.def), lost: fleetOf(army) - fleetOf(nr.att), att: fleetOf(army), def: fleetOf(b) };
     const winner = won ? army : b;

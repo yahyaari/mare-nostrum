@@ -1425,3 +1425,29 @@ Kullanıcı 27.10 (önerilerden dördüncüsü): "yağmurda okçular zayıf, sis
   adı ("☂ Yağmur · Akşam").
 - Görünüm: zeminde akşam turuncu, şafak pembe, gece lacivert örtü (askerler üstte, seçilebilir); askerlerin üstünde
   yağmur eğik çizgiler, kar yavaş düşen taneler, sis sürüklenen beyaz öbekler. Ses: yağmurun hışırtısı, karda rüzgâr.
+
+### 29h. Deniz savaşı sahada
+
+Kullanıcı 27.10 (önerilerden 4.): "deniz savaşları sahada - gemiler, mahmuzla çarpma, gemiye çıkma". Denizdeki bir
+filoya saldırırken (ya da denizde sana saldırıldığında) "⚔ Savaş" artık deniz savaşı açar (`rules/naval.js`,
+`view/naval.js`); limana denizden saldırı otomatik kalır.
+
+- **Her gemi bir birlik:** kadırga (gövde 40, hız 5.5, tayfa 20, mahmuz zayıf), trireme (gövde 55, hız 7.5, çevik,
+  mahmuzu sert), kinkerem (gövde 110, ağır, yavaş döner, tayfa 45, gemiye çıkmada güçlü, güvertesinde okçular).
+  Filonun taşıdığı askerler gemilere taşıma güçleri oranında dağılır, tayfaya katılır (deniz piyadesi); okçuların bir
+  payı güverteden atar. Amiral general gövdeyi ve mahmuzu güçlendirir.
+- **Yürüyüş:** gemiler yavaş döner (yavaşken daha da yavaş), hızlanıp yavaşlar; kayalık adacıkların etrafından
+  dolanır. Sağ tık: oraya git ya da o gemiye saldır.
+- **Mahmuz:** bir geminin burnu düşman gövdesine değerse gövdeyi deler: mahmuzun gücü x hızı x (bordadan x1.6, burun
+  burna x0.5). Tam hızla bordadan çarpan trireme bir kadırgayı batırır. Çarpan da biraz hasar alır; iki gemi kancalanır.
+- **Gemiye çıkma:** kancalı iki geminin tayfaları dövüşür (kalabalık ve kinkerem güçlü). Tayfası biten ya da direnci
+  kırılan gemi **ele geçer**; gövdesi biten **batar** (yakındaki dostları sarsılır). Morali bozulan gemi kendi kenarına
+  kaçar.
+- **Ok:** güvertedeki okçular 22 birimdeki en yakın düşmana atar (havaya göre).
+- Bir tarafın savaşan gemisi kalmayınca biter (240 sn dolarsa savunan kazanır). Sonuç otomatik deniz savaşıyla aynı
+  biçimde haritaya yazılır: yenilen filo askerleriyle batar, kazananın batan ve ele geçen gemileri düşer.
+- Görünüm: tepeden deniz, dalgalar, adacıklar; gemilerin gövdesi, tunç mahmuzu, çekilen kürekleri, sahibinin
+  renginde yelkeni, güvertede tayfası, hızı kadar köpüklü izi; kancalı gemiler arasında halatlar; batan gemi
+  dönerek kaybolur, ele geçenin yelkeni iner. Rozet: tür, tayfa, gövde ve moral çubukları. Sesler: kürek şıpırtısı,
+  mahmuzun gümlemesi, gemiye çıkanların kılıçları, batan geminin gıcırtısı.
+- Ayar (`node Tools/naval-cal.mjs`, 289 savaş): kazanan otomatik deniz savaşıyla %85 aynı.

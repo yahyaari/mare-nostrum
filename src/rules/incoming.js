@@ -7,9 +7,10 @@
 // attack / strike, barbarians.js raid) - taktik savaştaysa hazır sonuçla. Yalnız gerçek oyunda (\`state.defer\`,
 // main.js açar) ve tek oyunculu oyunda; bot oyunları ve testler eskisi gibi hemen çözer.
 
-import { attack, canAttack, canStrike, fieldSides, mpMax, sides, strike } from "./moves.js";
+import { attack, canAttack, canStrike, fieldSides, mpMax, sides, strike, navalSides } from "./moves.js";
 import { armyById, humansOf, isHuman } from "./state.js";
 import { raidOn } from "./barbarians.js";
+import { cellOf, isLand } from "./map.js";
 
 /** Bu saldırı ertelenir mi: gerçek oyun, tek oyuncu, hedefin sahibi oyuncu. */
 const deferrable = (state, owner) => !!state.defer && !!owner && isHuman(state, owner) && humansOf(state).length === 1;
@@ -58,6 +59,8 @@ export function incomingSides(state, it) {
   const a = armyById(state, it.from);
   if (it.kind === "army") {
     const b = armyById(state, it.target);
+    // Denizde: filo filoya (taktik deniz savaşı).
+    if (!isLand(cellOf(b.x, b.y))) return { ...navalSides(state, a, b), walls: null, attacker: a, target: b };
     return { ...fieldSides(state, a, b), walls: null, sea: false, attacker: a, target: b, field: true };
   }
   const sd = sides(state, a, a.owner, it.target);
