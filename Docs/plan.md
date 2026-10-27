@@ -7,7 +7,7 @@
 
 ## NEREDE KALDIK (27.10 akşam) - önce bunu oku
 
-Son commit (32. madde), hepsi push'lu, **2416 test** geçiyor, kayıt sürümü **20**. Kullanıcı son durum için
+Son commit **e904cf9**, hepsi push'lu, **2416 test** geçiyor, kayıt sürümü **20**. Kullanıcı son durum için
 "tamam şimdi çok güzel olmuş" dedi. Sırada: kullanıcı oynayıp söyleyecek.
 
 **Bu iki günün özü (ayrıntı aşağıdaki 10-27. maddelerde ve kurallar.md'de):**
@@ -163,12 +163,12 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     Denge (70 oyun): ilk düşüş 59, ayakta 339 (önce 58 / 347). 
 31. **Sahada komutan** (e8e480b): kurallar.md 29e. tactics.js `gen` türü (muhafız), `generalOrder`, `u.aura`, `b.genFell`,
     outcome `genFell`; moves.js `dropGeneral`; view: taç rozeti, halka, `fallen` şeridi; sound.js `genFell`.
-32. **Takviye, dizilişler, hava, para** (bu adım; kullanıcının "hepsini uygula" dediği önerilerin kalanı): kurallar.md
+32. **Takviye, dizilişler, hava, para** (e904cf9; kullanıcının "hepsini uygula" dediği önerilerin kalanı): kurallar.md
     7b (moves.js `helpersOf`, `share`; tactics.js `b.reserve`), 29f (tactics.js `abilityOf`, `useAbility`, `aiAbilities`,
     `u.m`), 29g (rules/weather.js), 3b (state.js `grainCap`, `grainOf`, `rushInfo`, `rush`; ai.js `buyGrain`). Yolda bulunan
     hata: şehre saldıran ordunun özel birlikleri sayılmıyor, kazanınca sıfırlanıyordu (sides()'a elite). Denge (70 oyun): ilk
     düşüş 59 -> 43, ayakta 339 -> 318 - özel birlik düzeltmesi tek başına 59 -> 49; takviye tam katılınca 40 / 302 oldu,
-    yarısı yetişsin diye  0.5. Dünya biraz daha kanlı: kullanıcı oynayıp söyleyecek.
+    yarısı yetişsin diye `N.reinforce.part` 0.5. Dünya biraz daha kanlı: kullanıcı oynayıp söyleyecek.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.
