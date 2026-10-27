@@ -175,7 +175,9 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
 34. **Deniz savaşı sahada** (bf0b56b): kurallar.md 29h. rules/naval.js (`setupNaval`, `stepNaval`, `aiNaval`,
     `navalOutcome`), view/naval.js, moves.js `navalSides` ve strike'ta sahadaki sonuç, incoming.js denizde. Ayar:
     Tools/naval-cal.mjs %85.
-    Kullanıcının bekleyenleri: savaş öncesi nutuk, zafer alayı, hırslı komutanlar, geç oyunda bilgisayarın uyuşması.
+    Kullanıcı 27.10: "savaş öncesi nutuk, zafer alayı gibi şeyler istemiyorum, oyunu boşuna çorba yapmaya gerek yok;
+    istediğim insanların eğlenebileceği build ve savaş ortamı" - süs sistemleri (nutuk, alay, hırslı komutanlar) yok.
+    Açık konu (savaşı ilgilendiriyor): geç oyunda (100. turdan sonra) bilgisayar ordularını sahaya çıkarmayı bırakıyor.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.
