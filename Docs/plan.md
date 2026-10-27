@@ -23,11 +23,14 @@ Son commit **e5540a0**, hepsi push'lu, **2347 test** geçiyor, kayıt sürümü 
   (çizim: askerler tek tek nokta `soldiers`, arazi önbelleği, sur/kule/kapı, merdiven, kartlar, şeritler),
   `main.js` (`openBattle`, `battleFrame`, `afterBattle`, fare: seç, sağ tık emir, sağ sürükle hat).
 - 27.10 düzeltmeler: öğretici haydutlar her yeni oyunda (ipuçları açıksa); dar geçitte birlik en çok 6 sıraya
-  iner, dağınık durur; dizilirken noktalar birlikle ışınlanır.
+  iner, dağınık durur; dizilirken noktalar birlikle ışınlanır. Sonra (28. madde): yol bulma yeniden - nehir
+  kenarında takılma bitti, dar geçidin tam ortasından gidilir.
 
 **Ölçüm alışkanlıkları (bu iki günde öğrenilen):**
 - Taktik savaş otomatik savaşla tutarlı mı: `node Tools/tactics-cal.mjs` (açık saha / surlu, kazanan aynı %; son:
-  açık %91, surlu %87, saldıran surda otomatik 41 / taktik 44 / 149). Sur ya da dövüş kuralı değişince bak.
+  açık %91, surlu %88, saldıran surda otomatik 41 / taktik 46 / 149). Sur ya da dövüş kuralı değişince bak.
+- Takılan birlik var mı: `node Tools/tactics-stuck.mjs` (59 engelli saha, iki taraf bilgisayarda; son: takılan 0,
+  süresi dolan 0 - önce 96 ve 23). Yol bulma, dizilme ya da yürüyüş değişince bak.
 - Denge: `node Tools/experiment.mjs '{"victory.wonders":99}' 70` (son: ilk düşüş 58, ayakta toplam 347).
 - Arayüz akışı: `node Tools/tutorial.mjs tr rome` (öğretici baştan sona) ve `node Tools/playtest.mjs
   http://localhost:8060/ rome 25 normal` - birlik/kart/sekme değişince ikisini de çalıştır (özel birlik eklenince
@@ -143,6 +146,12 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     artık Asker bas sekmesini açıyor (asker basma ayrı sekmeye geçince hiç asker basmıyordu).
 26. **Öğretici her yeni oyunda** (94669f6) ve **dar geçitte kola dönme** (0e705a6): kurallar.md 29a "Dar geçit".
 27. **Toplu ve dağınık birlikler, dizilmede görünen ışınlanma** (e5540a0): kurallar.md 29a "Toplu ve dağınık".
+28. **Takılmaz, geçidin ortasından** (bu adım; kullanıcı: "otomatik savaşta nehir kenarında gitmiyorlar, önce başka
+    yere tıklıyorum; daralan geçitte tam ortadan, en geniş şekilde gitsinler"): kurallar.md 29a "Takılmaz" ve
+    "Geçidin tam ortasından". field.js `pathOn` 1 birimlik hücrelerde, köşeden kesmeyen, ikili yığınlı A*; `grids`
+    (engelden uzaklık + bölgeler, gedikte yenilenir: `F.rev`), `onMain`, `nearestOpen`, `nearestMain`, `lineFree`.
+    tactics.js: köşeye sürtünen kayar, suya verilen emir kıyıya, dizilirken yalnız kendi tarafı açılır (savunanın
+    açılması saldıranı suya itiyordu), cebe dizilen ana karaya; daralmış birlik dururken de ortaya kayar.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

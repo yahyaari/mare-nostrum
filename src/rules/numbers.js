@@ -87,6 +87,10 @@ export const N = {
     flank: { side: 1.5, rear: 2, wrap: 0.8 },
     // Dar yerde daralan birliğin en çok kaç sıra derinliğe indiği (uzun kol olmasın, toplu kalsın).
     squeezeRows: 6,
+    // Yol (field.js pathOn; kullanıcı 27.10: "dar geçitte tam ortadan, en geniş şekilde gitsin"): birlik engelden
+    // `want` birim uzak durmak ister (bundan dar geçidin tam ortasından gider); daha yakın her hücre en çok `pinch`
+    // kat pahalı; kestirme bu uzaklıktan en çok `slack` birim yakına iner.
+    path: { want: 6, pinch: 3, slack: 0.5 },
     // Bilgisayarın tavrı: savunan, gücü saldıranınkinin `ratio` katına yetiyorsa saldırır, yoksa savunur - kendi
     // yarısında yüksekliği `hill`i geçen bir tepe varsa oraya çıkar; `engage` (atlı `cavEngage`) birime gelen düşmanla dövüşür.
     defend: { ratio: 1, hill: 0.3, engage: 10, cavEngage: 16 },

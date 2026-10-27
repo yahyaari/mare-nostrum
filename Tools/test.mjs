@@ -1224,6 +1224,61 @@ section("Taktik savaş: tavır ve dizilme (bölüm 29)");
   let onBridge = 99;
   for (let i = 0; i < 120; i++) { TC2.step(qb, 0.1); if (Math.hypot(qa.x - brq.x, qa.y - brq.y) < 2) onBridge = Math.min(onBridge, TC2.footprint(qa).cols); }
   check("köprüde daralır ama en çok birkaç sıra derinlikte kalır, karşıda yeniden açılır", onBridge < 20 && Math.ceil(20 / onBridge) <= N.tactics.squeezeRows && TC2.footprint(qa).cols === 20, `köprüde ${onBridge}, sonra ${TC2.footprint(qa).cols}`);
+  // Dar geçidin ortasından (kullanıcı 27.10: "daralan geçitte tam ortasına konumlansın, kenarından gitmesin, en
+  // geniş şekilde"): iki gölün arasındaki 10 birimlik geçide üst hizasından giren birlik ortadan geçer.
+  {
+    const Fp = FLq.flatField();
+    for (let y = 0; y < Fp.h; y++) for (let x = 45; x < 55; x++) if (y < 20 || y >= 30) Fp.kind[y * Fp.w + x] = FLq.WATER;
+    Fp.obstacles = true;
+    const gb = TC2.setupBattle({ civ: "rome", arch: 30 }, { civ: "gaul", inf: 10 }, null, 3, Fp);
+    const ga = gb.units.find((u) => u.side === "att");
+    for (const u of gb.units.filter((v) => v.side === "def")) Object.assign(u, { x: 95, y: 55 });
+    Object.assign(ga, { x: 25, y: 22, facing: 0 });
+    TC2.command(gb, [ga.id], { x: 80, y: 22 });
+    let off = 0, cols = 99;
+    for (let i = 0; i < 300 && ga.order; i++) { TC2.step(gb, 0.1); if (ga.x > 46 && ga.x < 54) { off = Math.max(off, Math.abs(ga.y - 25)); cols = Math.min(cols, TC2.footprint(ga).cols); } }
+    const sp = TC2.footprint({ ...ga, march: null }).sp;
+    check("dar geçidin tam ortasından, sığdığı en geniş cepheyle geçer", !ga.order && off < 1 && cols === Math.floor((10 - 0.2) / sp), `ortadan ${off.toFixed(2)}, cephe ${cols}`);
+  }
+  // Nehir kenarında takılmaz (kullanıcı 27.10: "nehir kenarında gitmiyorlar, önce başka yere tıklıyorum"): suyun
+  // köşesine dayanmış birlik, köşenin öte yanına çapraz emirle yürür, varır.
+  {
+    const Fk = FLq.flatField();
+    for (let y = 0; y < 30; y++) for (let x = 40; x < 60; x++) Fk.kind[y * Fk.w + x] = FLq.WATER;
+    Fk.obstacles = true;
+    const kb = TC2.setupBattle({ civ: "rome", inf: 40 }, { civ: "gaul", inf: 10 }, null, 3, Fk);
+    const ka = kb.units.find((u) => u.side === "att");
+    for (const u of kb.units.filter((v) => v.side === "def")) Object.assign(u, { x: 95, y: 55 });
+    Object.assign(ka, { x: 39.6, y: 30.3, facing: 0 });
+    TC2.command(kb, [ka.id], { x: 70, y: 20 });
+    for (let i = 0; i < 300 && ka.order; i++) TC2.step(kb, 0.1);
+    check("suyun köşesindeki birlik takılmadan öte yana varır", !ka.order && Math.hypot(ka.x - 70, ka.y - 20) < 1, `${ka.x.toFixed(1)},${ka.y.toFixed(1)}`);
+    // Suya verilen emir kıyıya: birlik suyun kenarına varır, emri biter.
+    Object.assign(ka, { x: 30, y: 45 });
+    TC2.command(kb, [ka.id], { x: 50, y: 25 });
+    for (let i = 0; i < 300 && ka.order; i++) TC2.step(kb, 0.1);
+    check("suya verilen emirle kıyıya kadar gider", !ka.order && FLq.passable(Fk, ka.x, ka.y) && ka.y > 29 && ka.y < 33, `${ka.x.toFixed(1)},${ka.y.toFixed(1)}`);
+  }
+  // Yollar hiçbir hücrede suya, eve, sura girmez; ordular suyla çevrili cebe dizilmez (karşı ordu oraya varamazdı).
+  {
+    let bad = 0, pocket = 0, n = 0;
+    const places = Object.keys(POS);
+    for (let i = 0; i < 24; i++) {
+      const p = POS[places[(i * 37) % places.length]];
+      const Fr = FLq.makeField({ at: { x: p.x + ((i % 5) - 2) * 0.3, y: p.y + ((i % 3) - 1) * 0.3 }, dir: i * 0.7, place: null, seed: i + 1, river: i % 2 === 0 });
+      if (!Fr.obstacles) continue;
+      n++;
+      const rb2 = TC2.setupBattle({ civ: "rome", inf: 80, arch: 30, cav: 20 }, { civ: "gaul", inf: 80, arch: 30, cav: 20 }, null, i + 1, Fr);
+      for (const u of rb2.units) if (!FLq.onMain(Fr, u.x, u.y)) pocket++;
+      for (let k = 0; k < 6; k++) {
+        const a = { x: 2 + ((i * 13 + k * 29) % 96), y: 2 + ((i * 7 + k * 17) % 56) }, c = { x: 2 + ((i * 31 + k * 11) % 96), y: 2 + ((i * 19 + k * 23) % 56) };
+        if (!FLq.onMain(Fr, a.x, a.y) || !FLq.onMain(Fr, c.x, c.y)) continue;
+        let prev = a;
+        for (const q of FLq.pathOn(Fr, a, c, false, N.tactics.path.want)) { if (!FLq.lineFree(Fr, prev, q)) bad++; prev = q; }
+      }
+    }
+    check("yol hiçbir yerde suya girmez, ordular ana karaya dizilir", n > 8 && bad === 0 && pocket === 0, `${n} saha, kötü parça ${bad}, cepte ${pocket}`);
+  }
   // Dost birlikler birbirinin içinden geçer: okçu hattının içinden piyade yürür.
   const pb = TC2.setupBattle({ civ: "rome", inf: 40, arch: 30 }, { civ: "gaul", inf: 10 }, null, 3);
   const [pi, pa] = [pb.units.find((u) => u.side === "att" && u.type === "inf"), pb.units.find((u) => u.side === "att" && u.type === "arch")];

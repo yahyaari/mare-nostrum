@@ -1139,6 +1139,21 @@ arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar".
   geçidin ortasına kayar. Askerler yerlerinin biraz yanında durur: dururken toplu, yürürken gevşek, dar yerde iyice
   dağınık; su, ev ve sur üstüne düşen asker birliğin ortasına doğru sokulur. Geçidin genişliği iki yanın toplamıyla
   ölçülür (birlik ortada değilse de).
+- **Geçidin tam ortasından, en geniş cepheyle** (kullanıcı 27.10: "daralan geçitlerde birlikler geçidin tam ortasına
+  konumlansın, kendi kenarlarından gitmesin, ortalayarak en geniş şekilde gitmeye çalışsın"): yol engelden 6 birim
+  uzak durmak ister (`N.tactics.path`); daha yakın her hücre en çok 4 kat pahalı - dar geçitte yol geçidin tam
+  ortasından geçer, kıyıya ve sura yapışmaz; açık arazide gölün, köyün yanından da biraz açıktan dolanır. Kestirmeler
+  bu uzaklıktan en çok 0.5 birim yakına iner. Daralan birlik geçide sığan en geniş cepheyi alır; dururken de geçidin
+  ortasına kayar. 10 birimlik geçitte birlik ortadan 0.3 birimden az sapar (önce 1-3 birim, kenara yakın).
+- **Takılmaz** (kullanıcı 27.10: "otomatik savaşta takılıyor, nehir kenarında gitmiyorlar; önce başka yere tıklayıp
+  yönünü düzeltiyorum, sonra gidiyor"): yol 1 birimlik hücrelerde, çaprazda köşeden kesmeden bulunur, kestirme
+  geçtiği her hücreye bakar (önce 2 birimlik ızgaranın yolu suyun köşesinden geçiyor, birlik ilk adımda suya
+  değip hiç kıpırdamıyordu). Köşeye yine sürtünen birlik yana kayarak geçer, hiç gidemiyorsa yeni yol bulur.
+  Suya, eve ya da sura verilen emir oraya en yakın, birliğin bulunduğu yandaki yere döner. Varılamayan hedefe
+  (suyun ötesi, surun içi) bu yandaki en yakın yere gidilir, oradan hedefe doğru dayanılır (surda merdiven
+  kurulur). Ordular suyla çevrili küçük bir cebe dizilmez (ana karaya; önce savunanın dizilişi saldıranın
+  birliklerini de itip suya sokabiliyordu). 59 rastgele engelli sahada iki taraf bilgisayarda: takılan birlik 96'dan
+  0'a, süresi dolan savaş 23'ten 0'a.
 - **Dizilirken ışınlanma görünür:** duraklatılmışken de askerler birliğin yeni yerine gelir (önce çizim eski yerde
   kalıyor, görünen yere tıklayınca birlik seçilemiyordu); dizilme aşamasında anında, duraklatılmış savaşta diziliş
   değişince hızla akarak.
@@ -1220,8 +1235,8 @@ Kullanıcı 26.10 (bir görsel gönderdi: ağaçlı kıyılarıyla bir nehir, ya
   muharebesinde yakındaki yerleşim sahanın ortasına düşerse). Yol nehirden geçiyorsa (moves.js
   terrainOf) ve sahada gerçek nehir yoksa ortadan bir nehir. Surlu yerde nehir yok.
 - **Köprüler:** her nehirde, iki ordunun arasına en yakın noktada bir köprü, nehir uzunsa bir tane daha.
-- **Etkiler:** su ve evler geçilmez - birlikler yolu kendileri bulur (2 birimlik ızgarada A*, ormanı pahalı
-  sayar; köprüye gider); karşı kıyıdaki düşmanla göğüs göğüse dövüşülmez (oklar geçer). Ormanda yürüyüş
+- **Etkiler:** su ve evler geçilmez - birlikler yolu kendileri bulur (1 birimlik hücrelerde A*, ormanı ve
+  engele yakın yerleri pahalı sayar; köprüye gider; 29a "Takılmaz"); karşı kıyıdaki düşmanla göğüs göğüse dövüşülmez (oklar geçer). Ormanda yürüyüş
   x0.6 (atlı x0.45), atlı göğüs göğüse x0.7, hücum x0.5, ormandakine ok x0.55. Yokuşta yavaşlama
   (yükseklik x0.25). Tepeden aşağı vuran 1 + 0.35 x yükseklik farkı kadar güçlü (yokuş yukarı zayıf);
   tepedeki okçunun menzili 1 + 0.3 x yükseklik.

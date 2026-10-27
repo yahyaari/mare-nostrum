@@ -294,6 +294,7 @@ export function breach(F, q, half) {
       if (along <= half && across <= 1.6) F.kind[y * w + x] = OPEN;
     }
   }
+  F.rev = (F.rev ?? 0) + 1;
 }
 
 /** Noktanın doğru parçasına uzaklığı. */
@@ -410,6 +411,110 @@ export function heightAt(F, x, y) {
 
 /** Yürünebilir mi (su, ev ve sur değil; köprü olur). */
 export const passable = (F, x, y) => { const k = kindAt(F, x, y); return k !== WATER && k !== HOUSE && k !== WALL; };
+/** Türüne göre geçilmez hücre. */
+const BLOCK = [false, true, false, false, true, true];
+
+/**
+ * Sahanın yol ızgaraları (hücre başına; saha değişince - gedik - yeniden): `clear` en yakın geçilmez hücreye ya da
+ * saha kenarına uzaklık; `region` birbirine yürünerek varılan bölgenin numarası (geçilmezde -1); `main` şehrin
+ * dışındaki en büyük bölge (ordular burada dizilir: suyla çevrili küçük bir cebe değil).
+ */
+function grids(F) {
+  if (F.grid && F.grid.kind === F.kind && F.grid.rev === (F.rev ?? 0)) return F.grid;
+  const { w, h } = F, n = w * h, D = Math.SQRT2;
+  const clear = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = i % w, y = (i / w) | 0;
+    clear[i] = BLOCK[F.kind[i]] ? 0 : Math.min(x, y, w - 1 - x, h - 1 - y) + 1;
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      let v = clear[i];
+      if (x > 0) v = Math.min(v, clear[i - 1] + 1);
+      if (y > 0) {
+        v = Math.min(v, clear[i - w] + 1);
+        if (x > 0) v = Math.min(v, clear[i - w - 1] + D);
+        if (x < w - 1) v = Math.min(v, clear[i - w + 1] + D);
+      }
+      clear[i] = v;
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      let v = clear[i];
+      if (x < w - 1) v = Math.min(v, clear[i + 1] + 1);
+      if (y < h - 1) {
+        v = Math.min(v, clear[i + w] + 1);
+        if (x < w - 1) v = Math.min(v, clear[i + w + 1] + D);
+        if (x > 0) v = Math.min(v, clear[i + w - 1] + D);
+      }
+      clear[i] = v;
+    }
+  }
+  const region = new Int32Array(n).fill(-1), size = [];
+  const C = F.city;
+  for (let i = 0; i < n; i++) {
+    if (BLOCK[F.kind[i]] || region[i] >= 0) continue;
+    const id = size.length, stack = [i];
+    let k = 0;
+    region[i] = id;
+    while (stack.length) {
+      const c = stack.pop(), x = c % w, y = (c / w) | 0;
+      if (!C || !insideCity(C, { x: x + 0.5, y: y + 0.5 })) k++;
+      for (const m of [x > 0 ? c - 1 : -1, x < w - 1 ? c + 1 : -1, y > 0 ? c - w : -1, y < h - 1 ? c + w : -1]) {
+        if (m < 0 || BLOCK[F.kind[m]] || region[m] >= 0) continue;
+        region[m] = id;
+        stack.push(m);
+      }
+    }
+    size.push(k);
+  }
+  const main = size.indexOf(Math.max(...size));
+  F.grid = { kind: F.kind, rev: F.rev ?? 0, clear, region, main };
+  return F.grid;
+}
+
+const cellAt = (F, p) => Math.max(0, Math.min(F.h - 1, Math.floor(p.y))) * F.w + Math.max(0, Math.min(F.w - 1, Math.floor(p.x)));
+
+/** Bu nokta ordunun dizilebileceği ana bölgede mi (suyla çevrili cepte, şehrin içinde değil). */
+export function onMain(F, x, y) {
+  if (!F.obstacles) return true;
+  const G = grids(F), i = cellAt(F, { x, y });
+  return !BLOCK[F.kind[i]] && G.region[i] === G.main;
+}
+
+/** Ana bölgede `p`ye en yakın yer (dizilişte yakında kara bulunamazsa). */
+export function nearestMain(F, p) {
+  const G = grids(F);
+  let best = null, bd = Infinity;
+  for (let i = 0; i < F.w * F.h; i++) {
+    if (G.region[i] !== G.main) continue;
+    const x = (i % F.w) + 0.5, y = ((i / F.w) | 0) + 0.5, d = Math.hypot(x - p.x, y - p.y);
+    if (d < bd) { bd = d; best = { x, y }; }
+  }
+  return best ?? { x: p.x, y: p.y };
+}
+
+/** `p`ye en yakın yürünebilir yer, `from`un bölgesinde (suya ya da sura verilen emir kıyıya, surun bu yanına). */
+export function nearestOpen(F, p, from = p) {
+  const G = grids(F), want = G.region[cellAt(F, from)];
+  const px = Math.floor(p.x), py = Math.floor(p.y);
+  let best = null, bd = Infinity;
+  for (let r = 0; r <= 16 && !best; r++) {
+    for (let y = py - r; y <= py + r; y++) {
+      for (let x = px - r; x <= px + r; x++) {
+        if (Math.max(Math.abs(x - px), Math.abs(y - py)) !== r || x < 0 || y < 0 || x >= F.w || y >= F.h) continue;
+        const i = y * F.w + x;
+        if (BLOCK[F.kind[i]] || (want >= 0 && G.region[i] !== want)) continue;
+        const d = Math.hypot(x + 0.5 - p.x, y + 0.5 - p.y);
+        if (d < bd) { bd = d; best = { x: x + 0.5, y: y + 0.5 }; }
+      }
+    }
+  }
+  return best ?? { x: p.x, y: p.y };
+}
 
 /** İki nokta arasında su var mı (köprü dışında): karşı kıyıdaki düşmanla göğüs göğüse dövüşülmez. */
 export function waterBetween(F, a, b) {
@@ -418,64 +523,147 @@ export function waterBetween(F, a, b) {
 }
 
 /**
- * Yürüyüş yolu (2 birimlik ızgarada, 8 yönlü, A*): geçilmez hücrelerden kaçar, ormanı pahalı sayar. Dönen:
- * [{ x, y }] (ilk nokta hariç), bulunamazsa düz çizgi [{ goal }].
+ * Doğru parçasının geçtiği her hücre (köşeden geçerken iki yanındaki de): `f(hücre, t)` (t: parçanın 0..1'i, hücreye
+ * girdiği yer) false dönerse durur ve false döner. Saha dışı geçilir.
  */
-export function pathOn(F, from, to, mounted = false) {
+function alongLine(F, a, b, f) {
+  const { w, h } = F, dx = b.x - a.x, dy = b.y - a.y;
+  let x = Math.floor(a.x), y = Math.floor(a.y);
+  const x1 = Math.floor(b.x), y1 = Math.floor(b.y), sx = Math.sign(dx), sy = Math.sign(dy);
+  const tdx = dx ? 1 / Math.abs(dx) : Infinity, tdy = dy ? 1 / Math.abs(dy) : Infinity;
+  let tx = dx ? (sx > 0 ? x + 1 - a.x : a.x - x) * tdx : Infinity, ty = dy ? (sy > 0 ? y + 1 - a.y : a.y - y) * tdy : Infinity;
+  const at = (cx, cy, t) => cx < 0 || cy < 0 || cx >= w || cy >= h || f(cy * w + cx, Math.min(1, t));
+  if (!at(x, y, 0)) return false;
+  for (let k = Math.abs(x1 - x) + Math.abs(y1 - y); k > 0; k--) {
+    if (Math.abs(tx - ty) < 1e-9) {
+      if (!at(x + sx, y, tx) || !at(x, y + sy, ty)) return false;
+      x += sx; y += sy; k--;
+      const t = tx;
+      tx += tdx; ty += tdy;
+      if (!at(x, y, t)) return false;
+    } else if (tx < ty) {
+      x += sx;
+      if (!at(x, y, tx)) return false;
+      tx += tdx;
+    } else {
+      y += sy;
+      if (!at(x, y, ty)) return false;
+      ty += tdy;
+    }
+  }
+  return true;
+}
+
+/** İki nokta arası düz yürünebilir mi (geçtiği her hücre). */
+export const lineFree = (F, a, b) => alongLine(F, a, b, (i) => !BLOCK[F.kind[i]]);
+
+// A* için yeniden kullanılan diziler.
+let AS = null;
+
+/**
+ * Yürüyüş yolu (1 birimlik hücrelerde, 8 yönlü, köşeden kesmeden, A*): geçilmez hücrelerden kaçar, ormanı pahalı
+ * sayar; `want` (birliğin yarı genişliği) verilirse engele ondan yakın hücreler pahalı - dar geçidin ortasından,
+ * kıyıya ve sura yapışmadan gider (kullanıcı 27.10: "nehir kenarında takılıyor; daralan geçitte tam ortadan
+ * gitsin"). Varılamayan hedefe (suyun ötesi, surun içi) bu yandaki en yakın yere, sonra hedefe doğru. Dönen:
+ * [{ x, y }] (bulunulan yer hariç, son nokta hedef).
+ */
+export function pathOn(F, from, to, mounted = false, want = 0) {
   if (!F.obstacles) return [to];
-  const G = 2, gw = Math.ceil(F.w / G), gh = Math.ceil(F.h / G);
-  const node = (x, y) => Math.max(0, Math.min(gh - 1, Math.floor(y / G))) * gw + Math.max(0, Math.min(gw - 1, Math.floor(x / G)));
-  const free = (n) => passable(F, (n % gw) * G + G / 2, Math.floor(n / gw) * G + G / 2);
-  const slow = (n) => (kindAt(F, (n % gw) * G + G / 2, Math.floor(n / gw) * G + G / 2) === FOREST ? (mounted ? 2.2 : 1.6) : 1);
-  const s = node(from.x, from.y), g = node(to.x, to.y);
+  const P = N.tactics.path, { w, h } = F, n = w * h, G = grids(F), { clear, region } = G;
+  want = Math.min(P.want, Math.max(0, want));
+  // Kestirme: geçtiği her hücre yürünür ve engelden iki ucunun uzaklığı kadar (en çok `want`) uzak.
+  const roomy = (a, c) => {
+    const ca = Math.min(want, clear[cellAt(F, a)]), cc = Math.min(want, clear[cellAt(F, c)]);
+    return alongLine(F, a, c, (i, t) => !BLOCK[F.kind[i]] && clear[i] >= ca + (cc - ca) * t - P.slack);
+  };
+  if (roomy(from, to)) return [to];
+  let s = cellAt(F, from), g = cellAt(F, to);
+  if (BLOCK[F.kind[s]]) s = cellAt(F, nearestOpen(F, from));
+  if (BLOCK[F.kind[s]]) return [to];
+  // Hedef başka bölgedeyse: bu bölgede hedefe en yakın hücreye.
+  const reach = !BLOCK[F.kind[g]] && region[g] === region[s];
+  if (!reach) {
+    let bd = Infinity;
+    for (let i = 0; i < n; i++) {
+      if (region[i] !== region[s]) continue;
+      const d = Math.hypot((i % w) + 0.5 - to.x, ((i / w) | 0) + 0.5 - to.y);
+      if (d < bd) { bd = d; g = i; }
+    }
+  }
   if (s === g) return [to];
-  const cost = new Float32Array(gw * gh).fill(Infinity), prev = new Int32Array(gw * gh).fill(-1);
-  const open = [[0, s]];
-  cost[s] = 0;
-  const gx = g % gw, gy = Math.floor(g / gw);
-  while (open.length) {
-    let bi = 0;
-    for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
-    const [, n] = open.splice(bi, 1)[0];
-    if (n === g) break;
-    const nx = n % gw, ny = Math.floor(n / gw);
+  if (!AS || AS.cost.length !== n) AS = { cost: new Float32Array(n), prev: new Int32Array(n), stamp: new Int32Array(n), gen: 0, hp: [], hn: [] };
+  const A = AS;
+  A.gen++;
+  const { cost, prev, stamp } = A, hp = A.hp, hn = A.hn;
+  hp.length = 0; hn.length = 0;
+  const push = (p, v) => {
+    let i = hp.length;
+    hp.push(p); hn.push(v);
+    while (i > 0) {
+      const up = (i - 1) >> 1;
+      if (hp[up] <= p) break;
+      hp[i] = hp[up]; hn[i] = hn[up]; hp[up] = p; hn[up] = v; i = up;
+    }
+  };
+  const pop = () => {
+    const top = hn[0], lp = hp.pop(), ln = hn.pop();
+    if (hp.length) {
+      let i = 0;
+      hp[0] = lp; hn[0] = ln;
+      for (;;) {
+        const l = i * 2 + 1, r = l + 1;
+        let m = i;
+        if (l < hp.length && hp[l] < hp[m]) m = l;
+        if (r < hp.length && hp[r] < hp[m]) m = r;
+        if (m === i) break;
+        [hp[i], hp[m]] = [hp[m], hp[i]];
+        [hn[i], hn[m]] = [hn[m], hn[i]];
+        i = m;
+      }
+    }
+    return top;
+  };
+  const gx = (g % w) + 0.5, gy = ((g / w) | 0) + 0.5;
+  stamp[s] = A.gen; cost[s] = 0; prev[s] = -1;
+  push(0, s);
+  while (hp.length) {
+    const c = pop();
+    if (c === g) break;
+    const cx = c % w, cy = (c / w) | 0;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue;
-        const x = nx + dx, y = ny + dy;
-        if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
-        const m = y * gw + x;
-        if (m !== g && !free(m)) continue;
-        const c = cost[n] + Math.hypot(dx, dy) * slow(m);
-        if (c >= cost[m]) continue;
-        cost[m] = c;
-        prev[m] = n;
-        open.push([c + Math.hypot(x - gx, y - gy), m]);
+        const x = cx + dx, y = cy + dy;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        const m = y * w + x;
+        if (BLOCK[F.kind[m]]) continue;
+        // Çaprazda köşeden kesmez: iki yanı da açık olmalı.
+        if (dx && dy && (BLOCK[F.kind[cy * w + x]] || BLOCK[F.kind[y * w + cx]])) continue;
+        const pinch = want > 0 ? 1 + (P.pinch * Math.max(0, want - clear[m])) / want : 1;
+        const v = cost[c] + (dx && dy ? Math.SQRT2 : 1) * (F.kind[m] === FOREST ? (mounted ? 2.2 : 1.6) : 1) * pinch;
+        if (stamp[m] === A.gen && v >= cost[m]) continue;
+        stamp[m] = A.gen; cost[m] = v; prev[m] = c;
+        push(v + Math.hypot(x + 0.5 - gx, y + 0.5 - gy), m);
       }
     }
   }
-  if (prev[g] < 0) return [to];
+  if (stamp[g] !== A.gen) return [to];
   const cells = [];
-  for (let n = g; n !== s && n >= 0; n = prev[n]) cells.push(n);
+  for (let c = g; c !== s && c >= 0; c = prev[c]) cells.push(c);
   cells.reverse();
-  // Düz giden kısımları atla (yalnız dönüş noktaları kalsın).
-  const pts = cells.map((n) => ({ x: (n % gw) * G + G / 2, y: Math.floor(n / gw) * G + G / 2 }));
+  // Düz giden kısımları atla (yalnız dönüş noktaları kalsın); kestirme engele yolun kendisinden yakın geçmez.
+  const pts = cells.map((c) => ({ x: (c % w) + 0.5, y: ((c / w) | 0) + 0.5 }));
+  if (reach) pts[pts.length - 1] = to;
   const out = [];
   let last = from;
   for (let i = 0; i < pts.length - 1; i++) {
-    if (clearLine(F, last, pts[i + 1])) continue;
+    if (roomy(last, pts[i + 1])) continue;
     out.push(pts[i]);
     last = pts[i];
   }
-  out.push(to);
+  out.push(pts.at(-1));
+  if (!reach) out.push(to);
   return out;
-}
-
-/** İki nokta arası düz yürünebilir mi. */
-function clearLine(F, a, b) {
-  const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.8);
-  for (let i = 1; i < n; i++) if (!passable(F, a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n)) return false;
-  return true;
 }
 
 /** Yerleşimin adı için: sahada köy olan yer (etiket). */

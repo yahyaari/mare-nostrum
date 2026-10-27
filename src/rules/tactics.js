@@ -28,7 +28,7 @@
 
 import { archMul, cavMul, eliteMelee, eliteMul, infMul, sideMuls } from "./combat.js";
 import { N, UNITS, uniqueOf } from "./numbers.js";
-import { FOREST, WALL, addCity, breach as openBreach, flatField, heightAt, insideCity, kindAt, passable, pathOn, sidePoint, wallAt, wallPoint, wallShare, waterBetween } from "./field.js";
+import { FOREST, WALL, addCity, breach as openBreach, flatField, heightAt, insideCity, kindAt, lineFree, nearestMain, nearestOpen, onMain, passable, pathOn, sidePoint, wallAt, wallPoint, wallShare, waterBetween } from "./field.js";
 
 const K = () => N.tactics;
 const PI2 = Math.PI * 2;
@@ -205,20 +205,22 @@ function deploy(b, side, g) {
     line(down, front - 15, h * 0.75);
   }
   line(g.siege ?? [], front - 15, h / 2);
-  for (let pass = 0; pass < 4; pass++) separate(b, 1, true);
+  for (let pass = 0; pass < 4; pass++) separate(b, 1, true, side);
   // Su ya da ev üstüne düşen birlik en yakın yürünebilir yere (önce yanlara, sonra geriye).
+  // Suyla çevrili küçük bir cebe düşen de (karşı ordu oraya varamaz): ana karaya.
   for (const u of b.units.filter((v) => v.side === side)) {
     const C2 = b.walls && side === "def" ? b.field.city : null;
-    if (passable(b.field, u.x, u.y) && (!C2 || insideCity(C2, u))) continue;
+    if (passable(b.field, u.x, u.y) && (C2 ? insideCity(C2, u) : onMain(b.field, u.x, u.y))) continue;
     let best = null;
     for (let d = 1; d < 40 && !best; d += 1) {
       for (const [dx, dy] of [[0, d], [0, -d], [side === "att" ? -d : d, 0], [side === "att" ? d : -d, 0], [d, d], [-d, d], [d, -d], [-d, -d]]) {
         const x = u.x + dx, y = u.y + dy;
         const okC = !C2 || (x > C2.x0 + 2 && x < C2.x1 - 2 && y > C2.y0 + 2 && y < C2.y1 - 2);
-        if (x > 1 && y > 1 && x < w - 1 && y < h - 1 && okC && passable(b.field, x, y)) { best = { x, y }; break; }
+        if (x > 1 && y > 1 && x < w - 1 && y < h - 1 && okC && passable(b.field, x, y) && (C2 || onMain(b.field, x, y))) { best = { x, y }; break; }
       }
     }
-    if (best) Object.assign(u, best);
+    // Yakında yoksa (sahanın çoğu deniz) ana karanın en yakın yerine.
+    Object.assign(u, best ?? (C2 ? {} : nearestMain(b.field, u)));
   }
 }
 
@@ -265,6 +267,16 @@ function squeeze(b, u, ang, reach) {
   // daralan birlik en çok `squeezeRows` sıra derinliğe iner (geçit daha darsa asker kenarlarda dağılır, view).
   const least = Math.ceil(Math.ceil(u.men) / K().squeezeRows);
   u.march = r < full.w ? Math.max(1, least, Math.floor((r - 0.2) / full.sp)) : null;
+}
+/** Daralmış birlik geçidin ortasına doğru kayar (yürüyüş hızının yarısıyla). */
+function centre(F, u, dt) {
+  if (!u.lateral) return;
+  const l = Math.hypot(u.lateral.x, u.lateral.y), step = Math.min(l, u.speed * 0.5 * dt);
+  if (l < 1e-3) return;
+  const sx = u.x + (u.lateral.x / l) * step, sy = u.y + (u.lateral.y / l) * step;
+  if (!passable(F, sx, sy)) return;
+  u.x = sx; u.y = sy;
+  u.lateral.x -= (u.lateral.x / l) * step; u.lateral.y -= (u.lateral.y / l) * step;
 }
 const fighting = (u) => alive(u) && !u.routed && u.type !== "siege";
 const foes = (b, u) => b.units.filter((v) => v.side !== u.side && alive(v) && !v.routed);
@@ -343,9 +355,11 @@ export function deployZone(b, side) {
 function settle(b, u, Z) {
   const ex = extent(u);
   const fit = (x, y) => ({ x: Math.max(Z.x0 + ex.x, Math.min(Z.x1 - ex.x, x)), y: Math.max(Z.y0 + ex.y, Math.min(Z.y1 - ex.y, y)) });
+  // Yürünür ve - şehrin içindeki savunan dışında - suyla çevrili bir cepte değil.
+  const ok = (q) => passable(b.field, q.x, q.y) && ((b.walls && u.inside) || onMain(b.field, q.x, q.y));
   let p = fit(u.x, u.y);
-  for (let d = 0; d < 20 && !passable(b.field, p.x, p.y); d += 1) {
-    const c = [[d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, -d], [d, -d], [-d, d]].map(([dx, dy]) => fit(u.x + dx, u.y + dy)).find((q) => passable(b.field, q.x, q.y));
+  for (let d = 0; d < 20 && !ok(p); d += 1) {
+    const c = [[d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, -d], [d, -d], [-d, d]].map(([dx, dy]) => fit(u.x + dx, u.y + dy)).find(ok);
     if (c) p = c;
   }
   Object.assign(u, p, { order: null, manual: false, px: p.x, py: p.y });
@@ -426,8 +440,8 @@ export function reshape(b, ids, dir) {
  * Düşmanla değer ama iç içe geçmez; dost birlikler birbirinin içinden geçer (kullanıcı 27.10: "takılıyorlar,
  * iç içe geçebilirler") - yalnız dizilirken (`friends`) açılırlar.
  */
-function separate(b, k, friends = false) {
-  const us = b.units.filter(alive);
+function separate(b, k, friends = false, side = null) {
+  const us = b.units.filter((u) => alive(u) && (!side || u.side === side));
   const R = us.map(rect);
   for (let i = 0; i < us.length; i++) {
     for (let j = i + 1; j < us.length; j++) {
@@ -659,9 +673,14 @@ export function step(b, dt) {
       // Arazi: engel varsa yol (köprüyü bulur), ormanda ve yokuşta yavaş.
       let aim = goal;
       if (F.obstacles && !(u.routed && b.walls)) {
+        // Suya, eve ya da sura verilen emir: oraya en yakın, bu yandaki yürünür yere.
+        if (goal === u.order && !passable(F, goal.x, goal.y)) Object.assign(goal, nearestOpen(F, goal, u));
         const key = `${Math.round(goal.x / 2)},${Math.round(goal.y / 2)}`;
-        if (u.pathKey !== key || b.t - (u.pathAt ?? -9) > 1.5) { u.path = pathOn(F, u, goal, u.mounted || u.type === "cav"); u.pathKey = key; u.pathAt = b.t; }
-        while (u.path.length > 1 && dist(u, u.path[0]) < 1.2) u.path.shift();
+        if (u.pathKey !== key || b.t - (u.pathAt ?? -9) > 1.5) {
+          u.path = pathOn(F, u, goal, u.mounted || u.type === "cav", u.type === "siege" ? 0 : T.path.want);
+          u.pathKey = key; u.pathAt = b.t;
+        }
+        while (u.path.length > 1 && dist(u, u.path[0]) < 1.2 && lineFree(F, u, u.path[1])) u.path.shift();
         aim = u.path[0] ?? goal;
       }
       const ground = kindAt(F, u.x, u.y) === FOREST ? (u.mounted || u.type === "cav" ? T.terrain.forestMounted : T.terrain.forest) : 1;
@@ -673,16 +692,12 @@ export function step(b, dt) {
         turn(u, to, (u.routed ? 6 : T.turn.march) * dt);
         const k = Math.min(1, sp / da);
         const nx = u.x + (aim.x - u.x) * k, ny = u.y + (aim.y - u.y) * k;
-        if (passable(F, nx, ny) || (u.routed && kindAt(F, nx, ny) === WALL)) { u.x = nx; u.y = ny; }
-        // Geçidin ortasına doğru (yürüyüş hızının yarısıyla).
-        if (u.lateral) {
-          const l = Math.hypot(u.lateral.x, u.lateral.y), step = Math.min(l, u.speed * 0.5 * dt);
-          if (l > 1e-3) {
-            const sx = u.x + (u.lateral.x / l) * step, sy = u.y + (u.lateral.y / l) * step;
-            if (passable(F, sx, sy)) { u.x = sx; u.y = sy; u.lateral.x -= (u.lateral.x / l) * step; u.lateral.y -= (u.lateral.y / l) * step; }
-          }
-        }
-        else { u.pathAt = -9; }
+        if (passable(F, nx, ny) || !passable(F, u.x, u.y) || (u.routed && kindAt(F, nx, ny) === WALL)) { u.x = nx; u.y = ny; }
+        // Köşeye sürtünen kayarak geçer (kullanıcı 27.10: "nehir kenarında gitmiyorlar"); hiç gidemiyorsa yeni yol.
+        else if (passable(F, nx, u.y)) u.x = nx;
+        else if (passable(F, u.x, ny)) u.y = ny;
+        else u.pathAt = -9;
+        centre(F, u, dt);
         u.wasMoving = true;
       } else if (u.order && !u.order.unit) {
         if (u.order.facing != null) u.facing = u.order.facing;
@@ -693,6 +708,8 @@ export function step(b, dt) {
       const tgt = cs.find((v) => v.id === u.order?.unit) ?? cs[0];
       turn(u, Math.atan2(tgt.y - u.y, tgt.x - u.x), T.turn.fight * dt);
     } else if (!u.routed && !u.order) {
+      // Dar yerde duran da geçidin ortasına.
+      centre(F, u, dt);
       // Duran birlik, yakına gelen düşmana yavaşça döner (uzaktakine değil: verilen cephe korunur).
       const n = foes(b, u).reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
       if (n && dist(u, n) < T.turn.near) turn(u, Math.atan2(n.y - u.y, n.x - u.x), T.turn.idle * dt);
