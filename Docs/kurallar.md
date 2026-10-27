@@ -1114,6 +1114,38 @@ süvari ayrılsın". `src/rules/tactics.js` (kurallar, saf), `src/view/tactics.j
   (güç farkı belirgin olanlarda %88; diziliş ve kuşatma gelince %87'den indi - kendiliğinden yandan çarpışmalar);
   kazananın kaybı otomatikte %29, taktikte %24. Ortanca savaş ~40 sn (x1 hızda), surlu yerde daha uzun. 1200 askerlik bir savaşın tamamı 0.1 sn'de hesaplanıyor.
 
+### 29a. Canlı dövüş, iç içe geçme, sura tırmanma
+
+Kullanıcı 27.10 (İstanbul kuşatmasından görseller: sur boyunca tırmanan noktalar, içeride karışan iki taraf):
+"birimler birbirlerine takılıyor; dinamik hareket etsinler, iç içe geçebilirler; kuşatmalarda surlara
+tırmanıyormuş gibi olsun, kaç kişi gelirse gelsin surdan tek sıra halinde geçebilmeli; çok fazla sallanıyorlar,
+arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar".
+
+- **İç içe geçme:** dost birlikler birbirini itmez, içinden geçer (yalnız dizilirken açılırlar); düşmanla değer.
+- **Askerler tek tek** (`view/tactics.js soldiers`): her nokta kendi yerinde yaşar, birliğin dizilişindeki yerine
+  yürür (birlik dönerken ya da kayıp verirken saflar akar). Dövüşte ön 3 sıra değdiği düşmanın kenarına yürür,
+  iki taraf cephede karışır; cephesi taşan uçlar düşmanın yanına dolanır, arkadakiler ileri sıkışır. Titreme
+  yok. Ölen asker düşmana en yakın olandan eksilir, yerde iz kalır.
+- **Geniş hat sarar:** düşmandan geniş cephenin taşan payı önden vururken de x0.8 kadar yandan vurmuş sayılır.
+- **Sur:** dışarıdakiler surun önünde, içeridekiler ardında. Sura dayanan birlik **merdivenden tek sıra
+  tırmanır**: saniyede 3 asker içeride ayrı bir birliğe (köprübaşı) geçer - kaç kişi olursa olsun; yan yana
+  merdivenlerden çıkanlar aynı köprübaşında toplanır (8 birim). Merdivenin dibindeki savunan tırmananları
+  düşürür (göğüs göğüse gücünün 0.6 katı, sur bonusuyla). Köprübaşı dirençli (kayıptan moral kaybı x0.5).
+  Atlı atından iner, tırmanır (içeride yaya, sura karşı yarı güç); okçu ancak emirle saldırıyorsa tırmanır.
+  **Kuşatma makinesi** sura dayanınca (her 10 asker saniyede 1 puan) 30 puanda 8 birimlik **gedik** açar;
+  gedikten herkes geçer. Surun iki yanı göğüs göğüse dövüşmez. Sur bonusu yalnız merdiven düşürmede ve surdan
+  okta; göğüs göğüse dövüşte yok (surun avantajı tırmanmanın darboğazı - ikisi birden saldıranı otomatik
+  savaştakinin yarısına indiriyordu). Surun ardındaki savunan oklardan korunur (x0.75). Gedik yokken
+  saldıranın elinde yalnız okçu ve makine kaldıysa hücum püskürtülür. Süre surlu yerde 5 dakika.
+- **Bilgisayar sura:** tırmanacak birlikler önce surun 10 birim önünde toplanır (en çok 15 sn), sonra her biri
+  kendi hizasında sura dayanır (merdivenler sur boyunca yayılır); makineler sura gider. Savunan: içeri girenlere
+  saldırır, merdivenlerin dibine koşar.
+- **Bozgunun etkisi** bozulan birliğin büyüklüğüyle orantılı (30 askerden küçükse az) - içeride kırılan küçük
+  köprübaşı bütün orduyu bozmasın.
+- **Ayar** (iki tarafı da bilgisayara oynatılan savaşlar): açık sahada kazanan %94 otomatik savaşla aynı
+  (önceden %83), surlu yerde %88; surlu yerde saldıranın kazanma sayısı otomatik 41, taktik ~44 / 149.
+  Alttaki kartlar çok birlik olunca (tırmananlar yeni birlik olur) iki sıra.
+
 ### 29b. Savaş sahasının arazisi
 
 Kullanıcı 26.10 (bir görsel gönderdi: ağaçlı kıyılarıyla bir nehir, yanında "Ridaniye Köyü", büyük bir dağ, adlarıyla):

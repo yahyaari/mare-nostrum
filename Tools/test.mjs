@@ -1153,10 +1153,59 @@ section("Taktik savaş (bölüm 29)");
   let shots = 0;
   for (let i = 0; i < 300 && !a2.over; i++) { TC.aiOrders(a2, "att", true); TC.aiOrders(a2, "def"); TC.step(a2, 0.1); shots += a2.shots.length; }
   check("okçular ok yağdırır", shots > 0);
-  // Sur: duvarı tutan savunan varken saldıran geçemez.
+  // Sur (kullanıcı 27.10: "surlara tırmanıyormuş gibi, tek sıra"): dışarıdakiler surun önünde; tırmananlar
+  // içeride ayrı bir birlik olur, saniyede en çok N.tactics.climb.rate kişi.
   const w = TC.setupBattle({ civ: "rome", inf: 200 }, { civ: "gaul", inf: 80, arch: 20 }, "city", 4);
-  for (let i = 0; i < 200; i++) { TC.aiOrders(w, "att", true); TC.aiOrders(w, "def"); TC.step(w, 0.1); }
-  check("surda: saldıran duvarın önünde kalır", w.units.filter((u) => u.side === "att" && !u.dead && !u.routed && !u.gone).every((u) => u.x < N.tactics.wallX));
+  let climbedMax = 0, prevInside = 0, outsideOk = true;
+  for (let i = 0; i < 200 && !w.over; i++) {
+    TC.aiOrders(w, "att", true); TC.aiOrders(w, "def"); TC.step(w, 0.1);
+    const live = w.units.filter((u) => !u.dead && !u.gone && !u.routed);
+    if (live.some((u) => u.side === "att" && !u.inside && u.x >= N.tactics.wallX)) outsideOk = false;
+    const inside = w.units.filter((u) => u.side === "att" && u.from).reduce((n, u) => n + (u.climbed ?? 0), 0) + w.units.filter((u) => u.side === "att" && !u.from).reduce((n, u) => n + (u.climbed ?? 0), 0);
+    climbedMax = Math.max(climbedMax, inside - prevInside);
+    prevInside = inside;
+  }
+  const outers = w.units.filter((u) => u.side === "att" && !u.from).length;
+  check("surda: dışarıdakiler surun önünde kalır", outsideOk);
+  check("surda: tırmananlar içeride ayrı birlik olur", w.units.some((u) => u.side === "att" && u.from && u.inside));
+  check("surda: tırmanma tek sıra (adımda birlik başına en çok rate x dt + 1)", climbedMax <= outers * (N.tactics.climb.rate * 0.1 + 1), climbedMax);
+  // Atlı atından iner (içeride yaya, sura karşı yarı güç); okçu tek başına şehri alamaz.
+  const cv = TC.setupBattle({ civ: "rome", cav: 60 }, { civ: "gaul", inf: 20 }, "city", 2);
+  for (let i = 0; i < 300 && !cv.units.some((u) => u.from); i++) { TC.aiOrders(cv, "att", true); TC.aiOrders(cv, "def"); TC.step(cv, 0.1); }
+  const dis = cv.units.find((u) => u.from);
+  check("atlı atından inip tırmanır, içeride yaya", !!dis && dis.dismounted && !dis.mounted && dis.charge === 0 && dis.type === "cav");
+  const ar = TC.setupBattle({ civ: "parthia", arch: 120 }, { civ: "gaul", inf: 30 }, "city", 2);
+  TC.autoplay(ar);
+  check("okçular surlu şehri alamaz (hücum püskürtülür)", ar.over?.winner === "def" && ar.over.repelled);
+  // Kuşatma makinesi sura dayanınca gedik açar; gedikten dışarıdaki içeri geçer.
+  const bk = TC.setupBattle({ civ: "rome", inf: 40, siege: 20 }, { civ: "gaul", inf: 200 }, "city", 3);
+  const ram = bk.units.find((u) => u.type === "siege"), gi = bk.units.find((u) => u.side === "att" && u.type === "inf");
+  Object.assign(ram, { x: N.tactics.wallX - TC.extent(ram).x - 0.3, y: 30 });
+  for (let i = 0; i < 400 && !bk.gaps.length; i++) TC.step(bk, 0.1);
+  check("makine sura dayanınca gedik açar", bk.gaps.length === 1 && Math.abs(bk.gaps[0].y - 30) < 1e-6);
+  for (const u of bk.units.filter((v) => v.side === "def")) Object.assign(u, { x: 95, y: 55 });
+  Object.assign(gi, { x: N.tactics.wallX - 5, y: 30, routed: false });
+  TC.command(bk, [gi.id], { x: N.tactics.wallX + 8, y: 30 });
+  for (let i = 0; i < 60; i++) TC.step(bk, 0.1);
+  check("gedikten geçen tarafını değiştirir", gi.inside && gi.x > N.tactics.wallX);
+  // Dost birlikler birbirini itmez (iç içe geçebilir).
+  const fr = TC.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 40 }, null, 1);
+  const [f1, f2] = fr.units.filter((u) => u.side === "att");
+  Object.assign(f2, { x: f1.x, y: f1.y });
+  TC.step(fr, 0.1);
+  check("dost birlikler iç içe geçebilir", Math.hypot(f1.x - f2.x, f1.y - f2.y) < 0.01);
+  // Geniş hat sarar: düşmandan geniş cephe önden de daha çok öldürür.
+  const hit = (cols) => {
+    const hb = TC.setupBattle({ civ: "gaul", inf: 40 }, { civ: "gaul", inf: 40 }, null, 1);
+    const [ha, hd] = [hb.units.find((u) => u.side === "att"), hb.units.find((u) => u.side === "def")];
+    ha.cols = cols; hd.cols = 8;
+    Object.assign(hd, { x: 50, y: 30, facing: Math.PI });
+    Object.assign(ha, { x: 50 - TC.footprint(ha).d / 2 - TC.footprint(hd).d / 2 - 0.3, y: 30, facing: 0 });
+    const m0 = hd.men;
+    for (let i = 0; i < 20; i++) TC.step(hb, 0.1);
+    return m0 - hd.men;
+  };
+  check("düşmandan geniş hat daha çok öldürür (sarar)", hit(20) > hit(8) * 1.3, `${hit(20).toFixed(1)} / ${hit(8).toFixed(1)}`);
   // Geri çekil: savaş kaybedilir, kalanlar kaçar.
   const r = TC.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 80 }, null, 6);
   r.over = { winner: "def", retreat: true };

@@ -101,8 +101,10 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     `src/view/tactics.js`. Saldırı penceresinde Sonucu gör / ⚔ Savaş.
 21. **Bölük, diziliş, kuşatma** (db6d9f0; "40 piyadeyi ikiye ayıramadım, uzatabilsem, etrafını sarsalar"):
     Böl / Birleştir / Genişlet / Derinleştir, sağ sürükleyerek hat, yandan x1.5 / arkadan x2. kurallar.md 29.
-22. **Savaş sahasının arazisi** (bu adım; kullanıcı görsel gönderdi - nehir, köy, dağ): kurallar.md 29b,
+22. **Savaş sahasının arazisi** (17e0641; kullanıcı görsel gönderdi - nehir, köy, dağ): kurallar.md 29b,
     `src/rules/field.js`. Gerçek kıyı, nehir, orman, dağ; köprüler, köy; yol bulma, tepe ve orman etkileri.
+23. **Canlı dövüş ve sura tırmanma** (bu adım; kullanıcı İstanbul kuşatması görselleri: "takılıyorlar, iç içe
+    geçsinler; surdan tek sıra tırmansınlar; arı kovanı gibi titriyorlar"): kurallar.md 29a.
 
 **Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
 yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.

@@ -51,15 +51,22 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   ctx.fillRect(0, 0, cam.w, cam.h);
   // Arazi bir kere çizilir (saha boyutu ya da dil değişince yeniden).
   ctx.drawImage(terrainLayer(f, b, T, lang, ctx.getTransform().a), f.x, f.y, f.w, f.h);
-  if (b.walls) wall(ctx, f, b);
+  if (b.walls) { wall(ctx, f, b); wall.gaps(); }
+  // Yerdeki ölüler.
+  corpses(ctx, f, B);
+  // Askerler kendi yerlerine yürür (duraklatılınca durur).
+  const dt = B.paused || b.over ? 0 : Math.min(0.1, Math.max(0, (now - (B.dotT ?? now)) / 1000)) * B.speed;
+  B.dotT = now;
   // Emir çizgileri (seçili birliklerin).
   for (const u of b.units) if (B.sel.has(u.id) && !u.dead && !u.gone && !u.routed && u.order) orderLine(ctx, f, b, u);
   // Birlikler: önce bozulanlar (altta), sonra ötekiler.
   const owner = { att: B.owners.att, def: B.owners.def };
   for (const u of [...b.units].sort((a, c) => (a.routed ? 0 : 1) - (c.routed ? 0 : 1))) {
     if (u.dead || u.gone) continue;
-    block(ctx, f, u, owner[u.side], B.sel.has(u.id), now);
+    block(ctx, f, B, u, owner[u.side], B.sel.has(u.id), dt);
   }
+  // Merdivenler (askerlerin üstünde): sura dayanıp tırmanan birliklerin yerinde, üstünde tek sıra askerler.
+  if (b.walls) for (const u of b.units) if (u.climbing && !u.dead && !u.gone) ladder(ctx, f, u, B.owners[u.side], now);
   for (const s of b.shots) arrows(ctx, f, b, s);
   for (const e of b.fx) burst(ctx, f, b, e);
   for (const u of b.units) {
@@ -285,6 +292,22 @@ function field(ctx, f, b) {
 /** Sur: savunanın önünde taş bir duvar, burçlarıyla; ardında birkaç ev. */
 function wall(ctx, f, b) {
   const x = f.x + N.tactics.wallX * f.k;
+  // Gedikler (kuşatma makinesi açtı): sur orada kesik, yerde taş yığını - sur çizildikten sonra üstüne.
+  const gaps = () => {
+    for (const g of b.gaps) {
+      const y0 = f.y + (g.y - g.half) * f.k, y1 = f.y + (g.y + g.half) * f.k;
+      ctx.fillStyle = "#cdbb93";
+      ctx.fillRect(x - 1.6 * f.k, y0, 3.2 * f.k, y1 - y0);
+      ctx.fillStyle = "#8f8574";
+      for (let i = 0; i < 14; i++) {
+        const sx = x + Math.sin(i * 7.1 + g.y) * 2.2 * f.k, sy = y0 + ((Math.cos(i * 3.3 + g.y) + 1) / 2) * (y1 - y0);
+        ctx.beginPath();
+        ctx.arc(sx, sy, (0.3 + ((i * 37) % 5) / 10) * f.k, 0, TAU);
+        ctx.fill();
+      }
+    }
+  };
+  wall.gaps = gaps;
   ctx.fillStyle = "#8f8574";
   ctx.strokeStyle = "rgba(40,32,22,0.8)";
   ctx.lineWidth = 1.2;
@@ -310,14 +333,117 @@ function wall(ctx, f, b) {
   }
 }
 
-/** Bir birliğin noktaları: cephe yönüne dik sıralar; ölenler arkadan eksilir. */
-function block(ctx, f, u, owner, selected, now) {
-  const fp = footprint(u);
-  const color = colorOf(owner);
+/**
+ * Askerler (kullanıcı 27.10: "arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar; dinamik hareket etsinler"):
+ * her nokta kendi yerinde yaşar (`B.dots`) ve birliğin dizilişindeki yerine doğru yürür - birlik dönerken ya da
+ * kayıp verirken saflar akarak toplanır. Dövüşte ön sıralar değdikleri düşmanın kenarına kadar yürür (iki taraf
+ * cephede karışır), cephesi taşan uçlar düşmanın yanına dolanır, arkadakiler ileri sıkışır. Ölen asker düşmana
+ * en yakın olandan eksilir, yerde iz kalır; tırmanıp içeri geçen ölü sayılmaz.
+ */
+function soldiers(B, u, dt) {
+  const b = B.b, fp = footprint(u);
   const n = Math.max(1, Math.round(u.men));
   const cos = Math.cos(u.facing), sin = Math.sin(u.facing);
+  B.dots ??= new Map();
+  let D = B.dots.get(u.id);
+  const slot = (i) => {
+    const row = i % fp.rows, col = Math.floor(i / fp.rows);
+    const fx = (fp.rows / 2 - row - 0.5) * fp.sp, fy = (col - (fp.cols - 1) / 2) * fp.sp;
+    return { x: u.x + fx * cos - fy * sin, y: u.y + fx * sin + fy * cos, row };
+  };
+  const jit = (i) => ({ a: Math.sin((u.id * 31 + i) * 12.9898) % 1, c: Math.cos((u.id * 17 + i) * 78.233) % 1 });
+  if (!D) {
+    // İlk kez: yerinde; surdan tırmanan grup ise surun dibinde belirir.
+    D = { pts: [], seen: u.climbed ?? 0 };
+    for (let i = 0; i < n; i++) { const s = slot(i); D.pts.push(u.from ? { x: N.tactics.wallX + 0.4, y: u.y + (jit(i).a - 0.5) * 1.5 } : { x: s.x, y: s.y }); }
+    B.dots.set(u.id, D);
+  }
+  // Değdiği düşmanlar (kurallardan).
+  const foes = b.touch?.get(u) ?? [];
+  const nearestFoe = (p) => foes.reduce((m, v) => (!m || Math.hypot(v.x - p.x, v.y - p.y) < Math.hypot(m.x - p.x, m.y - p.y) ? v : m), null);
+  // Eksilen askerler: tırmananlar önden (sura en yakın), ölenler düşmana en yakın olandan; ölenler iz bırakır.
+  while (D.pts.length > n) {
+    const climbed = (u.climbed ?? 0) - D.seen;
+    const toward = climbed > 0 ? { x: N.tactics.wallX, y: u.y } : nearestFoe(u) ?? { x: u.x + cos * 50, y: u.y + sin * 50 };
+    let k = 0, best = Infinity;
+    D.pts.forEach((p, i) => { const d = Math.hypot(p.x - toward.x, p.y - toward.y); if (d < best) { best = d; k = i; } });
+    const [p] = D.pts.splice(k, 1);
+    if (climbed > 0) D.seen += 1;
+    else { B.corpses ??= []; B.corpses.push({ x: p.x, y: p.y, side: u.side }); if (B.corpses.length > 1500) B.corpses.shift(); }
+  }
+  while (D.pts.length < n) { const s = slot(D.pts.length); D.pts.push(u.from ? { x: N.tactics.wallX + 0.4, y: u.y } : { x: s.x, y: s.y }); }
+  // Hedefler ve yürüyüş.
+  const vmax = (u.speed * 1.4 + 1.5) * dt;
+  D.pts.forEach((p, i) => {
+    const s = slot(i), j = jit(i);
+    let tx = s.x, ty = s.y;
+    if (u.routed) { tx += j.a * 3; ty += j.c * 3; }
+    else if (foes.length) {
+      const v = nearestFoe(s);
+      // Düşmanın dikdörtgeninin kenarındaki en yakın nokta (biraz içi: cephede karışırlar).
+      const vf = footprint(v), vc = Math.cos(v.facing), vs = Math.sin(v.facing);
+      const dx = s.x - v.x, dy = s.y - v.y;
+      let lx = dx * vc + dy * vs, ly = -dx * vs + dy * vc;
+      const hd = vf.d / 2 + 0.2, hw = vf.w / 2 + 0.2;
+      const cx = Math.max(-hd, Math.min(hd, lx)), cy = Math.max(-hw, Math.min(hw, ly));
+      if (Math.abs(lx) <= hd && Math.abs(ly) <= hw) { if (hd - Math.abs(lx) < hw - Math.abs(ly)) lx = Math.sign(lx || 1) * hd; else ly = Math.sign(ly || 1) * hw; } else { lx = cx; ly = cy; }
+      const ex = v.x + lx * vc - ly * vs, ey = v.y + lx * vs + ly * vc;
+      const gap = Math.hypot(ex - s.x, ey - s.y);
+      if (s.row < N.tactics.ranks && gap < 4.5) { tx = ex + j.a * 0.5; ty = ey + j.c * 0.5; }
+      else if (gap < 9) { const k = Math.min(1.2, gap * 0.4) / (gap || 1); tx = s.x + (ex - s.x) * k; ty = s.y + (ey - s.y) * k; }
+    }
+    const d = Math.hypot(tx - p.x, ty - p.y);
+    if (d > 1e-3) { const k = Math.min(1, vmax / d); p.x += (tx - p.x) * k; p.y += (ty - p.y) * k; }
+  });
+  return D.pts;
+}
+
+/** Yerdeki ölüler: küçük, soluk, tarafının renginin koyusu. */
+function corpses(ctx, f, B) {
+  if (!B.corpses?.length) return;
+  ctx.save();
+  for (const c of B.corpses) {
+    ctx.fillStyle = c.side === "att" ? shade(colorOf(B.owners.att), -0.45) : shade(colorOf(B.owners.def), -0.45);
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(f.x + c.x * f.k - 1.2, f.y + c.y * f.k - 0.8, 2.4, 1.6);
+  }
+  ctx.restore();
+}
+
+/** Merdiven: surun üstünde, tırmanan birliğin yerinde; üstünde tek sıra yukarı tırmanan askerler. */
+function ladder(ctx, f, u, owner, now) {
+  const x = f.x + N.tactics.wallX * f.k, y = f.y + u.y * f.k, half = 2.4 * f.k;
+  ctx.save();
+  ctx.strokeStyle = "#6e4e33";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x - half, y - 0.6 * f.k); ctx.lineTo(x + half, y - 0.6 * f.k);
+  ctx.moveTo(x - half, y + 0.6 * f.k); ctx.lineTo(x + half, y + 0.6 * f.k);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  for (let t = -half; t <= half; t += 0.7 * f.k) { ctx.beginPath(); ctx.moveTo(x + t, y - 0.6 * f.k); ctx.lineTo(x + t, y + 0.6 * f.k); ctx.stroke(); }
+  // Tek sıra: merdiven boyunca kayan askerler.
+  const r = Math.max(1.5, 0.32 * f.k);
+  for (let i = 0; i < 3; i++) {
+    const p = ((now / 900 + i / 3) % 1);
+    ctx.beginPath();
+    ctx.arc(x - half + p * half * 2, y, r, 0, TAU);
+    ctx.fillStyle = colorOf(owner);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(20,14,8,0.85)";
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Bir birliğin noktaları (soldiers): her biri kendi yerinde. */
+function block(ctx, f, B, u, owner, selected, dt) {
+  const fp = footprint(u);
+  const color = colorOf(owner);
+  const pts = soldiers(B, u, dt);
+  const cos = Math.cos(u.facing), sin = Math.sin(u.facing);
   const r = Math.max(1.6, 0.36 * f.k * (u.mounted || u.type === "cav" ? 1.15 : 1));
-  const shake = u.engaged ? 0.25 : 0;
   ctx.save();
   if (u.routed) ctx.globalAlpha = 0.55;
   if (selected) {
@@ -337,13 +463,8 @@ function block(ctx, f, u, owner, selected, now) {
     ctx.fillStyle = GOLD_LIGHT;
     ctx.fill();
   }
-  for (let i = 0; i < n; i++) {
-    const row = i % fp.rows, col = Math.floor(i / fp.rows);
-    // Yerel: ileri (cephe) -row, yan col; bozulan dağınık.
-    let fx = (fp.rows / 2 - row - 0.5) * fp.sp, fy = (col - (fp.cols - 1) / 2) * fp.sp;
-    if (u.routed) { fx += Math.sin(i * 12.9898) * 2.5; fy += Math.cos(i * 78.233) * 2.5; }
-    if (shake) { fx += Math.sin(now / 90 + i) * shake; fy += Math.cos(now / 110 + i * 1.7) * shake; }
-    const x = f.x + (u.x + fx * cos - fy * sin) * f.k, y = f.y + (u.y + fx * sin + fy * cos) * f.k;
+  for (const p of pts) {
+    const x = f.x + p.x * f.k, y = f.y + p.y * f.k;
     ctx.beginPath();
     if (u.type === "siege") ctx.rect(x - r, y - r, r * 2, r * 2);
     else if (u.mounted || u.type === "cav") ctx.ellipse(x, y, r * 1.35, r * 0.85, u.facing, 0, TAU);
@@ -562,7 +683,7 @@ function topBar(ctx, cam, B, T, lang) {
   };
   side("att", 18, "left");
   side("def", cam.w - 18, "right");
-  const left = Math.max(0, Math.ceil(N.tactics.time - B.b.t));
+  const left = Math.max(0, Math.ceil((B.b.walls ? N.tactics.timeWalls : N.tactics.time) - B.b.t));
   text(ctx, B.title, cam.w / 2, 24, { title: true, bold: true, size: 16, color: GOLD_LIGHT, align: "center" });
   const status = B.b.over ? "" : B.paused ? T.tacPaused : `${T.tacTime} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}${B.speed > 1 ? `  ·  x${B.speed}` : ""}${B.auto ? `  ·  ${T.tacAuto}` : ""}`;
   text(ctx, status, cam.w / 2, 45, { italic: true, size: 12, color: B.paused ? GOLD_LIGHT : CREAM, align: "center" });
@@ -575,11 +696,14 @@ function bottomBar(ctx, cam, B, T, boxes) {
   ctx.fillRect(0, y0, cam.w, BOTTOM_H);
   ctx.fillStyle = GOLD_DARK;
   ctx.fillRect(0, y0, cam.w, 2);
-  const mine = B.b.units.filter((u) => u.side === "att");
-  const bw = 120, right = cam.w - 16 - bw;
-  const cw = Math.min(62, (right - 24 - 6 * mine.length) / Math.max(1, mine.length));
+  const mine = B.b.units.filter((u) => u.side === "att" && !u.absorbed);
+  // Kartlar düğmelerin soluna sığar; çok birlik olunca (tırmananlar yeni birlik olur) iki sıra, küçük kart.
+  const bw = 120, right = cam.w - 16 - bw, avail = right - bw - 8 - 32;
+  const rowsN = mine.length * 46 > avail ? 2 : 1, per = Math.ceil(mine.length / rowsN);
+  const cw = Math.min(62, (avail - 6 * (per - 1)) / Math.max(1, per)), small = rowsN === 2;
+  const ch = small ? (BOTTOM_H - 28 - 6) / 2 : BOTTOM_H - 28;
   mine.forEach((u, i) => {
-    const x = 16 + i * (cw + 6), y = y0 + 14, h = BOTTOM_H - 28;
+    const x = 16 + (i % per) * (cw + 6), y = y0 + 14 + Math.floor(i / per) * (ch + 6), h = ch;
     const on = B.sel.has(u.id), out = u.dead || u.gone;
     roundRect(ctx, x, y, cw, h, 4);
     ctx.fillStyle = out ? "rgba(60,50,40,0.5)" : on ? "#4a3a26" : DARK;
@@ -587,25 +711,28 @@ function bottomBar(ctx, cam, B, T, boxes) {
     ctx.strokeStyle = on ? GOLD_LIGHT : GOLD_DARK;
     ctx.lineWidth = on ? 2 : 1;
     ctx.stroke();
+    const gy = small ? y + 12 : y + 22, gr = small ? 9 : 13;
     ctx.beginPath();
-    ctx.arc(x + cw / 2, y + 22, 13, 0, TAU);
+    ctx.arc(x + cw / 2, gy, gr, 0, TAU);
     ctx.fillStyle = out ? "#555" : colorOf(B.owners.att);
     ctx.fill();
     ctx.strokeStyle = u.elite ? GOLD_LIGHT : "rgba(20,14,8,0.9)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    glyph(ctx, u.elite ? "elite" : u.type, x + cw / 2, y + 22, CREAM);
-    text(ctx, out ? (u.dead ? "✕" : "↩") : u.routed ? "!" : String(Math.ceil(u.men)), x + cw / 2, y + 52, { bold: true, size: 13, color: u.routed ? "#d97a5a" : CREAM, align: "center" });
-    const nm = B.unitName(u);
-    let size = 10;
-    while (size > 7 && measure(ctx, nm, { size }) > cw - 4) size -= 0.5;
-    text(ctx, nm, x + cw / 2, y + 66, { size, color: "rgba(243,231,201,0.75)", align: "center" });
+    glyph(ctx, u.elite ? "elite" : u.type, x + cw / 2, gy, CREAM);
+    text(ctx, out ? (u.dead ? "✕" : "↩") : u.routed ? "!" : String(Math.ceil(u.men)), x + cw / 2, small ? y + 33 : y + 52, { bold: true, size: small ? 11 : 13, color: u.routed ? "#d97a5a" : CREAM, align: "center" });
+    if (!small) {
+      const nm = B.unitName(u);
+      let size = 10;
+      while (size > 7 && measure(ctx, nm, { size }) > cw - 4) size -= 0.5;
+      text(ctx, nm, x + cw / 2, y + 66, { size, color: "rgba(243,231,201,0.75)", align: "center" });
+    }
     const m = out || u.routed ? 0 : Math.max(0, Math.min(1, moraleOf(u) / 100));
     ctx.fillStyle = "rgba(255,255,255,0.12)";
-    ctx.fillRect(x + 6, y + h - 12, cw - 12, 5);
+    ctx.fillRect(x + 4, y + h - (small ? 6 : 12), cw - 8, small ? 3 : 5);
     ctx.fillStyle = m > 0.5 ? "#7fb85a" : m > 0.25 ? "#d6a63a" : "#c4523a";
-    ctx.fillRect(x + 6, y + h - 12, (cw - 12) * m, 5);
-    if (!out) boxes.push({ x, y, w: cw, h, act: { do: "tacPick", id: u.id }, tip: [B.unitName(u), `${Math.ceil(u.men)} / ${u.start}`] });
+    ctx.fillRect(x + 4, y + h - (small ? 6 : 12), (cw - 8) * m, small ? 3 : 5);
+    if (!out) boxes.push({ x, y, w: cw, h, act: { do: "tacPick", id: u.id }, tip: [B.unitName(u), `${Math.ceil(u.men)} / ${Math.round(u.start)}`] });
   });
   // Düğmeler: sağda alt alta.
   const bx = right, by = y0 + 10;
@@ -632,7 +759,7 @@ function endPanel(ctx, cam, B, T, lang, boxes) {
   const w = Math.min(460, cam.w - 40), h = 176, x = (cam.w - w) / 2, y = (cam.h - h) / 2 - 20;
   panel(ctx, x, y, w, h);
   text(ctx, won ? T.tacWon : B.b.over.retreat ? T.tacFled : T.tacLost, cam.w / 2, y + 42, { title: true, bold: true, size: 24, align: "center", color: won ? INK.good : INK.bad });
-  const lost = (s) => B.b.units.filter((u) => u.side === s).reduce((n, u) => n + (u.start - Math.floor(u.dead ? 0 : u.men)), 0);
+  const lost = (s) => Math.round(B.b.units.filter((u) => u.side === s).reduce((n, u) => n + (u.start - Math.floor(u.dead ? 0 : u.men)), 0));
   const fled = (s) => B.b.units.filter((u) => u.side === s && (u.routed || u.gone) && !u.dead).reduce((n, u) => n + Math.floor(u.men), 0);
   text(ctx, `${T.tacYourLoss}: ${lost("att")}  ·  ${T.tacTheirLoss}: ${lost("def")}`, cam.w / 2, y + 74, { size: 14, align: "center" });
   const note = B.b.over.timeout ? T.tacTimeout : won ? (fled("def") ? `${T.tacTheyFled}: ${fled("def")}` : "") : fled("att") ? `${T.tacWeFled}: ${fled("att")}` : "";

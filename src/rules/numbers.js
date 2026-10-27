@@ -75,15 +75,26 @@ export const N = {
   tactics: {
     w: 100, h: 60, wallX: 76, per: { inf: 40, arch: 30, cav: 30, siege: 20, elite: 30 }, speed: { inf: 3.5, cav: 8, siege: 2 },
     reach: 1.2, melee: 0.026, ranks: 3, charge: 0.6, chargeOther: 0.35, volley: { range: 26, every: 2.5, kill: 0.15, flight: 0.8 },
-    hold: 14, time: 180, morale: { loss: 1.15, flank: 3, rout: 15, charge: 12, arrow: 1, recover: 1, nearby: 6, floor: 0.15, flanked: 3, rear: 7, deep: 0.85, thin: 1.25 },
+    hold: 14, time: 180, morale: { loss: 1.15, flank: 3, rout: 15, charge: 12, arrow: 1, recover: 1, nearby: 6, nearbyMen: 30, floor: 0.15, flanked: 3, rear: 7, deep: 0.85, thin: 1.25 },
     // Kuşatma (kullanıcı 26.10: "düşmanın etrafını sarsalar"): yandan vuran x`side`, arkadan x`rear` öldürür;
+    // düşmandan geniş cephenin taşan payı `wrap` kadar yandan vurmuş sayılır;
     // dönüş hızı (radyan/sn): yürürken, dövüşürken (yavaş: sarılan arkasını hemen toplayamaz), dururken
     // `near` birimdeki düşmana. Bölünen birliğin her yarısı en az `minSplit` asker; birleşecekler `mergeReach` içinde.
     // Arazi (field.js): nehrin genişliği; ormanda hız (atlı daha yavaş), atlının göğüs göğüse ve hücum gücü,
     // ormana giren okların payı; yokuşta yavaşlama (yükseklik x); tepeden vuruş (yükseklik farkı x); tepedeki
     // okçunun menzili (yükseklik x).
     terrain: { riverWidth: 4, forest: 0.6, forestMounted: 0.45, forestCav: 0.7, forestCharge: 0.5, forestArrow: 0.55, hillSlow: 0.25, height: 0.35, hillRange: 0.3 },
-    flank: { side: 1.5, rear: 2 }, turn: { march: 3, fight: 0.5, idle: 1.2, near: 14 }, minSplit: 5, mergeReach: 20,
+    flank: { side: 1.5, rear: 2, wrap: 0.8 },
+    // Sur (kullanıcı 27.10: "surlara tırmanıyormuş gibi, tek sıra"): her birlik merdivenden saniyede `rate`
+    // asker tırmanır; merdivenin `guard` birim yakınındaki savunan tırmananları göğüs göğüse gücünün `repel`
+    // katı düşürür; sura dayanan makine (her 10 asker 1/sn) `breach` puanda `gapHalf` x 2 genişliğinde gedik
+    // açar; surun `wallZone` birim gerisindeki savunan sur bonusuyla dövüşür; surun ardındaki her savunan
+    // okları `cover` kadar yer. Gedik yokken saldıranın yalnız okçusu ve makinesi kaldıysa hücum başarısız.
+    // Bilgisayar sura saldırırken önce surun `stage` birim önünde toplanır (en çok `wait` sn bekler).
+    // Tırmananlar içeride `join` birim yakınındaki aynı türden köprübaşına katılır; köprübaşının kayıptan moral
+    // kaybı x`steady`.
+    climb: { stage: 10, wait: 15, rate: 3, guard: 4, repel: 0.6, join: 8, steady: 0.5, breach: 30, gapHalf: 4, wallZone: 8, cover: 0.75 },
+    timeWalls: 300, turn: { march: 3, fight: 0.5, idle: 1.2, near: 14 }, minSplit: 5, mergeReach: 20,
   },
   // Ticaret yolları (bölüm 28, trade.js): karadan `reach`, iki liman arasında `seaReach` birime kadar;
   // turluk para (iki uca da) `base` + uzaklık x `perDist`, yabancı yerle x`foreign`, en çok `max`. Şehir
