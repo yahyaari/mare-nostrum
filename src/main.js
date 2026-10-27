@@ -1111,7 +1111,7 @@ function dispatch(act) {
       const np = t ? nearestPlace(t) : m.id;
       const field = makeField({
         seed, dir, walls: t ? null : sd.walls, attacked: !t,
-        at: t ? { x: (a.x + t.x) / 2, y: (a.y + t.y) / 2 } : { x: goal.x - Math.cos(dir) * 0.35, y: goal.y - Math.sin(dir) * 0.35 },
+        at: t ? { x: (a.x + t.x) / 2, y: (a.y + t.y) / 2 } : { x: goal.x - Math.cos(dir) * (sd.walls ? 0.2 : 0.35), y: goal.y - Math.sin(dir) * (sd.walls ? 0.2 : 0.35) },
         place: t ? (Math.hypot(POS[np].x - t.x, POS[np].y - t.y) < 0.7 ? np : null) : m.id,
         river: !t && (sd.ter?.att ?? 1) < 1, pass: t ? (sd.def.terrain ?? 1) > 1 : (sd.ter?.def ?? 1) > 1,
       });

@@ -9,7 +9,7 @@
 
 import { N } from "../rules/numbers.js";
 import { extent, footprint, inside, moraleOf, strength } from "../rules/tactics.js";
-import { BRIDGE, FOREST, WATER, placeName } from "../rules/field.js";
+import { BRIDGE, FOREST, WATER, placeName, sidePoint, wallAt } from "../rules/field.js";
 import { TITLE_FONT } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_DARK, GOLD_LIGHT, roundRect, shade } from "./pieces.js";
 import { INK, TAU, button, colorOf, measure, panel, text, wrap } from "./kit.js";
@@ -51,7 +51,7 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   ctx.fillRect(0, 0, cam.w, cam.h);
   // Arazi bir kere çizilir (saha boyutu ya da dil değişince yeniden).
   ctx.drawImage(terrainLayer(f, b, T, lang, ctx.getTransform().a), f.x, f.y, f.w, f.h);
-  if (b.walls) { wall(ctx, f, b); wall.gaps(); }
+  if (b.field.city) wall(ctx, f, b);
   // Yerdeki ölüler.
   corpses(ctx, f, B);
   // Askerler kendi yerlerine yürür (duraklatılınca durur).
@@ -66,7 +66,7 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
     block(ctx, f, B, u, owner[u.side], B.sel.has(u.id), dt);
   }
   // Merdivenler (askerlerin üstünde): sura dayanıp tırmanan birliklerin yerinde, üstünde tek sıra askerler.
-  if (b.walls) for (const u of b.units) if (u.climbing && !u.dead && !u.gone) ladder(ctx, f, u, B.owners[u.side], now);
+  if (b.walls) for (const u of b.units) if (u.climbing && u.ladder && !u.dead && !u.gone) ladder(ctx, f, u, B.owners[u.side], now);
   for (const s of b.shots) arrows(ctx, f, b, s);
   for (const e of b.fx) burst(ctx, f, b, e);
   for (const u of b.units) {
@@ -152,6 +152,7 @@ function terrain(ctx, f, F, T, lang) {
       }
     }
   }
+  if (F.city) cityGround(ctx, f, F.city);
   // Su: önce kıyı rengi geniş, sonra su; nehirler ayrıca kıvrımlı çizgi (kıyı, su, ortada açık).
   const cells = (kind) => { const out = []; for (let y = 0; y < F.h; y++) for (let x = 0; x < F.w; x++) if (F.kind[y * F.w + x] === kind) out.push([x, y]); return out; };
   const water = cells(WATER);
@@ -226,6 +227,7 @@ function terrain(ctx, f, F, T, lang) {
     ctx.stroke();
     ctx.restore();
   }
+  if (F.city) cityTown(ctx, f, F);
   // Adlar: köy (yerleşimin adı) ve dağ sırası, koyu kenarlı altın yazı.
   for (const l of F.labels) {
     const s2 = l.kind === "place" ? placeName(l.id, lang) : T.ranges?.[l.id] ?? l.id;
@@ -289,48 +291,180 @@ function field(ctx, f, b) {
   ctx.strokeRect(f.x - 1, f.y - 1, f.w + 2, f.h + 2);
 }
 
-/** Sur: savunanın önünde taş bir duvar, burçlarıyla; ardında birkaç ev. */
-function wall(ctx, f, b) {
-  const x = f.x + N.tactics.wallX * f.k;
-  // Gedikler (kuşatma makinesi açtı): sur orada kesik, yerde taş yığını - sur çizildikten sonra üstüne.
-  const gaps = () => {
-    for (const g of b.gaps) {
-      const y0 = f.y + (g.y - g.half) * f.k, y1 = f.y + (g.y + g.half) * f.k;
-      ctx.fillStyle = "#cdbb93";
-      ctx.fillRect(x - 1.6 * f.k, y0, 3.2 * f.k, y1 - y0);
-      ctx.fillStyle = "#8f8574";
-      for (let i = 0; i < 14; i++) {
-        const sx = x + Math.sin(i * 7.1 + g.y) * 2.2 * f.k, sy = y0 + ((Math.cos(i * 3.3 + g.y) + 1) / 2) * (y1 - y0);
-        ctx.beginPath();
-        ctx.arc(sx, sy, (0.3 + ((i * 37) % 5) / 10) * f.k, 0, TAU);
-        ctx.fill();
-      }
-    }
-  };
-  wall.gaps = gaps;
-  ctx.fillStyle = "#8f8574";
-  ctx.strokeStyle = "rgba(40,32,22,0.8)";
-  ctx.lineWidth = 1.2;
-  ctx.fillRect(x - 1.1 * f.k, f.y, 2.2 * f.k, f.h);
-  ctx.strokeRect(x - 1.1 * f.k, f.y, 2.2 * f.k, f.h);
-  for (let y = 0; y < N.tactics.h; y += 8) {
-    ctx.fillStyle = "#a39985";
-    ctx.fillRect(x - 2 * f.k, f.y + (y + 2) * f.k, 4 * f.k, 3.2 * f.k);
-    ctx.strokeRect(x - 2 * f.k, f.y + (y + 2) * f.k, 4 * f.k, 3.2 * f.k);
-  }
-  // Evler.
-  for (let i = 0; i < 9; i++) {
-    const hx = f.x + (N.tactics.wallX + 6 + (i % 3) * 6) * f.k, hy = f.y + (8 + Math.floor(i / 3) * 18 + (i % 2) * 5) * f.k;
-    ctx.fillStyle = "#cdb995";
-    ctx.fillRect(hx, hy, 3.2 * f.k, 2.4 * f.k);
-    ctx.fillStyle = "#9c5b3e";
+/** Şehrin zemini: surun içi toprak ve taş döşeli, hafif koyu (suyun altında kalır). */
+function cityGround(ctx, f, C) {
+  ctx.fillStyle = "rgba(150,118,78,0.32)";
+  ctx.fillRect(f.x + C.x0 * f.k, f.y + C.y0 * f.k, (C.x1 - C.x0) * f.k, (C.y1 - C.y0) * f.k);
+  // (Su sonra üstüne çizilir: deniz şehrin içine girdiyse liman gibi görünür.)
+}
+
+/**
+ * Şehrin içi (kullanıcının görselleri gibi): sokaklar açık renk, evler küçük çatılar (kahve, kiremit, gri),
+ * ortada kale ya da saray - avlusu, dört köşe kulesi.
+ */
+function cityTown(ctx, f, F) {
+  const C = F.city, k = f.k;
+  const water = (x, y) => F.kind[Math.floor(y) * F.w + Math.floor(x)] === WATER;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(228,206,160,0.75)";
+  ctx.lineWidth = 1.3 * k;
+  for (const [a, b] of C.streets) {
+    const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.5);
     ctx.beginPath();
-    ctx.moveTo(hx - 0.4 * f.k, hy);
-    ctx.lineTo(hx + 1.6 * f.k, hy - 1.4 * f.k);
-    ctx.lineTo(hx + 3.6 * f.k, hy);
-    ctx.closePath();
-    ctx.fill();
+    let pen = false;
+    for (let i = 0; i <= n; i++) {
+      const x = a.x + ((b.x - a.x) * i) / n, y = a.y + ((b.y - a.y) * i) / n;
+      if (water(x, y)) { pen = false; continue; }
+      if (pen) ctx.lineTo(f.x + x * k, f.y + y * k); else ctx.moveTo(f.x + x * k, f.y + y * k);
+      pen = true;
+    }
+    ctx.stroke();
   }
+  const roofs = ["#6b4a35", "#8a5236", "#5d5650", "#7a3f2c"];
+  for (const hs of C.houses) {
+    if (water(hs.x, hs.y)) continue;
+    ctx.save();
+    ctx.translate(f.x + hs.x * k, f.y + hs.y * k);
+    ctx.rotate(hs.rot);
+    ctx.fillStyle = "rgba(30,20,12,0.35)";
+    ctx.fillRect((-hs.w / 2 + 0.18) * k, (-hs.h / 2 + 0.22) * k, hs.w * k, hs.h * k);
+    ctx.fillStyle = roofs[Math.floor(hs.tone * roofs.length)];
+    ctx.fillRect((-hs.w / 2) * k, (-hs.h / 2) * k, hs.w * k, hs.h * k);
+    ctx.strokeStyle = "rgba(25,16,10,0.8)";
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect((-hs.w / 2) * k, (-hs.h / 2) * k, hs.w * k, hs.h * k);
+    ctx.beginPath();
+    ctx.moveTo((-hs.w / 2) * k, 0);
+    ctx.lineTo((hs.w / 2) * k, 0);
+    ctx.strokeStyle = "rgba(255,235,200,0.25)";
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Kale: kalın duvarlı bir avlu, dört köşe kulesi, ortada büyük yapı.
+  const kp = C.keep;
+  if (kp) {
+    const x = f.x + (kp.x - kp.w / 2) * k, y = f.y + (kp.y - kp.h / 2) * k, w = kp.w * k, h = kp.h * k;
+    ctx.fillStyle = "rgba(30,20,12,0.4)";
+    ctx.fillRect(x + 0.3 * k, y + 0.4 * k, w, h);
+    ctx.fillStyle = "#cbb48a";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#5a3f2b";
+    ctx.lineWidth = Math.max(2, 0.45 * k);
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = "#9c6a48";
+    ctx.fillRect(x + w * 0.28, y + h * 0.25, w * 0.44, h * 0.5);
+    ctx.strokeStyle = "rgba(40,26,16,0.9)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + w * 0.28, y + h * 0.25, w * 0.44, h * 0.5);
+    for (const [tx, ty] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
+      ctx.beginPath();
+      ctx.arc(tx, ty, 0.75 * k, 0, TAU);
+      ctx.fillStyle = "#8a5a40";
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+/**
+ * Sur: şehrin dört yanında kalın, kahverengi taş bir duvar - dış kenarında mazgallar, aralıklı ve köşelerde
+ * kuleler, her yanın ortasında kapı (iki kule arasında kapalı kapı). Suyun üstünde sur yok; gedik yerinde
+ * yıkıntı (taşlar).
+ */
+function wall(ctx, f, b) {
+  const F = b.field, C = F.city, k = f.k, half = 1.25;
+  ctx.save();
+  for (const s of ["W", "N", "S", "E"]) {
+    const len = s === "W" || s === "E" ? C.y1 - C.y0 : C.x1 - C.x0;
+    const steps = Math.ceil(len / 0.5);
+    let run = null;
+    const flush = (end) => {
+      if (!run) return;
+      const a = run, z = end;
+      // Duvar gövdesi: yan boyunca kalın şerit.
+      const x0 = Math.min(a.x, z.x) - half, x1 = Math.max(a.x, z.x) + half, y0 = Math.min(a.y, z.y) - half, y1 = Math.max(a.y, z.y) + half;
+      ctx.fillStyle = "#86634a";
+      ctx.fillRect(f.x + x0 * k, f.y + y0 * k, (x1 - x0) * k, (y1 - y0) * k);
+      ctx.strokeStyle = "#3e2a1c";
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(f.x + x0 * k, f.y + y0 * k, (x1 - x0) * k, (y1 - y0) * k);
+      // Surun üstündeki yürüyüş yolu: ortada açık bir çizgi.
+      ctx.strokeStyle = "rgba(214,184,140,0.55)";
+      ctx.lineWidth = Math.max(1, 0.35 * k);
+      ctx.beginPath();
+      ctx.moveTo(f.x + a.x * k, f.y + a.y * k);
+      ctx.lineTo(f.x + z.x * k, f.y + z.y * k);
+      ctx.stroke();
+      // Mazgallar: dış kenarda küçük kareler.
+      ctx.fillStyle = "#5f4331";
+      const n = Math.max(1, Math.floor(Math.hypot(z.x - a.x, z.y - a.y) / 1.1));
+      for (let i = 0; i <= n; i++) {
+        const t = i / n, mx = a.x + (z.x - a.x) * t + a.nx * half * 0.7, my = a.y + (z.y - a.y) * t + a.ny * half * 0.7;
+        ctx.fillRect(f.x + (mx - 0.3) * k, f.y + (my - 0.3) * k, 0.6 * k, 0.6 * k);
+      }
+      run = null;
+    };
+    for (let i = 0; i <= steps; i++) {
+      const q = sidePoint(C, s, Math.min(1, i / steps));
+      if (wallAt(F, q)) { if (!run) run = q; run.last = q; }
+      else { flush(run?.last ?? q); }
+    }
+    flush(run?.last);
+    // Kuleler: köşeler ve her 6 birimde bir (sur olan yerde); kapılar ortada.
+    const towers = Math.max(2, Math.round(len / 6));
+    for (let i = 0; i <= towers; i++) {
+      const q = sidePoint(C, s, i / towers);
+      if (!wallAt(F, q) || Math.abs(i / towers - 0.5) < 0.06) continue;
+      tower(ctx, f, q.x, q.y, 1.3);
+    }
+  }
+  // Kapılar: iki kule arasında kalın, koyu, demir parmaklıklı kapı.
+  for (const g of C.gates) {
+    if (!wallAt(F, g)) continue;
+    const ax = g.ny ? 1 : 0, ay = g.nx ? 1 : 0; // yan boyunca
+    tower(ctx, f, g.x - ax * 2, g.y - ay * 2, 1.25);
+    tower(ctx, f, g.x + ax * 2, g.y + ay * 2, 1.25);
+    ctx.fillStyle = "#2e2016";
+    const gw = ax ? 2.2 : 1.6, gh = ay ? 2.2 : 1.6;
+    ctx.fillRect(f.x + (g.x - gw / 2) * k, f.y + (g.y - gh / 2) * k, gw * k, gh * k);
+    ctx.strokeStyle = "rgba(200,170,120,0.55)";
+    ctx.lineWidth = 0.8;
+    for (let t = -0.8; t <= 0.8; t += 0.4) {
+      ctx.beginPath();
+      if (ax) { ctx.moveTo(f.x + (g.x + t) * k, f.y + (g.y - gh / 2) * k); ctx.lineTo(f.x + (g.x + t) * k, f.y + (g.y + gh / 2) * k); }
+      else { ctx.moveTo(f.x + (g.x - gw / 2) * k, f.y + (g.y + t) * k); ctx.lineTo(f.x + (g.x + gw / 2) * k, f.y + (g.y + t) * k); }
+      ctx.stroke();
+    }
+  }
+  // Gedikler: yıkıntı.
+  for (const g of b.gaps) {
+    const ax = g.ny ? 1 : 0, ay = g.nx ? 1 : 0;
+    for (let i = 0; i < 26; i++) {
+      const t = (Math.sin(i * 7.1 + g.x) * 0.5 + 0.5) * 2 - 1, o = Math.cos(i * 3.3 + g.y) * 1.6;
+      const sx = g.x + ax * t * g.half + g.nx * o, sy = g.y + ay * t * g.half + g.ny * o;
+      ctx.beginPath();
+      ctx.arc(f.x + sx * k, f.y + sy * k, (0.25 + ((i * 37) % 5) / 12) * k, 0, TAU);
+      ctx.fillStyle = i % 3 ? "#86634a" : "#5f4331";
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/** Sur kulesi: kare, mazgallı, gölgeli. */
+function tower(ctx, f, x, y, r) {
+  const k = f.k;
+  ctx.fillStyle = "rgba(25,16,10,0.35)";
+  ctx.fillRect(f.x + (x - r + 0.25) * k, f.y + (y - r + 0.3) * k, 2 * r * k, 2 * r * k);
+  ctx.fillStyle = "#9a7356";
+  ctx.fillRect(f.x + (x - r) * k, f.y + (y - r) * k, 2 * r * k, 2 * r * k);
+  ctx.strokeStyle = "#3e2a1c";
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(f.x + (x - r) * k, f.y + (y - r) * k, 2 * r * k, 2 * r * k);
+  ctx.fillStyle = "#6e4e39";
+  ctx.fillRect(f.x + (x - r * 0.5) * k, f.y + (y - r * 0.5) * k, r * k, r * k);
 }
 
 /**
@@ -355,7 +489,8 @@ function soldiers(B, u, dt) {
   if (!D) {
     // İlk kez: yerinde; surdan tırmanan grup ise surun dibinde belirir.
     D = { pts: [], seen: u.climbed ?? 0 };
-    for (let i = 0; i < n; i++) { const s = slot(i); D.pts.push(u.from ? { x: N.tactics.wallX + 0.4, y: u.y + (jit(i).a - 0.5) * 1.5 } : { x: s.x, y: s.y }); }
+    const L = u.ladder;
+    for (let i = 0; i < n; i++) { const s = slot(i); D.pts.push(u.from && L ? { x: L.x - L.nx * 0.4 + L.ny * (jit(i).a - 0.5) * 1.5, y: L.y - L.ny * 0.4 + L.nx * (jit(i).a - 0.5) * 1.5 } : { x: s.x, y: s.y }); }
     B.dots.set(u.id, D);
   }
   // Değdiği düşmanlar (kurallardan).
@@ -364,14 +499,14 @@ function soldiers(B, u, dt) {
   // Eksilen askerler: tırmananlar önden (sura en yakın), ölenler düşmana en yakın olandan; ölenler iz bırakır.
   while (D.pts.length > n) {
     const climbed = (u.climbed ?? 0) - D.seen;
-    const toward = climbed > 0 ? { x: N.tactics.wallX, y: u.y } : nearestFoe(u) ?? { x: u.x + cos * 50, y: u.y + sin * 50 };
+    const toward = climbed > 0 && u.ladder ? u.ladder : nearestFoe(u) ?? { x: u.x + cos * 50, y: u.y + sin * 50 };
     let k = 0, best = Infinity;
     D.pts.forEach((p, i) => { const d = Math.hypot(p.x - toward.x, p.y - toward.y); if (d < best) { best = d; k = i; } });
     const [p] = D.pts.splice(k, 1);
     if (climbed > 0) D.seen += 1;
     else { B.corpses ??= []; B.corpses.push({ x: p.x, y: p.y, side: u.side }); if (B.corpses.length > 1500) B.corpses.shift(); }
   }
-  while (D.pts.length < n) { const s = slot(D.pts.length); D.pts.push(u.from ? { x: N.tactics.wallX + 0.4, y: u.y } : { x: s.x, y: s.y }); }
+  while (D.pts.length < n) { const s = slot(D.pts.length), L = u.ladder; D.pts.push(u.from && L ? { x: L.x - L.nx * 0.4, y: L.y - L.ny * 0.4 } : { x: s.x, y: s.y }); }
   // Hedefler ve yürüyüş.
   const vmax = (u.speed * 1.4 + 1.5) * dt;
   D.pts.forEach((p, i) => {
@@ -410,24 +545,26 @@ function corpses(ctx, f, B) {
   ctx.restore();
 }
 
-/** Merdiven: surun üstünde, tırmanan birliğin yerinde; üstünde tek sıra yukarı tırmanan askerler. */
+/** Merdiven: surun üstünde, tırmanan birliğin yerinde, sura dik; üstünde tek sıra tırmanan askerler. */
 function ladder(ctx, f, u, owner, now) {
-  const x = f.x + N.tactics.wallX * f.k, y = f.y + u.y * f.k, half = 2.4 * f.k;
+  const L = u.ladder, k = f.k, len = 2.4, w = 0.6;
+  const px = -L.ny, py = L.nx; // yan
+  const P = (a, s) => [f.x + (L.x + L.nx * a + px * s) * k, f.y + (L.y + L.ny * a + py * s) * k];
   ctx.save();
   ctx.strokeStyle = "#6e4e33";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x - half, y - 0.6 * f.k); ctx.lineTo(x + half, y - 0.6 * f.k);
-  ctx.moveTo(x - half, y + 0.6 * f.k); ctx.lineTo(x + half, y + 0.6 * f.k);
+  for (const s of [-w, w]) { const [x0, y0] = P(len, s), [x1, y1] = P(-len * 0.6, s); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); }
   ctx.stroke();
   ctx.lineWidth = 1;
-  for (let t = -half; t <= half; t += 0.7 * f.k) { ctx.beginPath(); ctx.moveTo(x + t, y - 0.6 * f.k); ctx.lineTo(x + t, y + 0.6 * f.k); ctx.stroke(); }
-  // Tek sıra: merdiven boyunca kayan askerler.
-  const r = Math.max(1.5, 0.32 * f.k);
+  for (let a = -len * 0.6; a <= len; a += 0.7) { const [x0, y0] = P(a, -w), [x1, y1] = P(a, w); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+  // Tek sıra: merdiven boyunca dışarıdan içeri kayan askerler.
+  const r = Math.max(1.5, 0.32 * k);
   for (let i = 0; i < 3; i++) {
-    const p = ((now / 900 + i / 3) % 1);
+    const p = (now / 900 + i / 3) % 1;
+    const [x, y] = P(len - p * len * 1.6, 0);
     ctx.beginPath();
-    ctx.arc(x - half + p * half * 2, y, r, 0, TAU);
+    ctx.arc(x, y, r, 0, TAU);
     ctx.fillStyle = colorOf(owner);
     ctx.fill();
     ctx.strokeStyle = "rgba(20,14,8,0.85)";

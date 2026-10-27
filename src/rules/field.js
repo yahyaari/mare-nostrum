@@ -20,7 +20,7 @@ import { onLand, project } from "../geo.js";
 import { N } from "./numbers.js";
 import { POS, cellOf, isMountain } from "./map.js";
 
-export const OPEN = 0, WATER = 1, FOREST = 2, BRIDGE = 3, HOUSE = 4;
+export const OPEN = 0, WATER = 1, FOREST = 2, BRIDGE = 3, HOUSE = 4, WALL = 5;
 
 /** Sahanın kapladığı harita birimi (enine); boyu oranla. */
 const SPAN = 1.2;
@@ -157,10 +157,150 @@ export function makeField(spec) {
         for (let yy = Math.floor(hy - house.h / 2); yy <= hy + house.h / 2; yy++) for (let xx = Math.floor(hx - house.w / 2); xx <= hx + house.w / 2; xx++) set(xx, yy, HOUSE);
       }
     }
-    F.labels.push({ kind: "place", id: spec.place, x: vx, y: Math.max(4, vy - 10) });
+    if (!spec.walls) F.labels.push({ kind: "place", id: spec.place, x: vx, y: Math.max(4, vy - 10) });
   }
-  F.obstacles = F.kind.some((k) => k === WATER || k === HOUSE);
+  // 6. Surlu şehir (kullanıcı 27.10, kuşatma görselleri: "şehirlerin surlarla etrafı çevrili"): sahanın ortasında
+  // dört yanı surlu bir şehir, yerleşimin sahadaki yerinde; deniz kıyısındaysa deniz tarafı suyla kapalı.
+  if (spec.walls) {
+    const p = at ?? { x: w * 0.68, y: h / 2 };
+    const C = addCity(F, spec.walls, p.x, p.y, r);
+    if (spec.place) F.labels.push({ kind: "place", id: spec.place, x: C.cx, y: Math.max(3, C.y0 - 3.5) });
+  }
+  F.obstacles = F.kind.some((k) => k === WATER || k === HOUSE || k === WALL);
   return F;
+}
+
+// ---- surlu şehir ----
+
+/**
+ * Şehri sahaya koy: dikdörtgen sur (kale küçük), içinde ana caddeler, evler ve ortada kale (saray); her yanın
+ * ortasında kapı. Sur hücreleri WALL (geçilmez - merdivenle tırmanılır, gedikten geçilir); suyun üstüne sur
+ * çekilmez. Şehrin içi ve çevresi ormansız. `F.city`: { x0, y0, x1, y1, cx, cy, houses, streets, keep, gates }.
+ */
+export function addCity(F, walls, px, py, r = rng(7)) {
+  const { w, h } = F;
+  const big = walls !== "castle";
+  const hx = big ? 15 : 11, hy = big ? 13 : 10;
+  const idx0 = (x, y) => Math.floor(y) * w + Math.floor(x);
+  // Kıyıda: şehir yerleşimin yakınında, içi en çok karada kalacak yere kayar (Siraküza denize düşüyordu).
+  const fit = (x, y) => ({ x: Math.max(40 + hx, Math.min(w - 4 - hx, x)), y: Math.max(hy + 4, Math.min(h - hy - 4, y)) });
+  const landShare = (c) => {
+    let n = 0, l = 0;
+    for (let y = c.y - hy; y <= c.y + hy; y += 2) for (let x = c.x - hx; x <= c.x + hx; x += 2) { n++; if (F.kind[idx0(x, y)] !== WATER) l++; }
+    return l / n;
+  };
+  let best = fit(px, py), bestScore = -Infinity;
+  for (let dy = -14; dy <= 14; dy += 3.5) {
+    for (let dx = -14; dx <= 14; dx += 3.5) {
+      const c = fit(px + dx, py + dy), share = landShare(c);
+      const score = Math.min(share, 0.88) * 100 - Math.hypot(c.x - px, c.y - py) * 0.4;
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+  }
+  const cx = best.x, cy = best.y;
+  const C = { x0: cx - hx, y0: cy - hy, x1: cx + hx, y1: cy + hy, cx, cy, houses: [], streets: [], keep: null, gates: [], big };
+  const idx = (x, y) => Math.floor(y) * w + Math.floor(x);
+  const water = (x, y) => x >= 0 && y >= 0 && x < w && y < h && F.kind[idx(x, y)] === WATER;
+  // Orman: şehrin içinden ve 4 birim çevresinden kalkar.
+  for (let y = Math.max(0, Math.floor(C.y0 - 4)); y < Math.min(h, C.y1 + 4); y++) for (let x = Math.max(0, Math.floor(C.x0 - 4)); x < Math.min(w, C.x1 + 4); x++) if (F.kind[idx(x, y)] === FOREST) F.kind[idx(x, y)] = OPEN;
+  // Sur: dikdörtgenin kenarından 1 birim içeri ve dışarı.
+  for (let y = Math.floor(C.y0 - 1); y <= C.y1 + 1; y++) {
+    for (let x = Math.floor(C.x0 - 1); x <= C.x1 + 1; x++) {
+      if (x < 0 || y < 0 || x >= w || y >= h || water(x + 0.5, y + 0.5)) continue;
+      const qx = x + 0.5, qy = y + 0.5;
+      const onX = Math.abs(qx - C.x0) <= 1 || Math.abs(qx - C.x1) <= 1, onY = Math.abs(qy - C.y0) <= 1 || Math.abs(qy - C.y1) <= 1;
+      const within = qx >= C.x0 - 1 && qx <= C.x1 + 1 && qy >= C.y0 - 1 && qy <= C.y1 + 1;
+      if (within && ((onX && qy >= C.y0 - 1 && qy <= C.y1 + 1) || (onY && qx >= C.x0 - 1 && qx <= C.x1 + 1))) F.kind[idx(x, y)] = WALL;
+    }
+  }
+  // Kapılar: her yanın ortasında (suyun üstünde değilse).
+  for (const s of SIDES) {
+    const g = sidePoint(C, s, 0.5);
+    if (!water(g.x, g.y)) C.gates.push({ ...g, side: s });
+  }
+  // Ana caddeler: kapılardan ortaya; yan sokaklar.
+  C.streets.push([{ x: C.x0, y: cy }, { x: C.x1, y: cy }], [{ x: cx, y: C.y0 }, { x: cx, y: C.y1 }]);
+  for (const t of [0.27, 0.73]) {
+    if (r() < 0.8) C.streets.push([{ x: C.x0 + 2, y: C.y0 + (C.y1 - C.y0) * t }, { x: C.x1 - 2, y: C.y0 + (C.y1 - C.y0) * t + (r() - 0.5) * 2 }]);
+    if (r() < 0.8) C.streets.push([{ x: C.x0 + (C.x1 - C.x0) * t, y: C.y0 + 2 }, { x: C.x0 + (C.x1 - C.x0) * t + (r() - 0.5) * 2, y: C.y1 - 2 }]);
+  }
+  // Kale (saray): ortanın yanında, büyük.
+  C.keep = { x: cx + (r() < 0.5 ? -1 : 1) * hx * 0.38, y: cy + (r() < 0.5 ? -1 : 1) * hy * 0.32, w: big ? 6 : 4.5, h: big ? 4.6 : 3.6 };
+  // Kale suya düştüyse şehrin karadaki bir köşesine.
+  if (water(C.keep.x, C.keep.y)) {
+    const spots = [[-0.4, -0.35], [0.4, -0.35], [-0.4, 0.35], [0.4, 0.35], [0, 0], [-0.2, 0], [0.2, 0]].map(([a, c]) => ({ x: cx + a * hx * 1.8, y: cy + c * hy * 1.8 }));
+    const land = spots.find((p) => !water(p.x, p.y));
+    if (land) Object.assign(C.keep, land);
+    else C.keep = null;
+  }
+  // Evler: sokakların ve kalenin dışında, gevşek bir ızgarada.
+  const nearStreet = (x, y) => C.streets.some(([a, b]) => segDist({ x, y }, a, b) < 1.3);
+  for (let y = C.y0 + 2.2; y < C.y1 - 1.6; y += 2.8) {
+    for (let x = C.x0 + 2.2; x < C.x1 - 1.6; x += 3) {
+      const hx2 = x + (r() - 0.5) * 1.2, hy2 = y + (r() - 0.5) * 1.2;
+      if (r() < 0.22 || nearStreet(hx2, hy2) || water(hx2, hy2)) continue;
+      if (C.keep && Math.abs(hx2 - C.keep.x) < C.keep.w / 2 + 1.6 && Math.abs(hy2 - C.keep.y) < C.keep.h / 2 + 1.6) continue;
+      C.houses.push({ x: hx2, y: hy2, w: 1.4 + r() * 1.1, h: 1.1 + r() * 0.8, rot: (r() - 0.5) * 0.7, tone: r() });
+    }
+  }
+  F.city = C;
+  F.obstacles = true;
+  return C;
+}
+
+const SIDES = ["W", "N", "S", "E"];
+const NORMAL = { W: [-1, 0], E: [1, 0], N: [0, -1], S: [0, 1] };
+
+/** Şehrin bir yanında, `t` (0..1) oranındaki nokta ve yanın dışa bakan yönü. */
+export function sidePoint(C, s, t) {
+  const [nx, ny] = NORMAL[s];
+  if (s === "W" || s === "E") return { x: s === "W" ? C.x0 : C.x1, y: C.y0 + (C.y1 - C.y0) * t, nx, ny, side: s };
+  return { x: C.x0 + (C.x1 - C.x0) * t, y: s === "N" ? C.y0 : C.y1, nx, ny, side: s };
+}
+
+/** Şehrin içinde mi. */
+export const insideCity = (C, p) => p.x > C.x0 && p.x < C.x1 && p.y > C.y0 && p.y < C.y1;
+
+/** Sura en yakın nokta: { x, y, nx, ny (dışa), side, d (uzaklık), t (yan boyunca oran) }. */
+export function wallPoint(C, p) {
+  let best = null;
+  for (const s of SIDES) {
+    const vertical = s === "W" || s === "E";
+    const t = vertical ? (p.y - C.y0) / (C.y1 - C.y0) : (p.x - C.x0) / (C.x1 - C.x0);
+    const q = sidePoint(C, s, Math.max(0, Math.min(1, t)));
+    const d = Math.hypot(p.x - q.x, p.y - q.y);
+    if (!best || d < best.d) best = { ...q, d, t: Math.max(0, Math.min(1, t)) };
+  }
+  return best;
+}
+
+/** Bu noktada sur var mı (su değil, gedik değil). */
+export const wallAt = (F, q) => kindAt(F, q.x - q.nx * 0.5, q.y - q.ny * 0.5) === WALL || kindAt(F, q.x + q.nx * 0.5, q.y + q.ny * 0.5) === WALL;
+
+/** Surun bir yanının ne kadarı karada (suyun üstünde sur yok). */
+export function wallShare(F, C, s) {
+  let n = 0;
+  for (let i = 1; i < 10; i++) if (wallAt(F, sidePoint(C, s, i / 10))) n++;
+  return n / 9;
+}
+
+/** Gedik aç: surun `q` noktasında, yan boyunca `half` kadar iki yana (hücreler açılır). */
+export function breach(F, q, half) {
+  const { w, h } = F;
+  for (let y = Math.floor(q.y - half - 2); y <= q.y + half + 2; y++) {
+    for (let x = Math.floor(q.x - half - 2); x <= q.x + half + 2; x++) {
+      if (x < 0 || y < 0 || x >= w || y >= h || F.kind[y * w + x] !== WALL) continue;
+      const along = q.nx ? Math.abs(y + 0.5 - q.y) : Math.abs(x + 0.5 - q.x), across = q.nx ? Math.abs(x + 0.5 - q.x) : Math.abs(y + 0.5 - q.y);
+      if (along <= half && across <= 1.6) F.kind[y * w + x] = OPEN;
+    }
+  }
+}
+
+/** Noktanın doğru parçasına uzaklığı. */
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y);
 }
 
 /** Nehrin çizgisi kıvrımlı: her 2 birimde bir nokta, dik yönde yumuşak gürültü. */
@@ -268,8 +408,8 @@ export function heightAt(F, x, y) {
   return F.height[Math.floor(y) * F.w + Math.floor(x)];
 }
 
-/** Yürünebilir mi (su ve ev değil; köprü olur). */
-export const passable = (F, x, y) => { const k = kindAt(F, x, y); return k !== WATER && k !== HOUSE; };
+/** Yürünebilir mi (su, ev ve sur değil; köprü olur). */
+export const passable = (F, x, y) => { const k = kindAt(F, x, y); return k !== WATER && k !== HOUSE && k !== WALL; };
 
 /** İki nokta arasında su var mı (köprü dışında): karşı kıyıdaki düşmanla göğüs göğüse dövüşülmez. */
 export function waterBetween(F, a, b) {

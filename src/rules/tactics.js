@@ -28,7 +28,7 @@
 
 import { archMul, cavMul, eliteMelee, eliteMul, infMul, sideMuls } from "./combat.js";
 import { N, UNITS, uniqueOf } from "./numbers.js";
-import { FOREST, flatField, heightAt, kindAt, passable, pathOn, waterBetween } from "./field.js";
+import { FOREST, WALL, addCity, breach as openBreach, flatField, heightAt, insideCity, kindAt, passable, pathOn, sidePoint, wallAt, wallPoint, wallShare, waterBetween } from "./field.js";
 
 const K = () => N.tactics;
 const PI2 = Math.PI * 2;
@@ -122,6 +122,11 @@ export function extent(u) {
  */
 export function setupBattle(att, def, walls, seed = 1, field = null) {
   const muls = sideMuls(att, def, walls), open = sideMuls(att, def, null);
+  // Surlu savaş: sahada şehir yoksa (düz saha, testler) sağ ortaya bir şehir; gedikler sahayı değiştirir, kopyası.
+  if (walls) {
+    field = field ? { ...field, kind: field.kind.slice() } : flatField();
+    if (!field.city) addCity(field, walls, K().w * 0.68, K().h / 2);
+  }
   const b = {
     t: 0, over: null, walls, seed, field: field ?? flatField(), rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, gaps: [],
     sides: { att: { civ: att.civ, muls: muls.att, open: muls.att, gen: !!att.gen }, def: { civ: def.civ, muls: muls.def, open: open.def, gen: !!def.gen } },
@@ -166,7 +171,8 @@ function deploy(b, side, g) {
     if (!list.length) return [cy, cy];
     const widths = list.map((u) => footprint(u).w);
     const total = widths.reduce((s, v) => s + v, 0);
-    const g2 = Math.max(0.5, Math.min(gap, (h * 0.92 - total) / Math.max(1, list.length - 1)));
+    const room = C && side === "def" ? C.y1 - C.y0 - 2 : h * 0.92;
+    const g2 = Math.max(0.5, Math.min(gap, (room - total) / Math.max(1, list.length - 1)));
     let y = cy - (total + g2 * (list.length - 1)) / 2;
     const top = y;
     list.forEach((u, i) => {
@@ -176,15 +182,20 @@ function deploy(b, side, g) {
     });
     return [top, y - g2];
   };
-  // Savunan (aynalı) surun ardında: sur `wallX`'te, savunanın hattı onun 4 birim gerisinde.
-  const front = b.walls && side === "def" ? w - K().wallX - 4 : 20;
-  const [top, bottom] = line(g.front ?? [], front, h / 2);
-  line(g.arch ?? [], front - 8, h / 2);
+  // Savunan surlu şehrin içinde: hattı batı surunun 5 birim gerisinde (aynalı x).
+  const C = b.walls ? b.field.city : null;
+  const front = C && side === "def" ? w - (C.x0 + 5) : 20;
+  const mid = C && side === "def" ? C.cy : h / 2;
+  const [top, bottom] = line(g.front ?? [], front, mid);
+  line(g.arch ?? [], front - 8, mid);
   // Atlılar: hattın üst ve alt ucunun ötesinde; yer yoksa okçuların arkasına.
   const cav = g.cav ?? [];
   const up = cav.filter((_, i) => i % 2 === 0), down = cav.filter((_, i) => i % 2 === 1);
   const span = (list) => list.reduce((s, u) => s + footprint(u).w + gap, 0);
-  if (top - gap - span(up) >= 0 && bottom + gap + span(down) <= h) {
+  if (C && side === "def") {
+    // Şehrin içinde atlılar ortada yedek.
+    line(cav, w - C.cx - 4, C.cy);
+  } else if (top - gap - span(up) >= 0 && bottom + gap + span(down) <= h) {
     line(up, front - 2, top - gap - span(up) / 2);
     line(down, front - 2, bottom + gap + span(down) / 2);
   } else {
@@ -195,12 +206,14 @@ function deploy(b, side, g) {
   for (let pass = 0; pass < 4; pass++) separate(b, 1, true);
   // Su ya da ev üstüne düşen birlik en yakın yürünebilir yere (önce yanlara, sonra geriye).
   for (const u of b.units.filter((v) => v.side === side)) {
-    if (passable(b.field, u.x, u.y)) continue;
+    const C2 = b.walls && side === "def" ? b.field.city : null;
+    if (passable(b.field, u.x, u.y) && (!C2 || insideCity(C2, u))) continue;
     let best = null;
     for (let d = 1; d < 40 && !best; d += 1) {
-      for (const [dx, dy] of [[0, d], [0, -d], [side === "att" ? -d : d, 0], [side === "att" ? d : -d, 0]]) {
+      for (const [dx, dy] of [[0, d], [0, -d], [side === "att" ? -d : d, 0], [side === "att" ? d : -d, 0], [d, d], [-d, d], [d, -d], [-d, -d]]) {
         const x = u.x + dx, y = u.y + dy;
-        if (x > 1 && y > 1 && x < w - 1 && y < h - 1 && passable(b.field, x, y)) { best = { x, y }; break; }
+        const okC = !C2 || (x > C2.x0 + 2 && x < C2.x1 - 2 && y > C2.y0 + 2 && y < C2.y1 - 2);
+        if (x > 1 && y > 1 && x < w - 1 && y < h - 1 && okC && passable(b.field, x, y)) { best = { x, y }; break; }
       }
     }
     if (best) Object.assign(u, best);
@@ -337,7 +350,7 @@ function separate(b, k, friends = false) {
       const foe = a.side !== c.side && !a.routed && !c.routed;
       if (!foe && !friends) continue;
       // Surun iki yanındakiler birbirini itmez (sur aralarında).
-      if (foe && b.walls && a.inside !== c.inside && !gapAt(b, a.y) && !gapAt(b, c.y)) continue;
+      if (foe && b.walls && a.inside !== c.inside && !gapAt(b, a) && !gapAt(b, c)) continue;
       const g = gapOf(R[i], R[j]);
       const want = foe ? -0.2 : 0.4;
       if (g.gap >= want) continue;
@@ -363,7 +376,7 @@ function contactMap(b) {
       if (dist(a, c) > A.r + C.r + K().reach) continue;
       if (gapOf(A, C).gap > K().reach) continue;
       if (b.field.obstacles && waterBetween(b.field, a, c)) continue;
-      if (b.walls && a.inside !== c.inside && !gapAt(b, a.y) && !gapAt(b, c.y)) continue;
+      if (b.walls && a.inside !== c.inside && !gapAt(b, a) && !gapAt(b, c)) continue;
       m.get(a).push(c);
       m.get(c).push(a);
     }
@@ -372,15 +385,18 @@ function contactMap(b) {
 }
 const contacts = (b, u) => b.touch.get(u) ?? [];
 
-/** Surda gedik var mı bu yükseklikte. */
-export const gapAt = (b, y) => b.gaps.some((g) => Math.abs(y - g.y) < g.half);
+/** Bu nokta bir gediğin önünde mi (yan boyunca gediğin içinde, sura 6 birimden yakın). */
+export const gapAt = (b, p) => b.gaps.some((g) => {
+  const along = g.nx ? Math.abs(p.y - g.y) : Math.abs(p.x - g.x), across = g.nx ? Math.abs(p.x - g.x) : Math.abs(p.y - g.y);
+  return along < g.half && across < 6;
+});
 
 /**
  * Birliğin çarpanları. Sur bonusu (`wall`) yalnız surdakinin işine: merdivenden tırmananı düşürmek ve surdan
  * ok atmak. Göğüs göğüse dövüşte sur bonusu yok - surun avantajı tırmanmanın darboğazı (ikisi birden iki kez
  * saymak olurdu: saldıran otomatik savaştakinin yarısı kadar kazanıyordu).
  */
-const mulsOf = (b, u, wall = false) => (wall && u.side === "def" && b.walls && u.inside && u.x < K().wallX + K().climb.wallZone ? b.sides.def.muls : b.sides[u.side].open);
+const mulsOf = (b, u, wall = false) => (wall && u.side === "def" && b.walls && u.inside && wallPoint(b.field.city, u).d < K().climb.wallZone ? b.sides.def.muls : b.sides[u.side].open);
 
 /** `u`, `v`ye hangi yüzünden vuruyor: "front", "flank", "rear" (v'nin dikdörtgenine göre). */
 export function faceOf(v, u) {
@@ -396,17 +412,23 @@ export function faceOf(v, u) {
 export function aiOrders(b, side, all = false) {
   // Sura saldıran bilgisayar: tırmanacak birlikler önce surun önünde toplanır, hepsi gelince birlikte saldırır
   // (tek tek varıp merdivende kırılmasınlar).
-  const T = K(), stage = T.wallX - T.climb.stage;
-  if (b.walls && side === "att" && !b.assault) {
-    const climbers = b.units.filter((v) => v.side === side && alive(v) && !v.routed && !v.inside && v.type !== "siege" && (v.kind !== "arch" || v.mounted));
-    if (!climbers.length || climbers.every((v) => v.x + extent(v).x >= stage - 3) || b.t > T.climb.wait) b.assault = true;
+  const T = K(), C = b.walls ? b.field.city : null;
+  const plan = C && side === "att" ? siegePlan(b) : null;
+  // Bir birliğin surdaki yeri (planındaki yan ve oran) ve oraya göre dışarıdaki duruş noktası.
+  const post = (u, out) => {
+    const q = sidePoint(C, plan.get(u.id).side, plan.get(u.id).t), ex = Math.abs(q.nx) * extent(u).x + Math.abs(q.ny) * extent(u).y;
+    return { x: Math.max(2, Math.min(T.w - 2, q.x + q.nx * (out + ex))), y: Math.max(2, Math.min(T.h - 2, q.y + q.ny * (out + ex))), facing: Math.atan2(-q.ny, -q.nx) };
+  };
+  if (plan && !b.assault) {
+    const climbers = b.units.filter((v) => plan.has(v.id) && alive(v) && !v.routed && !v.inside);
+    if (!climbers.length || climbers.every((v) => dist(v, post(v, T.climb.stage)) < 4) || b.t > T.climb.wait) b.assault = true;
   }
   for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed)) {
     if (u.manual && !all) continue;
-    if (b.walls && side === "att" && !u.inside && u.type !== "siege" && !gapAt(b, u.y)) {
-      if (!b.assault && u.kind !== "arch") { u.order = { x: stage - extent(u).x, y: u.y }; continue; }
-      // Hücum: her birlik sura kendi hizasında dayanır (merdivenler sur boyunca yayılır, tek noktaya yığılmazlar).
-      if (u.kind !== "arch" || u.mounted) { u.order = { x: T.wallX - extent(u).x - 0.2, y: u.y }; continue; }
+    // Sura saldıran: önce planındaki yanın önünde toplanır, sonra o yerde sura dayanır (dört yandan, sur boyunca).
+    if (plan?.has(u.id) && !u.inside && !gapAt(b, u)) {
+      u.order = post(u, b.assault ? 0.2 : T.climb.stage);
+      continue;
     }
     const en = foes(b, u);
     if (!en.length) { u.order = null; continue; }
@@ -419,15 +441,16 @@ export function aiOrders(b, side, all = false) {
       const ladders = b.units.filter((v) => v.side !== side && alive(v) && !v.routed && v.climbing);
       if (inner.length && (u.kind !== "arch" || dist(u, near(inner)) < K().volley.range)) { u.order = u.kind === "arch" ? null : { unit: near(inner).id }; continue; }
       if (ladders.length && u.kind !== "arch") {
-        const l = near(ladders);
-        u.order = { x: K().wallX + extent(u).x + 0.5, y: l.y };
+        const l = near(ladders).ladder ?? wallPoint(C, near(ladders));
+        const ex = Math.abs(l.nx) * extent(u).x + Math.abs(l.ny) * extent(u).y;
+        u.order = { x: l.x - l.nx * (ex + 0.5), y: l.y - l.ny * (ex + 0.5) };
         continue;
       }
       if (dist(u, nearest) > K().hold) { u.order = null; continue; }
     }
     if (u.type === "siege") {
       // Kuşatma makinesi sura dayanır (gedik açar); sursuz savaşta yerinde.
-      u.order = b.walls && side === "att" && !u.inside ? { x: K().wallX - footprint(u).d / 2 - 0.6, y: u.y } : null;
+      u.order = plan?.has(u.id) && !u.inside ? post(u, 0.6) : null;
       continue;
     }
     if (u.shoot > 0 && !u.mounted) {
@@ -482,7 +505,7 @@ export function step(b, dt) {
       const d = dist(u, goal);
       // Arazi: engel varsa yol (köprüyü bulur), ormanda ve yokuşta yavaş.
       let aim = goal;
-      if (F.obstacles) {
+      if (F.obstacles && !(u.routed && b.walls)) {
         const key = `${Math.round(goal.x / 2)},${Math.round(goal.y / 2)}`;
         if (u.pathKey !== key || b.t - (u.pathAt ?? -9) > 1.5) { u.path = pathOn(F, u, goal, u.mounted || u.type === "cav"); u.pathKey = key; u.pathAt = b.t; }
         while (u.path.length > 1 && dist(u, u.path[0]) < 1.2) u.path.shift();
@@ -497,7 +520,7 @@ export function step(b, dt) {
         turn(u, to, (u.routed ? 6 : T.turn.march) * dt);
         const k = Math.min(1, sp / da);
         const nx = u.x + (aim.x - u.x) * k, ny = u.y + (aim.y - u.y) * k;
-        if (passable(F, nx, ny)) { u.x = nx; u.y = ny; }
+        if (passable(F, nx, ny) || (u.routed && kindAt(F, nx, ny) === WALL)) { u.x = nx; u.y = ny; }
         else { u.pathAt = -9; }
         u.wasMoving = true;
       } else if (u.order && !u.order.unit) {
@@ -514,12 +537,12 @@ export function step(b, dt) {
       if (n && dist(u, n) < T.turn.near) turn(u, Math.atan2(n.y - u.y, n.x - u.x), T.turn.idle * dt);
     }
     if (u.routed && (u.x < -4 || u.x > T.w + 4)) u.gone = true;
-    if (u.routed && b.walls) u.inside = u.x > T.wallX;
+    if (u.routed && b.walls) u.inside = insideCity(b.field.city, u);
   }
   separate(b, 0.5);
   if (b.walls) walls(b, dt);
   // İtilip suya ya da eve giren birlik eski yerine.
-  if (F.obstacles) for (const u of b.units) if (alive(u) && !passable(F, u.x, u.y)) { u.x = u.px; u.y = u.py; }
+  if (F.obstacles) for (const u of b.units) if (alive(u) && !passable(F, u.x, u.y) && !(u.routed && kindAt(F, u.x, u.y) === WALL)) { u.x = u.px; u.y = u.py; }
   b.touch = contactMap(b);
   const sideMul = (v, u) => ({ front: 1, flank: T.flank.side, rear: T.flank.rear })[faceOf(v, u)];
   // Tepeden aşağı vuran güçlü, yokuş yukarı vuran zayıf.
@@ -612,40 +635,80 @@ export function step(b, dt) {
 }
 
 /**
- * Sur (kullanıcı 27.10: "surlara tırmanıyormuş gibi olsun, kaç kişi gelirse gelsin tek sıra geçebilmeli"):
- * dışarıdakiler surun önünde, içeridekiler ardında; gedikten geçen tarafını değiştirir, bozulup kaçan surdan
- * kaçar. Sura dayanan saldıran birlik (okçu, emirle saldırmıyorsa tırmanmaz; makine tırmanmaz) merdivenden tek
- * sıra tırmanır: askerleri içeride ayrı bir birliğe geçer. Merdivenin dibindeki savunan tırmananları düşürür.
- * Sura dayanan kuşatma makinesi zamanla gedik açar.
+ * Sura saldırı planı (bilgisayar): tırmanacak her birliğe bir yan ve o yanda bir yer. Şehrin hizasındakiler
+ * batı surundan, yukarıdakiler kuzeyden, aşağıdakiler güneyden (kullanıcının görselleri gibi dört yandan sarar);
+ * bir yanın çoğu suysa ona en yakın kara yanı. Bir yandakiler sur boyunca eşit aralıkla.
+ */
+function siegePlan(b) {
+  const C = b.field.city;
+  const want = (v) => v.side === "att" && alive(v) && !v.routed && !v.inside && !v.from && (v.type === "siege" || v.kind !== "arch" || v.mounted);
+  if (b.plan && [...b.units].every((v) => !want(v) || b.plan.has(v.id))) return b.plan;
+  const land = ["W", "N", "S", "E"].filter((s) => wallShare(b.field, C, s) > 0.5);
+  const pick = (s) => (land.includes(s) ? s : land[0] ?? "W");
+  const plan = new Map(), bySide = {};
+  for (const v of b.units.filter(want)) {
+    const s = v.type === "siege" ? pick("W") : pick(v.y < C.y0 + 2 ? "N" : v.y > C.y1 - 2 ? "S" : "W");
+    (bySide[s] ??= []).push(v);
+  }
+  for (const [s, list] of Object.entries(bySide)) {
+    list.sort((a, c) => (s === "W" || s === "E" ? a.y - c.y : a.x - c.x));
+    list.forEach((v, i) => plan.set(v.id, { side: s, t: 0.12 + (0.76 * (i + 0.5)) / list.length }));
+  }
+  b.plan = plan;
+  return plan;
+}
+
+/**
+ * Sur (kullanıcı 27.10: "surlara tırmanıyormuş gibi olsun, kaç kişi gelirse gelsin tek sıra geçebilmeli"; sonra
+ * "şehirlerin surlarla etrafı çevrili"): şehir dört yanı surlu bir dikdörtgen (field.js addCity). Dışarıdakiler
+ * surun dışında, içeridekiler içinde kalır; gedikten geçen tarafını değiştirir, bozulup kaçan surdan kaçar. Sura
+ * dayanan saldıran birlik (okçu, emirle saldırmıyorsa tırmanmaz; makine tırmanmaz) en yakın sur noktasında
+ * merdivenden tek sıra tırmanır: askerleri içeride ayrı bir birliğe geçer. Merdivenin dibindeki savunan
+ * tırmananları düşürür. Sura dayanan kuşatma makinesi zamanla gedik açar.
  */
 function walls(b, dt) {
-  const T = K(), C = T.climb;
+  const T = K(), C = T.climb, W = b.field.city;
   for (const u of b.units.filter(alive)) {
     if (u.routed) continue;
-    const ex = extent(u).x;
-    if (gapAt(b, u.y)) { u.inside = u.x > T.wallX; continue; }
-    u.x = u.inside ? Math.max(u.x, T.wallX + ex + 0.4) : Math.min(u.x, T.wallX - ex - 0.4);
+    if (gapAt(b, u)) { u.inside = insideCity(W, u); continue; }
+    const ex = extent(u), m = 0.4;
+    if (u.inside) {
+      u.x = Math.max(W.x0 + ex.x + m, Math.min(W.x1 - ex.x - m, u.x));
+      u.y = Math.max(W.y0 + ex.y + m, Math.min(W.y1 - ex.y - m, u.y));
+    } else if (u.x > W.x0 - ex.x - m && u.x < W.x1 + ex.x + m && u.y > W.y0 - ex.y - m && u.y < W.y1 + ex.y + m) {
+      // Dışarıdaki surun içine girmesin: en az giren yandan dışarı.
+      const pen = [[u.x - (W.x0 - ex.x - m), "x", W.x0 - ex.x - m], [W.x1 + ex.x + m - u.x, "x", W.x1 + ex.x + m], [u.y - (W.y0 - ex.y - m), "y", W.y0 - ex.y - m], [W.y1 + ex.y + m - u.y, "y", W.y1 + ex.y + m]];
+      const [, ax, to] = pen.reduce((a, c) => (c[0] < a[0] ? c : a));
+      u[ax] = to;
+    }
   }
   for (const u of b.units.filter((v) => alive(v) && !v.routed && v.side === "att" && !v.inside)) {
-    const atWall = u.x + extent(u).x >= T.wallX - 1.2 && !gapAt(b, u.y);
+    const q = wallPoint(W, u), ex = Math.abs(q.nx) * extent(u).x + Math.abs(q.ny) * extent(u).y;
+    // Köşelerde merdiven kurulmaz.
+    const atWall = q.d - ex <= 1.2 && q.t > 0.06 && q.t < 0.94 && wallAt(b.field, q) && !gapAt(b, u);
     // Makine: sura dayandıkça gedik açar.
     if (u.type === "siege") {
       if (!atWall) continue;
       u.ram = (u.ram ?? 0) + dt * (u.men / N.company);
       if (u.ram >= C.breach) {
-        b.gaps.push({ y: u.y, half: C.gapHalf });
-        b.fx.push({ kind: "breach", x: T.wallX, y: u.y, t: b.t });
+        b.gaps.push({ x: q.x, y: q.y, nx: q.nx, ny: q.ny, half: C.gapHalf });
+        openBreach(b.field, q, C.gapHalf);
+        b.fx.push({ kind: "breach", x: q.x, y: q.y, t: b.t });
         u.ram = -Infinity;
       }
       continue;
     }
     // Atlı atından iner, tırmanır (içeride yaya, sura karşı yarı güçle - otomatik savaştaki gibi); okçu ancak
-    // emirle saldırıyorsa tırmanır.
-    const wants = !(u.shoot > 0 && u.charge < 1 && !u.order?.unit && !u.mounted);
+    // emirle saldırıyorsa tırmanır. Yalnız sura dayanıp duran, içerideki bir düşmana saldırmakla emredilen ya da
+    // yürüdüğü yer surun dibi olan tırmanır - surun yanından geçen değil.
+    const target = u.order?.unit ? unitById(b, u.order.unit) : null;
+    const meant = !u.order || (target && target.inside) || (!u.order.unit && Math.hypot(u.order.x - u.x, u.order.y - u.y) < 2.5);
+    const wants = meant && !(u.shoot > 0 && u.charge < 1 && !u.order?.unit && !u.mounted);
     u.climbing = atWall && wants;
     if (!u.climbing) continue;
-    // Merdivenin dibi: surun içindeki savunanlar tırmananları düşürür.
-    const L = { x: T.wallX, y: u.y };
+    // Merdiven: surun en yakın noktasında; dibindeki savunanlar tırmananları düşürür.
+    const L = { x: q.x, y: q.y, nx: q.nx, ny: q.ny };
+    u.ladder = L;
     let repel = 0;
     for (const d of b.units) {
       if (d.side !== "def" || !fighting(d) || !d.inside || dist(d, L) > footprint(d).r + C.guard) continue;
@@ -660,15 +723,19 @@ function walls(b, dt) {
     u.climbAcc -= n;
     let v = u.climbTo ? unitById(b, u.climbTo) : null;
     // Köprübaşı: yakındaki merdivenden çıkmış aynı türden grup varsa ona katılırlar.
-    if (!v || !alive(v) || v.routed) v = b.units.find((x) => x.side === "att" && x.from && x.type === u.type && !!x.dismounted === (u.mounted || u.type === "cav") && alive(x) && !x.routed && Math.abs(x.y - u.y) < C.join && x.x < T.wallX + 8) ?? null;
+    if (!v || !alive(v) || v.routed) v = b.units.find((x) => x.side === "att" && x.from && x.type === u.type && !!x.dismounted === (u.mounted || u.type === "cav") && alive(x) && !x.routed && x.inside && dist(x, L) < C.join) ?? null;
     if (!v || !alive(v) || v.routed) {
       const horse = u.mounted || u.type === "cav";
       v = {
         id: b.nextId++, side: "att", type: u.type, kind: horse ? "inf" : u.kind, elite: u.elite, mounted: false, speed: horse ? T.speed.inf : u.speed,
         melee: horse ? u.melee * N.cavWall : u.melee, shoot: horse ? 0 : u.shoot, charge: 0, stop: u.stop, dismounted: horse,
-        men: 0, start: 0, cols: Math.max(2, Math.min(8, footprint(u).cols)), morale: u.morale, moraleMax: u.moraleMax, x: T.wallX + 1.6, y: u.y, facing: 0,
+        men: 0, start: 0, cols: Math.max(2, Math.min(8, footprint(u).cols)), morale: u.morale, moraleMax: u.moraleMax,
+        // Surun 2 birim içinde doğar (sur hücresinin üstünde değil); yürüyüş kontrolü için eski yeri de.
+        x: Math.max(W.x0 + 2.5, Math.min(W.x1 - 2.5, L.x - L.nx * 2.5)), y: Math.max(W.y0 + 2.5, Math.min(W.y1 - 2.5, L.y - L.ny * 2.5)), facing: Math.atan2(-L.ny, -L.nx), ladder: L,
         order: u.order?.unit ? { unit: u.order.unit } : null, manual: u.manual, cool: 0, engaged: false, routed: false, gone: false, dead: false, wasMoving: false, inside: true, from: u.id,
       };
+      v.px = v.x;
+      v.py = v.y;
       b.units.push(v);
       u.climbTo = v.id;
     }

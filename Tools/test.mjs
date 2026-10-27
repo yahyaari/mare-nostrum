@@ -1155,18 +1155,24 @@ section("Taktik savaş (bölüm 29)");
   check("okçular ok yağdırır", shots > 0);
   // Sur (kullanıcı 27.10: "surlara tırmanıyormuş gibi, tek sıra"): dışarıdakiler surun önünde; tırmananlar
   // içeride ayrı bir birlik olur, saniyede en çok N.tactics.climb.rate kişi.
+  const FL2 = await import("../src/rules/field.js");
   const w = TC.setupBattle({ civ: "rome", inf: 200 }, { civ: "gaul", inf: 80, arch: 20 }, "city", 4);
-  let climbedMax = 0, prevInside = 0, outsideOk = true;
+  const WC = w.field.city;
+  check("kuşatmada şehir dört yanı surlu, içinde savunanlar", !!WC && ["W", "N", "S", "E"].every((sd) => FL2.wallShare(w.field, WC, sd) > 0.9) && w.units.filter((u) => u.side === "def").every((u) => FL2.insideCity(WC, u)) && WC.gates.length === 4 && WC.houses.length > 10);
+  let climbedMax = 0, prevInside = 0, outsideOk = true, sides = new Set();
   for (let i = 0; i < 200 && !w.over; i++) {
     TC.aiOrders(w, "att", true); TC.aiOrders(w, "def"); TC.step(w, 0.1);
     const live = w.units.filter((u) => !u.dead && !u.gone && !u.routed);
-    if (live.some((u) => u.side === "att" && !u.inside && u.x >= N.tactics.wallX)) outsideOk = false;
+    if (live.some((u) => u.side === "att" && !u.inside && FL2.insideCity(WC, u))) outsideOk = false;
+    for (const u of live) if (u.climbing && u.ladder) sides.add(u.ladder.side);
     const inside = w.units.filter((u) => u.side === "att" && u.from).reduce((n, u) => n + (u.climbed ?? 0), 0) + w.units.filter((u) => u.side === "att" && !u.from).reduce((n, u) => n + (u.climbed ?? 0), 0);
     climbedMax = Math.max(climbedMax, inside - prevInside);
     prevInside = inside;
   }
   const outers = w.units.filter((u) => u.side === "att" && !u.from).length;
-  check("surda: dışarıdakiler surun önünde kalır", outsideOk);
+  check("surda: dışarıdakiler surun dışında kalır", outsideOk);
+  for (const p of w.plan?.values() ?? []) sides.add(p.side);
+  check("bilgisayar şehri birden çok yandan sarar", sides.size >= 2, [...sides].join(""));
   check("surda: tırmananlar içeride ayrı birlik olur", w.units.some((u) => u.side === "att" && u.from && u.inside));
   check("surda: tırmanma tek sıra (adımda birlik başına en çok rate x dt + 1)", climbedMax <= outers * (N.tactics.climb.rate * 0.1 + 1), climbedMax);
   // Atlı atından iner (içeride yaya, sura karşı yarı güç); okçu tek başına şehri alamaz.
@@ -1180,14 +1186,24 @@ section("Taktik savaş (bölüm 29)");
   // Kuşatma makinesi sura dayanınca gedik açar; gedikten dışarıdaki içeri geçer.
   const bk = TC.setupBattle({ civ: "rome", inf: 40, siege: 20 }, { civ: "gaul", inf: 200 }, "city", 3);
   const ram = bk.units.find((u) => u.type === "siege"), gi = bk.units.find((u) => u.side === "att" && u.type === "inf");
-  Object.assign(ram, { x: N.tactics.wallX - TC.extent(ram).x - 0.3, y: 30 });
+  const BC = bk.field.city;
+  Object.assign(ram, { x: BC.x0 - TC.extent(ram).x - 0.3, y: BC.cy - 6 });
   for (let i = 0; i < 400 && !bk.gaps.length; i++) TC.step(bk, 0.1);
-  check("makine sura dayanınca gedik açar", bk.gaps.length === 1 && Math.abs(bk.gaps[0].y - 30) < 1e-6);
-  for (const u of bk.units.filter((v) => v.side === "def")) Object.assign(u, { x: 95, y: 55 });
-  Object.assign(gi, { x: N.tactics.wallX - 5, y: 30, routed: false });
-  TC.command(bk, [gi.id], { x: N.tactics.wallX + 8, y: 30 });
+  check("makine sura dayanınca gedik açar, sur orada açılır", bk.gaps.length === 1 && Math.abs(bk.gaps[0].y - (BC.cy - 6)) < 1e-6 && FL2.passable(bk.field, BC.x0, BC.cy - 6));
+  for (const u of bk.units.filter((v) => v.side === "def")) Object.assign(u, { x: BC.x1 - 4, y: BC.y1 - 4 });
+  Object.assign(gi, { x: BC.x0 - 6, y: BC.cy - 6, routed: false });
+  TC.command(bk, [gi.id], { x: BC.x0 + 8, y: BC.cy - 6 });
   for (let i = 0; i < 60; i++) TC.step(bk, 0.1);
-  check("gedikten geçen tarafını değiştirir", gi.inside && gi.x > N.tactics.wallX);
+  check("gedikten geçen tarafını değiştirir", gi.inside && FL2.insideCity(BC, gi));
+  // Gedik yokken sur geçilmez: kuzeydeki bir noktaya emir verilen birlik surun etrafından dolanır, içine girmez.
+  const ar2 = TC.setupBattle({ civ: "rome", inf: 40 }, { civ: "gaul", inf: 40 }, "city", 5);
+  const AC = ar2.field.city, walker = ar2.units.find((u) => u.side === "att");
+  for (const u of ar2.units.filter((v) => v.side === "def")) Object.assign(u, { x: AC.x1 - 4, y: AC.y1 - 4 });
+  TC.command(ar2, [walker.id], { x: AC.cx, y: AC.y0 - 7 });
+  let entered = false;
+  for (let i = 0; i < 300; i++) { TC.step(ar2, 0.1); if (FL2.insideCity(AC, walker)) entered = true; }
+  check("dışarıdaki birlik surun etrafından dolanır, içine girmez", !entered && Math.hypot(walker.x - AC.cx, walker.y - (AC.y0 - 7)) < 3, `${walker.x.toFixed(1)},${walker.y.toFixed(1)}`);
+  check("surun yanından geçen birlik tırmanmaz", !ar2.units.some((u) => u.from) && walker.men === 40);
   // Dost birlikler birbirini itmez (iç içe geçebilir).
   const fr = TC.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 40 }, null, 1);
   const [f1, f2] = fr.units.filter((u) => u.side === "att");

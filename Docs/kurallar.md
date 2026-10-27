@@ -1146,6 +1146,18 @@ arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar".
   (önceden %83), surlu yerde %88; surlu yerde saldıranın kazanma sayısı otomatik 41, taktik ~44 / 149.
   Alttaki kartlar çok birlik olunca (tırmananlar yeni birlik olur) iki sıra.
 
+- **Surla çevrili şehir** (kullanıcı 27.10, kuşatma görselleri - dört yanı surlu bir şehir, çevresinde ordular;
+  İstanbul'da bir yanı deniz: "şehirlerin surlarla etrafı çevrili şekilde"): kuşatmada şehir sahanın ortasında
+  (`field.js addCity`), dikdörtgen sur - şehir 30 x 26, kale 22 x 20 birim; surun üstü yürüyüş yolu, dış kenarda
+  mazgallar, köşelerde ve her 6 birimde kule, her yanın ortasında iki kuleli kapı; içeride ana caddeler, yan
+  sokaklar, evler, ortada köşe kuleli kale (saray). Kıyıdaki şehir, içi en çok karada kalacak yere kayar; suyun
+  üstüne sur çekilmez (deniz o yanı kapatır). Sur hücreleri geçilmez: dışarıdakiler surun etrafından dolanır (yol
+  bulma), gedikten geçilir; bozulan birlik kapılardan kaçar. Merdiven surun en yakın noktasına, köşelere değil;
+  yalnız sura dayanıp duran ya da içerideki düşmana saldırmakla emredilen tırmanır (yanından geçen değil).
+  Savunan şehrin içinde batı surunun ardında dizilir. **Bilgisayar** şehri sarar: şehrin hizasındakiler batı
+  surundan, yukarıdakiler kuzeyden, aşağıdakiler güneyden (deniz yanına değil), her yanda sur boyunca eşit
+  aralıkla; makineler batı suruna. Denge değişmedi: surlu yerde kazanan %88 otomatik savaşla aynı.
+
 ### 29b. Savaş sahasının arazisi
 
 Kullanıcı 26.10 (bir görsel gönderdi: ağaçlı kıyılarıyla bir nehir, yanında "Ridaniye Köyü", büyük bir dağ, adlarıyla):

@@ -69,7 +69,7 @@ export const N = {
   // değme payı (`reach`); göğüs göğüse: adam başı güç x `melee` asker/sn; hücum: bölük başı N.charge x
   // `charge` (okçu dışına x`chargeOther`); ok: `range` menzil, `every` sn'de bir, bölük başı N.volley x
   // `kill`, `flight` sn uçar; surun ardındaki savunan düşman `hold` birime gelene kadar bekler;
-  // `time` sn sonunda savunan kazanır. Göğüs göğüse yalnız ön `ranks` sıra dövüşür. Moral 100 (general +10): kaybedilen her %1 x `loss`, kuşatılınca
+  // `time` sn sonunda savunan kazanır (surlu şehirde `timeWalls`); surlu şehir field.js addCity. Göğüs göğüse yalnız ön `ranks` sıra dövüşür. Moral 100 (general +10): kaybedilen her %1 x `loss`, kuşatılınca
   // sn'de `flank`, hücum yiyince `charge`, ok yiyince `arrow`, dövüşmeyen sn'de `recover` toparlanır;
   // `rout`un altında ya da askerin `floor` payı kalınca bozulur; bozulan yakındaki dostlardan `nearby` götürür.
   tactics: {
