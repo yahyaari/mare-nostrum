@@ -16,7 +16,7 @@ import { INK, SERIF, TAU, colorOf } from "./kit.js";
 import { CREAM, DARK, GOLD, GOLD_LIGHT, TITLE, banner, castleModel, chevrons, cityModel, fleet, goalMark, plaque, roundRect, shield, ship, soldier, wonderMark } from "./pieces.js";
 import { wonderAt } from "../rules/wonders.js";
 import { field, forge, stall, temple, tent as campTent } from "./buildings.js";
-import { clear, drawClouds, drawSnow, paintCompass, paintFog, paintGround, paintLabels } from "./atlas.js";
+import { clear, drawClouds, drawPetals, drawSnow, paintCompass, paintFog, paintGround, paintLabels } from "./atlas.js";
 import { regions } from "./regions.js";
 import { TREES } from "../data/trees.js";
 
@@ -101,6 +101,8 @@ export function drawMap(ctx, cam, view, dpr) {
   }
   if (TERRAIN?.complete) drawClouds(ctx, cam, dpr, SIZE.x, performance.now() / 1000);
   if (view.winter) drawSnow(ctx, cam, dpr, performance.now() / 1000);
+  // Sonbaharda savrulan yapraklar, ilkbaharda çiçek yaprakları.
+  else if (view.season === "autumn" || view.season === "spring") drawPetals(ctx, cam, dpr, performance.now() / 1000, view.season);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(vignette(Math.round(cam.w * dpr), Math.round(cam.h * dpr)), 0, 0);
 
@@ -704,6 +706,10 @@ function drawPlaces(ctx, cam, view, L) {
 
   docked(ctx, cam, view, shown, z);
 
+  // Yerleşimlerin çevresi (maketin altında, yerde): tarlalar, demirhaneler, kışla, kervan.
+  const t0 = performance.now() / 1000;
+  for (const { p, s } of shown) if (view.works?.[p.id] && view.owners[p.id]) surroundings(ctx, s, z, view.works[p.id], view.owners[p.id], t0 + p.id.length);
+
   // Sancaklar ve maketler: önce sancak (direğin dibi maketin arkasında kalır), sonra maket.
   // Kuzeydekiler önce: güneydekinin sancağı onun üstüne düşer, tersi değil.
   const now0 = performance.now();
@@ -719,6 +725,8 @@ function drawPlaces(ctx, cam, view, L) {
     else cityModel(ctx, s.x, s.y + 2 * z, z * 1.15, p.capital, lv);
     if (p.port) anchor(ctx, s.x + 18 * z, s.y + 1, view.blockade?.[p.id]);
     ctx.globalAlpha = 1;
+    // Kuşatılan yer: şehrin içinden yükselen dumanlar.
+    if (view.sieges?.[p.id] !== undefined) for (let i = 0; i < 3; i++) plume(ctx, s.x - 8 * z + i * 8 * z, s.y - 6 * z, z, now0 / 1000 + i * 1.3, 1.5);
     // Dünya harikası: sancağın sağında altın tapınaklı madalyon.
     if (wonderAt(p.id) || view.built?.[p.id]) wonderMark(ctx, s.x + f.w / 2 + 10, s.y - f.pole + 22, 8.5 * Math.max(1, Math.min(1.3, z)));
     // Bir görevin hedefi: sancağın solunda altın bir madalyon.
@@ -1095,6 +1103,75 @@ const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h 
 export function sizeAt(cam) {
   const r = Math.log2(Math.max(1, cam.scale / cam.min));
   return Math.max(0.9, Math.min(1.75, 0.9 + 0.45 * r));
+}
+
+/**
+ * Haritada yaşayan şehirler (kullanıcı 28.10, önerilerden 2.): yerleşimin çevresi yapılarına ve yoluna göre. Solda
+ * tarla şeritleri (tarım şehrinde daha çok ve altın), sağda demirhane (dumanı tüter; demirhane şehrinde ocak kızıl, duman
+ * kalın), solda arkada kışlanın çadırları (kışla şehrinde önünde talim eden askerler), ticaret şehrine kapıya giden
+ * araba. Uzaktan bakınca sade kalsın diye küçük; yakınlaştıkça büyür.
+ */
+function surroundings(ctx, s0, z0, w, owner, t) {
+  const z = z0 * 1.3;
+  // Solu deniz olan yerde (w.flip) her şey aynalanır: x, merkezin öbür yanına.
+  const s = w.flip ? { x: s0.x, y: s0.y, m: -1 } : { x: s0.x, y: s0.y, m: 1 };
+  const X = (dx) => s0.x + dx * s.m;
+  // Bir yanı deniz: her şey kara yanında, demirhane tarlaların arkasında.
+  const one = w.flip || w.wetRight;
+  const farm = w.spec === "farm", smith = w.spec === "forge";
+  const strips = Math.min(farm ? 7 : 4, (w.farms ?? 0) + (farm ? 2 : 0));
+  for (let i = 0; i < strips; i++) field(ctx, X(-30 * z + (i % 2) * 3 * z), s.y + 3 * z + i * 1.7 * z, (farm ? 17 : 13) * z, farm ? 0 : i);
+  if ((w.industry ?? 0) >= 2 || smith) {
+    const fx = one ? X(-34 * z) : X(28 * z), fy = s.y + (one ? -7 : 2) * z;
+    forge(ctx, fx, fy, 0.38 * z, Math.min(3, Math.max(1, Math.floor((w.industry ?? 0) / 2))));
+    plume(ctx, fx - 4 * z, fy - 7 * z, z, t, smith ? 1.3 : 0.8);
+    if (smith) {
+      const g = ctx.createRadialGradient(fx - 1 * z, fy - 2 * z, 0.5, fx - 1 * z, fy - 2 * z, 6 * z);
+      g.addColorStop(0, `rgba(255,190,80,${0.65 + 0.2 * Math.sin(t * 7)})`);
+      g.addColorStop(1, "rgba(255,140,40,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(fx - 7 * z, fy - 8 * z, 12 * z, 12 * z);
+    }
+  }
+  const tents = Math.min(4, Math.floor((w.barracks ?? 0) / 2) + (w.spec === "camp" ? 2 : 0));
+  for (let i = 0; i < tents; i++) campTent(ctx, X(-26 * z + i * 4.2 * z), s.y - 4 * z - (i % 2) * z, 3.4 * z, owner);
+  if (w.spec === "camp") {
+    // Talim: iki sıra küçük asker, ileri geri adım.
+    ctx.fillStyle = colorOf(owner);
+    for (let i = 0; i < 6; i++) {
+      const dx = Math.sin(t * 2.5) * 1.5 * z;
+      ctx.beginPath();
+      ctx.arc(X(-25 * z + (i % 3) * 3 * z) + dx, s.y + 0.5 * z + Math.floor(i / 3) * 2.2 * z, 0.9 * z, 0, TAU);
+      ctx.fill();
+    }
+  }
+  if (w.spec === "trade") {
+    // Kapıya giden araba: sağ alttan şehre, sonra baştan.
+    const k = (t * 0.12) % 1, x = X((one ? -26 + 20 * k : 26 - 20 * k) * z), y = s.y + (12 - 8 * k) * z;
+    ctx.fillStyle = "#7a5634";
+    ctx.fillRect(x - 2.4 * z, y - 2 * z, 4.8 * z, 1.8 * z);
+    ctx.fillStyle = "#e9dcbc";
+    ctx.beginPath();
+    ctx.ellipse(x, y - 2.2 * z, 2.2 * z, 1.4 * z, 0, Math.PI, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#3b3024";
+    ctx.beginPath();
+    ctx.arc(x - 1.5 * z, y, 0.7 * z, 0, TAU);
+    ctx.arc(x + 1.5 * z, y, 0.7 * z, 0, TAU);
+    ctx.fill();
+  }
+  if ((w.market ?? 0) > 0 && w.spec !== "trade") stall(ctx, X((one ? -14 : 14) * z), s.y + 8 * z, 0.4 * z, owner);
+}
+
+/** Haritada yükselen duman: yükseldikçe büyüyen, solan halkalar. */
+function plume(ctx, x, y, z, t, s) {
+  for (let i = 0; i < 4; i++) {
+    const k = (t * 0.3 + i / 4) % 1;
+    ctx.fillStyle = `rgba(205,200,194,${0.55 * (1 - k)})`;
+    ctx.beginPath();
+    ctx.arc(x + Math.sin(k * 3 + i) * 2 * z + k * 6 * z, y - k * 22 * z * s, (1.6 + k * 4.5) * z * s, 0, TAU);
+    ctx.fill();
+  }
 }
 
 /** Sancağın kumaşı ve direği: başkentte büyük, kalede ve bağımsız yerde küçük. */

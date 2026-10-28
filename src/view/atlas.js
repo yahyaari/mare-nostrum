@@ -311,6 +311,29 @@ export function drawSnow(ctx, cam, dpr, t) {
   ctx.restore();
 }
 
+/** Sonbaharda turuncu yapraklar, ilkbaharda beyaz-pembe çiçek yaprakları: kar gibi ama seyrek, dönerek süzülür. */
+export function drawPetals(ctx, cam, dpr, t, season) {
+  const autumn = season === "autumn";
+  const colors = autumn ? ["#c8742a", "#a8501e", "#d9a03a"] : ["#f6e6ea", "#f2cdd6", "#ffffff"];
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (let i = 0; i < (autumn ? 34 : 26); i++) {
+    const speed = 10 + (i % 5) * 4;
+    const y = ((i * 97.1 + t * speed) % (cam.h + 20)) - 10;
+    const x = ((i * 173.3) % cam.w + Math.sin(t * 0.7 + i) * 26 + t * 14) % cam.w;
+    ctx.globalAlpha = 0.55 + (i % 3) * 0.12;
+    ctx.fillStyle = colors[i % 3];
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(t * (1 + (i % 3) * 0.6) + i);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, autumn ? 4.2 : 3.2, autumn ? 2.1 : 1.8, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 let cloudSprites = null;
 /** Bulut gölgesi ve beyaz bulut: bir kere küçük tuvallere çizilir, her karede sadece kopyalanır. */
 function sprites() {

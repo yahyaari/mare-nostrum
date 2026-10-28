@@ -554,6 +554,15 @@ function mapView() {
   view.seen = sight(game, game.player, view.eyes);
   view.friends = new Set(PLACES.filter((p) => { const o = game.places[p.id].owner; return o === game.player || (o && relation(game, game.player, o) === "ally"); }).map((p) => p.id));
   view.winter = isWinter(game.turn);
+  view.season = seasonOf(game.turn);
+  // Yerleşimlerin çevresi (haritada yaşayan şehirler): görünen yerlerin tarlası, sanayisi, kışlası, pazarı ve yolu.
+  view.works = Object.fromEntries(PLACES.filter((p) => !ui.fog || view.seen.has(p.id) || view.friends.has(p.id)).map((p) => {
+    const q = game.places[p.id];
+    // Tarlalar karaya: solu denizse yapılar aynalanır, iki yanı da denizse tarla yok.
+    const m = POS[p.id], land = (dx) => isLand(cellOf(m.x + dx, m.y + 0.15));
+    const left = land(-0.7), right = land(0.7);
+    return [p.id, { farms: left || right ? q.farms : 0, industry: q.industry, barracks: q.barracks, market: q.market ?? 0, spec: q.spec ?? null, flip: !left && right, wetRight: left && !right }];
+  }));
   view.levels = Object.fromEntries(Object.entries(game.places).map(([id, p]) => [id, p.level]));
   view.goals = Object.fromEntries((game.missions ?? []).filter((x) => x.place && x.civ === game.player).map((x) => [x.place, true]));
   view.spies = Object.fromEntries((game.spies ?? []).filter((s) => s.civ === game.player).map((s) => [s.target, s.at ? "in" : "road"]));

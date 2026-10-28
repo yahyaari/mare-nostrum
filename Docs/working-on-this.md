@@ -62,6 +62,7 @@ node Tools/battlefilm.mjs                           taktik savaşın girişi ve 
 node Tools/noticefilm.mjs tr                        görselli bildirimlerin hepsi, tek tek fotoğraf (Logs/notices; Docs/gorseller.md)
 node Tools/buildfilm.mjs tr                         şehrin yolu kartı ve penceresi, kuşatmanın koçbaşıları (harita, kart, saha) (Logs/buildfilm)
 node Tools/cityfilm.mjs tr                          şehir manzarası: başta, gelişmiş liman, kış, kuşatma, ipucu (Logs/cityfilm)
+node Tools/mapfilm.mjs                              haritada yaşayan şehirler: dört yol, kuşatma dumanı, mevsimler (Logs/mapfilm)
 node Tools/soundcheck.mjs                           seslerin gerçekten ses ürettiğini ölç (çevrimdışı)
 node Tools/playtest.mjs http://localhost:8060/ saka 60 easy             tarayıcıda, düğmelere basarak 60 tur oyna
 node Tools/tutorial.mjs tr rome                     öğreticiyi tarayıcıda gerçek basışlarla baştan sona oyna

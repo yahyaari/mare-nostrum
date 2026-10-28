@@ -756,6 +756,11 @@ hepsini yap"): Total War'daki yerleşim görünümü gibi. Soldaki şehir kartı
 - Üstüne gelinen yapı altın çerçeveli; ipucunda adı, seviyesi, getirdiği. Kendi şehrinde basınca yükselir (olmuyorsa
   ipucunda neden), sancağa basınca şehrin yolu penceresi. Yabancı şehirde gördüğün ya da casusunun söylediği kadarı.
   Fotoğraflar: `node Tools/cityfilm.mjs`.
+- **Haritada da** (önerilerden 2.): görünen her yerleşimin çevresi yapılarına ve yoluna göre (draw.js `surroundings`):
+  tarla şeritleri (tarım şehrinde daha çok ve altın), sanayi 2+ ise dumanı tüten demirhane (demirhane şehrinde ocak kızıl),
+  kışla çadırları (kışla şehrinde önünde talim), ticaret şehrine giden araba, pazar tezgâhı. Hepsi karada: bir yanı deniz
+  olan yerde (main.js `view.works` flip / wetRight) kara yanına toplanır. Kuşatılan yerden dumanlar yükselir. Sonbaharda
+  yapraklar, ilkbaharda çiçek yaprakları savrulur (atlas.js `drawPetals`; kışın kar zaten vardı). `node Tools/mapfilm.mjs`.
 
 ## 12b. Casuslar
 
