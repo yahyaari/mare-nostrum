@@ -66,7 +66,7 @@ her biri ayrı push:
    başkentin yanında haydut kampı; balonlar ordu kurmayı, garnizondan çıkarmayı, yürümeyi,
    savaş penceresini ve savaşı sırayla gösterir; 40 para ganimet. 7 medeniyetin hepsinde
    tarayıcıda gerçek basışlarla baştan sona denendi (`node Tools/tutorial.mjs tr rome`).
-3. **Araştırma ağacı** c60cdbb: kurallar.md bölüm 23, `src/rules/research.js`. Bilim nüfustan (her 80
+3. **Araştırma ağacı** (bu adım): kurallar.md bölüm 23, `src/rules/research.js`. Bilim nüfustan (her 80
    nüfus 1, başkent +2), 16 teknoloji (4 kol x 4 çağ), seçilmemiş bilim birikir; süvari, kuşatma
    makinesi, kinkerem araştırmayla açılır; savaş çarpanları savaş penceresinde ayrı satır; her
    teknoloji 3 skor; bilgisayar sırayla araştırır. Alt menüde Araştırma (kandil), Civilization
@@ -80,24 +80,24 @@ Sonra kullanıcı "başka ne yapabiliriz" dedi; önerdiğim üç büyük iş (li
 harikaları inşa etme yarışı, aynı bilgisayarda arkadaşlarla) ve küçükler (şehir binaları, geri
 çekilme ve dağlar, oyun sonu özeti) için: "sırayla devam et".
 
-4. **Liderler ve canlı diplomasi** c60cdbb: kurallar.md bölüm 24. Yedi lider (Scipio, Hannibal,
+4. **Liderler ve canlı diplomasi** (bu adım): kurallar.md bölüm 24. Yedi lider (Scipio, Hannibal,
    Kleopatra, İskender, Mithridates, Vercingetorix, Tomris), çizimle portre (yüz ifadesi tutuma
    göre), kişilik (savaş/barış/ittifak çarpanları, öfke eşiği, kin), tutum puanı ve gerekçeleri
    (Civ V gibi), hafıza (`state.memory`), hediye, ticaret anlaşması (`state.deals`), para
    karşılığı barış, liderle görüşme ekranı, portreli teklif mektupları, savaş ilan eden lider
    konuşur. Kayıt 14. Denge: kişilikler yumuşatıldı (ayakta kalan 344, herkes 41+).
-5. **Harikaları inşa etme yarışı** c60cdbb: kurallar.md 18b. Altı yeni harika (Delfi Kahini,
+5. **Harikaları inşa etme yarışı** (bu adım): kurallar.md 18b. Altı yeni harika (Delfi Kahini,
    Büyük Kütüphane, Büyük Hazine, Büyük Liman, Büyük Su Kemeri, Kolezyum), araştırmayla açılır,
    şehirde inşaatçıyla; ilk bitiren alır, kaybedene yarı para. `state.built`, kayıt 15. Harikalar
    zaferi 12'den 8. Ayrıca eski bir hareket hatası düzeldi: boğazdaki feribot yolundaki gemisiz
    ordu Ege'yi yürüyerek geçiyordu (moves.js modeOf).
-6. **Arkadaşlarla aynı bilgisayarda** c60cdbb: kurallar.md bölüm 25. Oyuncular 1-4, sırayla
+6. **Arkadaşlarla aynı bilgisayarda** (bu adım): kurallar.md bölüm 25. Oyuncular 1-4, sırayla
    seçim, devir ekranı (Escape kapatmaz, Enter = Hazırım), son oyuncudan sonra dünya turu, her
    oyuncuya kendi mektup/görev/haber; `state.players`, `humansOf`, `isHuman`, `aliveHumans`. Kayıt 16.
-7. **Şehir binaları** c60cdbb: kurallar.md 4b. Yapılar sekmesi: tapınak, pazar, okul, hamam. Kayıt 17.
-8. **Geri çekilme ve dağlar** c60cdbb: kurallar.md bölüm 7 ve 22b. Yenilen ordu yarıdan azıyla
+7. **Şehir binaları** (bu adım): kurallar.md 4b. Yapılar sekmesi: tapınak, pazar, okul, hamam. Kayıt 17.
+8. **Geri çekilme ve dağlar** (bu adım): kurallar.md bölüm 7 ve 22b. Yenilen ordu yarıdan azıyla
    çekilir, generali yaşar; dağlar yol dışında iki kat yavaş, dağda savunan x1.25.
-9. **Oyun sonu özeti** c60cdbb: kurallar.md 21b. Harita tekrarı, skor grafiği, sıralama, sayılar.
+9. **Oyun sonu özeti** (bu adım): kurallar.md 21b. Harita tekrarı, skor grafiği, sıralama, sayılar.
 
 Önerilen listenin hepsi bitti.
 
@@ -181,7 +181,7 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     Tools/naval-cal.mjs %85.
     Kullanıcı 27.10: "savaş öncesi nutuk, zafer alayı gibi şeyler istemiyorum, oyunu boşuna çorba yapmaya gerek yok;
     istediğim insanların eğlenebileceği build ve savaş ortamı" - süs sistemleri (nutuk, alay, hırslı komutanlar) yok.
-35. **Geç oyun canlı, müttefikler savaşa katılır** (bu adım; kullanıcı: "hadi eğlenceli hale getirecek şeyler yapalım"):
+35. **Geç oyun canlı, müttefikler savaşa katılır** (6612dd6; kullanıcı: "hadi eğlenceli hale getirecek şeyler yapalım"):
     kurallar.md 11 (ai.js garrisonThreat, N.aiGarrisonThreat / aiLate), 7b (moves.js helpersOf müttefik). Denge: ilk düşüş 43,
     ayakta 295. Açık: 160. turdan sonra garnizonlar yine birikiyor.
 
