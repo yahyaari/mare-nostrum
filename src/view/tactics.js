@@ -81,7 +81,15 @@ export function drawTactics(ctx, cam, B, T, lang, boxes, now) {
   }
   // Deniz savaşı (bölüm 29h): deniz ve gemiler (view/naval.js); kara savaşında arazi ve birlikler.
   if (b.naval) drawNavalField(ctx, f, B, T, now);
-  else landField(ctx, f, B, T, lang, now, t, dpr);
+  else {
+    // Hücum çarpınca ve gedik açılınca saha sarsılır (marks).
+    const M = marksOf(B, now);
+    const shake = M.shake > 0 ? M.shake * 5 : 0;
+    ctx.save();
+    if (shake) ctx.translate(Math.sin(now * 0.09) * shake, Math.cos(now * 0.11) * shake * 0.7);
+    landField(ctx, f, B, T, lang, now, t, dpr);
+    ctx.restore();
+  }
   // Seçim kutusu.
   if (B.drag) {
     const x = Math.min(B.drag.x0, B.drag.x1), y = Math.min(B.drag.y0, B.drag.y1);
@@ -135,8 +143,10 @@ function landField(ctx, f, B, T, lang, now, t, dpr) {
   }
   // Gecenin, akşamın, şafağın rengi zeminde (askerler seçilebilsin diye altlarında).
   sky(ctx, f, b, now, "ground");
-  // Yerdeki ölüler.
+  // Yerdeki ölüler; gediklerin molozu, kaçanların düşürdüğü kalkanlar; koşan atlıların tozu.
   corpses(ctx, f, B);
+  groundMarks(ctx, f, B);
+  hoofDust(ctx, f, b, now);
   // Askerler kendi yerlerine yürür (duraklatılınca durur).
   // Askerlerin yürüyüşü: savaşla aynı hızda; duraklatılınca yerlerinde, ama birlik ışınlandıysa ya da dizilişi
   // değiştiyse yeni yerlerine akarlar (kullanıcı 27.10: "noktalar olduğu yerde kalıyor, seçemiyorum").
@@ -167,6 +177,7 @@ function landField(ctx, f, B, T, lang, now, t, dpr) {
   // Merdivenler (askerlerin üstünde): sura dayanıp tırmanan birliklerin yerinde, üstünde tek sıra askerler.
   if (b.walls) for (const u of b.units) if (u.climbing && u.ladder && !u.dead && !u.gone) ladder(ctx, f, u, B.owners[u.side], now);
   for (const s of b.shots) arrows(ctx, f, b, s);
+  airMarks(ctx, f, B, now);
   for (const e of b.fx) burst(ctx, f, b, e);
   for (const e of b.fx) if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce") fallen(ctx, f, B, e, T);
   for (const u of b.units) {
@@ -932,7 +943,7 @@ function block(ctx, f, B, u, owner, selected, dt) {
  */
 function ram(ctx, f, u, color) {
   // Birliğin kutusunu doldursun: çizim 5.2 x 3.4 birimlik, kutunun boyuna göre büyür.
-  const fp = footprint(u), z = Math.min(fp.d * 0.8 / 5.2, fp.w * 0.8 / 3.4);
+  const fp = footprint(u), z = Math.min(1.05, fp.d * 0.8 / 5.2, fp.w * 0.8 / 3.4);
   const k = f.k * z, swing = u.ram > 0 ? Math.sin(u.ram * 9) * 0.5 : 0;
   ctx.translate(f.x + u.x * f.k, f.y + u.y * f.k);
   ctx.rotate(u.facing);
@@ -1129,8 +1140,10 @@ function orderLine(ctx, f, b, u) {
 function arrows(ctx, f, b, s) {
   const p = Math.max(0, Math.min(1, (b.t - s.t0) / (s.t1 - s.t0)));
   ctx.save();
-  ctx.strokeStyle = "rgba(40,28,16,0.85)";
-  ctx.lineWidth = 1.1;
+  // Yanan oklar: turuncu, parlak (ateşli ok yeteneği).
+  ctx.strokeStyle = s.fire ? "rgba(255,150,50,0.95)" : "rgba(40,28,16,0.85)";
+  ctx.lineWidth = s.fire ? 1.6 : 1.1;
+  if (s.fire) { ctx.shadowColor = "rgba(255,170,60,0.9)"; ctx.shadowBlur = 6; }
   for (let i = 0; i < s.n; i++) {
     const ox = Math.sin(i * 7.31) * 2.2, oy = Math.cos(i * 3.17) * 2.2;
     const x0 = s.from.x + ox * 0.4, y0 = s.from.y + oy * 0.4, x1 = s.at.x + ox, y1 = s.at.y + oy;
@@ -1164,7 +1177,7 @@ function fallen(ctx, f, B, e, T) {
 }
 
 function burst(ctx, f, b, e) {
-  if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce") return;
+  if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce" || e.kind === "breach") return;
   const age = b.t - e.t;
   const a = Math.max(0, 1 - age / 1.6);
   if (a <= 0) return;
@@ -1180,6 +1193,143 @@ function burst(ctx, f, b, e) {
     text(ctx, "!", f.x + e.x * f.k, f.y + e.y * f.k - 20 - age * 12, { bold: true, size: 20, color: "#c4523a", align: "center" });
   }
   ctx.restore();
+}
+
+// ---- efektler ----
+//
+// Kullanıcı 28.10 (önerilerden 3.: "gedik açılınca toz bulutu ve taş parçaları, yanan oklarla şehirde yangın, hücumda
+// kamera sarsıntısı, bozulup kaçan birliğin ardında kalkanlar"): kuralların olaylarından (b.fx, b.shots) ekranda kalan
+// izler. Kurallara dokunmaz; B.marks yalnız ekranın (savaş bitince gider).
+
+/** Yeni olaylardan izler: gedik (toz, taşlar, moloz, sarsıntı), hücum (sarsıntı), bozulma (kalkanlar), yanan ok (yangın). */
+function marksOf(B, now) {
+  const b = B.b, M = (B.marks ??= { seen: new WeakSet(), list: [], shake: 0, at: now });
+  M.shake = Math.max(0, M.shake - Math.min(0.1, (now - M.at) / 1000) * 2.2);
+  M.at = now;
+  for (const e of b.fx) {
+    if (M.seen.has(e)) continue;
+    M.seen.add(e);
+    if (e.kind === "breach") {
+      M.list.push({ kind: "dust", x: e.x, y: e.y, t: e.t }, { kind: "stones", x: e.x, y: e.y, t: e.t }, { kind: "rubble", x: e.x, y: e.y, t: e.t });
+      M.shake = Math.max(M.shake, 1.2);
+    } else if (e.kind === "charge") M.shake = Math.max(M.shake, 0.55);
+    else if (e.kind === "rout") {
+      const u = b.units.filter((v) => v.routed).reduce((m, v) => (!m || Math.hypot(v.x - e.x, v.y - e.y) < Math.hypot(m.x - e.x, m.y - e.y) ? v : m), null);
+      M.list.push({ kind: "shields", x: e.x, y: e.y, t: e.t, owner: u ? u.owner ?? B.owners[u.side] : null, facing: u?.facing ?? 0 });
+    }
+  }
+  // Yanan ok şehrin içine düşünce en yakın ev tutuşur (ok yere varınca).
+  const C = b.field.city;
+  for (const s of b.shots) {
+    if (!s.fire || M.seen.has(s)) continue;
+    M.seen.add(s);
+    if (!C || !insideCity(C, s.at)) continue;
+    const h = C.houses.reduce((m, q) => (!m || Math.hypot(q.x - s.at.x, q.y - s.at.y) < Math.hypot(m.x - s.at.x, m.y - s.at.y) ? q : m), null);
+    if (h && Math.hypot(h.x - s.at.x, h.y - s.at.y) < 6 && !M.list.some((m) => m.kind === "fire" && m.house === h && b.t - m.t < 14)) {
+      M.list.push({ kind: "fire", x: h.x, y: h.y, t: s.t1, house: h });
+    }
+  }
+  const life = { dust: 4, stones: 1.4, fire: 16, rubble: Infinity, shields: Infinity };
+  M.list = M.list.filter((m) => b.t - m.t < life[m.kind]);
+  // Yerdeki kalkanlar en çok 40 küme (eskisi silinir).
+  const sh = M.list.filter((m) => m.kind === "shields");
+  if (sh.length > 40) M.list = M.list.filter((m) => m !== sh[0]);
+  return M;
+}
+
+/** Yerde kalanlar: gediğin molozu, kaçanların düşürdüğü kalkanlar ve mızraklar. */
+function groundMarks(ctx, f, B) {
+  for (const m of B.marks?.list ?? []) {
+    const x = f.x + m.x * f.k, y = f.y + m.y * f.k, k = f.k;
+    if (m.kind === "rubble") {
+      ctx.fillStyle = "rgba(150,135,110,0.9)";
+      for (let i = 0; i < 9; i++) {
+        const a = i * 2.39, r = (1 + (i % 4) * 0.9) * k;
+        ctx.fillRect(x + Math.cos(a) * r * 1.6 - 0.5 * k, y + Math.sin(a) * r - 0.4 * k, (0.6 + (i % 3) * 0.3) * k, (0.5 + (i % 2) * 0.3) * k);
+      }
+    } else if (m.kind === "shields") {
+      ctx.save();
+      for (let i = 0; i < 6; i++) {
+        const a = i * 1.7 + m.facing, r = (0.8 + (i % 3) * 1.1) * k;
+        const sx = x + Math.cos(a) * r * 1.4, sy = y + Math.sin(a) * r;
+        ctx.fillStyle = m.owner ? colorOf(m.owner) : "#7a5634";
+        ctx.globalAlpha = 0.75;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, 0.55 * k, 0.4 * k, a, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(60,44,26,0.8)";
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(sx - Math.cos(a + 1) * 1.3 * k, sy - Math.sin(a + 1) * 1.3 * k);
+        ctx.lineTo(sx + Math.cos(a + 1) * 1.3 * k, sy + Math.sin(a + 1) * 1.3 * k);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+}
+
+/** Havadakiler: gediğin toz bulutu ve uçuşan taşları, yanan evlerin alevi ve dumanı. */
+function airMarks(ctx, f, B, now) {
+  const b = B.b;
+  for (const m of B.marks?.list ?? []) {
+    const age = b.t - m.t;
+    if (age < 0) continue;
+    const x = f.x + m.x * f.k, y = f.y + m.y * f.k, k = f.k;
+    if (m.kind === "dust") {
+      const a = Math.max(0, 1 - age / 4);
+      for (let i = 0; i < 10; i++) {
+        const ang = i * 0.63, r = (1.5 + age * 3.5) * k * (0.7 + (i % 3) * 0.2);
+        ctx.fillStyle = `rgba(170,150,120,${0.45 * a})`;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(ang) * r, y + Math.sin(ang) * r * 0.7 - age * 1.5 * k, (1.6 + age * 1.2) * k, 0, TAU);
+        ctx.fill();
+      }
+    } else if (m.kind === "stones") {
+      ctx.fillStyle = "#8a7c66";
+      for (let i = 0; i < 12; i++) {
+        const ang = i * 0.52 + 0.3, v = 6 + (i % 4) * 3;
+        const px = x + Math.cos(ang) * v * age * k, py = y + (Math.sin(ang) * v * age - 14 * age + 18 * age * age) * k;
+        ctx.fillRect(px, py, 0.7 * k, 0.6 * k);
+      }
+    } else if (m.kind === "fire") {
+      const s = now / 1000, a = Math.min(1, age * 2, (16 - age) / 3);
+      // Duman: yükselen, rüzgârla kayan halkalar.
+      for (let i = 0; i < 5; i++) {
+        const q = (s * 0.4 + i / 5) % 1;
+        ctx.fillStyle = `rgba(60,52,46,${0.4 * a * (1 - q)})`;
+        ctx.beginPath();
+        ctx.arc(x + q * 3 * k, y - (1 + q * 7) * k, (0.8 + q * 2.2) * k, 0, TAU);
+        ctx.fill();
+      }
+      // Alev: titreyen turuncu diller.
+      for (let i = 0; i < 3; i++) {
+        const fl = 0.8 + 0.3 * Math.sin(s * 11 + i * 2);
+        ctx.fillStyle = i === 1 ? `rgba(255,220,120,${0.9 * a})` : `rgba(240,120,40,${0.85 * a})`;
+        ctx.beginPath();
+        ctx.moveTo(x + (i - 1) * 0.6 * k - 0.5 * k, y);
+        ctx.quadraticCurveTo(x + (i - 1) * 0.6 * k, y - 2.2 * fl * k, x + (i - 1) * 0.6 * k + 0.5 * k, y);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+/** Koşan atlıların tozu: hızlı yürüyen atlı birliğin arkasında solan bulutçuklar. */
+function hoofDust(ctx, f, b, now) {
+  const s = now / 1000;
+  for (const u of b.units) {
+    if (u.dead || u.gone || !(u.mounted || u.type === "cav" || u.type === "gen") || !u.wasMoving || u.engaged) continue;
+    const back = { x: -Math.cos(u.facing), y: -Math.sin(u.facing) }, d = footprint(u).d / 2 + 0.6;
+    for (let i = 0; i < 4; i++) {
+      const q = (s * 1.6 + i / 4) % 1, side = (i % 2 ? 1 : -1) * footprint(u).w * 0.3;
+      const x = u.x + back.x * (d + q * 3) - back.y * side, y = u.y + back.y * (d + q * 3) + back.x * side;
+      ctx.fillStyle = `rgba(180,160,125,${0.35 * (1 - q)})`;
+      ctx.beginPath();
+      ctx.arc(f.x + x * f.k, f.y + y * f.k, (0.8 + q * 1.6) * f.k, 0, TAU);
+      ctx.fill();
+    }
+  }
 }
 
 /** Üst bant: iki tarafın adı ve gücü, ortada başlık ve süre. */

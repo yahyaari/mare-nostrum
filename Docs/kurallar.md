@@ -1444,6 +1444,12 @@ aşağıdan yavaşça gelsin".
 - Görmek için: `node Tools/battlefilm.mjs` (girişin ve bitişin kareleri Logs/battlefilm'e); sesleri ölçmek için
   `node Tools/soundcheck.mjs` ("taktik" satırı).
 
+**Efektler** (kullanıcı 28.10, önerilerden 3.; view/tactics.js `marksOf`, `groundMarks`, `airMarks`, `hoofDust`): gedik açılınca toz
+bulutu, uçuşan taşlar, yerde kalan moloz ve sarsıntı; hücum çarpınca saha kısa bir an sarsılır; yanan oklar (Mısır
+okçularının yeteneği) turuncu iz bırakır, şehrin içine düşenler en yakın evi tutuşturur (alev ve duman, 16 sn);
+bozulup kaçan birliğin yerinde sahibinin renginde düşmüş kalkanlar ve mızraklar kalır; koşan atlıların ardında toz.
+Yalnız ekranın (kurallara dokunmaz). `node Tools/fxfilm.mjs`.
+
 ### 29e. Sahada komutan
 
 Kullanıcı 27.10 (önerilerden ilki): komutan taktik savaşta görünmüyordu, yalnız +10 moral sayılıyordu.

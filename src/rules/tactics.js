@@ -1010,7 +1010,7 @@ function siegePlan(b) {
     list.forEach((v, i) => plan.set(v.id, { side: s, t: 0.12 + (0.76 * (i + 0.5)) / list.length }));
   }
   // Makineler (koçbaşılar) piyadenin yerini almaz: batı kapısının iki yanına, ortaya sıkışık.
-  engines.sort((a, c) => a.y - c.y).forEach((v, i) => plan.set(v.id, { side: pick("W"), t: 0.5 + (i - (engines.length - 1) / 2) * 0.14 }));
+  engines.sort((a, c) => a.y - c.y).forEach((v, i) => plan.set(v.id, { side: pick("W"), t: 0.5 + (i - (engines.length - 1) / 2) * 0.2 }));
   b.plan = plan;
   return plan;
 }
