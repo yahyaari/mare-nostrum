@@ -38,10 +38,10 @@ export function toField(cam, x, y) {
 }
 
 /** Bir saha noktasındaki birlik (`side` verilirse yalnız o tarafın), yoksa null. */
-export function unitAt(b, p, side = null) {
+export function unitAt(b, p, side = null, seeHidden = true) {
   let best = null, bd = Infinity;
   for (const u of b.units) {
-    if (u.dead || u.gone || (side && u.side !== side) || !inside(u, p, 1.6)) continue;
+    if (u.dead || u.gone || (side && u.side !== side) || (u.hidden && !seeHidden) || !inside(u, p, 1.6)) continue;
     const d = Math.hypot(u.x - p.x, u.y - p.y);
     if (d < bd) { best = u; bd = d; }
   }
@@ -171,18 +171,22 @@ function landField(ctx, f, B, T, lang, now, t, dpr) {
   // Birlikler: önce bozulanlar (altta), sonra ötekiler.
   const owner = { att: B.owners.att, def: B.owners.def };
   for (const u of [...b.units].sort((a, c) => (a.routed ? 0 : 1) - (c.routed ? 0 : 1))) {
-    if (u.dead || u.gone) continue;
+    if (u.dead || u.gone || (u.hidden && u.side !== B.me)) continue; // düşmanın pusudaki birliği görünmez
+    ctx.save();
+    if (u.hidden) ctx.globalAlpha = 0.55;
     block(ctx, f, B, u, u.owner ?? owner[u.side], B.sel.has(u.id), dt);
+    ctx.restore();
   }
   // Merdivenler (askerlerin üstünde): sura dayanıp tırmanan birliklerin yerinde, üstünde tek sıra askerler.
   if (b.walls) for (const u of b.units) if (u.climbing && u.ladder && !u.dead && !u.gone) ladder(ctx, f, u, B.owners[u.side], now);
   for (const s of b.shots) arrows(ctx, f, b, s);
   airMarks(ctx, f, B, now);
   for (const e of b.fx) burst(ctx, f, b, e);
-  for (const e of b.fx) if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce") fallen(ctx, f, B, e, T);
+  for (const e of b.fx) if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce" || e.kind === "ambush") fallen(ctx, f, B, e, T);
   for (const u of b.units) {
-    if (u.dead || u.gone) continue;
+    if (u.dead || u.gone || (u.hidden && u.side !== B.me)) continue;
     badge(ctx, f, u, u.owner ?? owner[u.side], B.sel.has(u.id), b);
+    if (u.hidden) leaf(ctx, f, u);
   }
 }
 
@@ -967,6 +971,26 @@ function ram(ctx, f, u, color) {
   ctx.fillRect(-2.6 * k, -0.25 * k, 5.2 * k, 0.5 * k);
 }
 
+/** Pusudaki kendi birliğin: rozetinin solunda yeşil yaprak (düşman göremez). */
+function leaf(ctx, f, u) {
+  const x = f.x + u.x * f.k - 16, y = f.y + u.y * f.k - footprint(u).w * f.k * 0.5 - 14;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-0.6);
+  ctx.fillStyle = "#6fa04a";
+  ctx.strokeStyle = "rgba(20,14,8,0.85)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 6, 3.4, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-6, 0);
+  ctx.lineTo(6, 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Kuşatma kulesi: üç katlı ahşap kule, tepesinde sahibinin renginde şerit; sura yanaşınca önünde köprü. */
 function siegeTower(ctx, f, u, color, b) {
   const k = f.k * 0.9;
@@ -1225,8 +1249,9 @@ function arrows(ctx, f, b, s) {
 function fallen(ctx, f, B, e, T) {
   const age = B.b.t - e.t, a = Math.max(0, Math.min(1, age * 4, (4 - age) / 1.2));
   if (a <= 0) return;
-  const s = e.kind === "reinforce" ? T.tacReinforced.replace("{0}", e.men) : (e.kind === "genFell" ? T.tacGenFell : T.tacGenFled).replace("{0}", e.name ?? T.tacGeneral);
-  const y = f.y + f.h * (e.kind === "reinforce" ? 0.85 : 0.18), mine = e.side === B.me;
+  const mine = e.side === B.me;
+  const s = e.kind === "ambush" ? (mine ? T.tacAmbushOurs : T.tacAmbush) : e.kind === "reinforce" ? T.tacReinforced.replace("{0}", e.men) : (e.kind === "genFell" ? T.tacGenFell : T.tacGenFled).replace("{0}", e.name ?? T.tacGeneral);
+  const y = f.y + f.h * (e.kind === "reinforce" ? 0.85 : e.kind === "ambush" ? 0.5 : 0.18);
   ctx.save();
   ctx.globalAlpha = a;
   const w = Math.min(f.w - 40, measure(ctx, s, { title: true, bold: true, size: 24 }) + 80);
@@ -1235,12 +1260,12 @@ function fallen(ctx, f, B, e, T) {
   ctx.fill();
   ctx.fillStyle = colorOf(B.owners[e.side]);
   ctx.fillRect(f.x + f.w / 2 - w / 2, y + 12, w, 2);
-  text(ctx, s, f.x + f.w / 2, y + 2, { title: true, bold: true, size: 24, color: e.kind === "reinforce" ? (mine ? "#9fd07a" : "#e08a6a") : mine ? "#e08a6a" : GOLD_LIGHT, align: "center" });
+  text(ctx, s, f.x + f.w / 2, y + 2, { title: true, bold: true, size: 24, color: e.kind === "reinforce" || e.kind === "ambush" ? (mine ? "#9fd07a" : "#e08a6a") : mine ? "#e08a6a" : GOLD_LIGHT, align: "center" });
   ctx.restore();
 }
 
 function burst(ctx, f, b, e) {
-  if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce" || e.kind === "breach") return;
+  if (e.kind === "genFell" || e.kind === "genFled" || e.kind === "reinforce" || e.kind === "breach" || e.kind === "ambush" || e.kind === "bridge") return;
   const age = b.t - e.t;
   const a = Math.max(0, 1 - age / 1.6);
   if (a <= 0) return;

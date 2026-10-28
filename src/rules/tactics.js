@@ -329,7 +329,8 @@ function centre(F, u, dt) {
   u.lateral.x -= (u.lateral.x / l) * step; u.lateral.y -= (u.lateral.y / l) * step;
 }
 const fighting = (u) => alive(u) && !u.routed && u.type !== "siege";
-const foes = (b, u) => b.units.filter((v) => v.side !== u.side && alive(v) && !v.routed);
+/** Görünen düşmanlar (ormanda gizlenen sayılmaz; bölüm 29i). */
+const foes = (b, u) => b.units.filter((v) => v.side !== u.side && alive(v) && !v.routed && !v.hidden);
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const unitById = (b, id) => b.units.find((v) => v.id === id);
 /** Açı farkı, -π..π. */
@@ -686,6 +687,9 @@ function aiAbilities(b, side, all) {
   const T = K();
   for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed)) {
     if (u.manual && !all) continue;
+    // Pusu için gizlenen birlik yerinde bekler: düşman yaklaşınca açığa çıkar, sonra saldırır. (Ormandan geçerken
+    // gizlenen öteki birlikler yoluna devam eder.)
+    if (u.hidden && u.lurk) { u.order = null; continue; }
     const ab = abilityOf(b, u);
     if (!ab) continue;
     const en = foes(b, u);
@@ -882,6 +886,17 @@ export function step(b, dt) {
   if (b.walls) walls(b, dt);
   // İtilip suya ya da eve giren birlik eski yerine.
   if (F.obstacles) for (const u of b.units) if (alive(u) && !passable(F, u.x, u.y) && !(u.routed && kindAt(F, u.x, u.y) === WALL)) { u.x = u.px; u.y = u.py; }
+  // Pusu (bölüm 29i; kullanıcı 28.10, önerilerden 6.): ormanda kıpırdamadan duran birlik gizlenir; düşman yaklaşınca, ya da
+  // ormandan çıkınca, dövüşe girince açığa çıkar - gizliyken çıkan pusu kurmuş olur.
+  const AM = T.ambush;
+  for (const u of b.units) {
+    if (!alive(u)) continue;
+    const wood = !(b.walls && u.inside) && !u.routed && !u.engaged && u.type !== "siege" && kindAt(F, u.x, u.y) === FOREST;
+    if (!wood) { if (u.hidden) spring(b, u); u.still = 0; continue; }
+    u.still = u.wasMoving ? 0 : (u.still ?? 0) + dt;
+    if (!u.hidden && u.still >= AM.hide) u.hidden = true;
+    if (u.hidden && b.units.some((v) => v.side !== u.side && alive(v) && !v.routed && !v.hidden && dist(u, v) <= AM.reveal + footprint(v).r)) spring(b, u);
+  }
   b.touch = contactMap(b);
   const sideMul = (v, u) => ({ front: 1, flank: T.flank.side, rear: T.flank.rear })[faceOf(v, u)];
   // Tepeden aşağı vuran güçlü, yokuş yukarı vuran zayıf.
@@ -897,7 +912,7 @@ export function step(b, dt) {
       const vs = v.stop + (v.m?.stop ?? 0);
       const stop = vs > 0 && face === "front" ? (v.men / N.company) * vs : 0;
       const wood = kindAt(F, v.x, v.y) === FOREST || kindAt(F, u.x, u.y) === FOREST ? T.terrain.forestCharge : 1;
-      const raw = (u.men / N.company) * N.charge * u.charge * T.charge * (v.kind === "arch" ? 1 : T.chargeOther) * mulsOf(b, u).power * sideMul(v, u) * wood * hill(u, v) * (u.m ?? ONE).charge * b.wx.charge;
+      const raw = (u.men / N.company) * N.charge * u.charge * T.charge * (v.kind === "arch" ? 1 : T.chargeOther) * mulsOf(b, u).power * sideMul(v, u) * wood * hill(u, v) * (u.m ?? ONE).charge * b.wx.charge * ambushOf(b, u, v);
       const kills = Math.max(0, raw - stop * N.charge * T.charge);
       hurt(b, v, kills);
       v.morale -= kills > 0 ? T.morale.charge * (face === "front" ? 1 : 1.5) + (active(b, u, "stampede") ? K().abilities.stampede.shock : 0) : 0;
@@ -915,8 +930,8 @@ export function step(b, dt) {
     const fighters = Math.min(u.men, footprint(u).cols * T.ranks);
     // Ormanda atlı zayıf.
     const wood = (u.mounted || u.type === "cav") && kindAt(F, u.x, u.y) === FOREST ? T.terrain.forestCav : 1;
-    const out = fighters * u.melee * mulsOf(b, u).power * T.melee * wood * (u.m ?? ONE).melee * dt;
     const tgt = cs.find((v) => v.id === u.order?.unit) ?? cs[0];
+    const out = fighters * u.melee * mulsOf(b, u).power * T.melee * wood * (u.m ?? ONE).melee * ambushOf(b, u, tgt) * dt;
     for (const v of cs) {
       const share = cs.length === 1 ? 1 : v === tgt ? 0.7 : 0.3 / (cs.length - 1);
       const face = faceOf(v, u);
@@ -945,6 +960,8 @@ export function step(b, dt) {
     const cover = b.walls && t.side === "def" && t.inside ? T.climb.cover : 1;
     const kills = (u.men / N.company) * N.volley * u.shoot * mulsOf(b, u, true).volley * T.volley.kill * trees * cover * (0.85 + b.rand() * 0.3) * (u.m ?? ONE).volley * b.wx.volley;
     b.shots.push({ from: { x: u.x, y: u.y }, to: t.id, at: { x: t.x, y: t.y }, t0: b.t, t1: b.t + T.volley.flight, kills, side: u.side, n: Math.min(12, Math.ceil(u.men / 3)), fire: (u.m ?? ONE).arrowMorale > 1 ? u.m.arrowMorale : 0 });
+    // Ok atan gizli birlik yerini belli eder.
+    if (u.hidden) spring(b, u);
   }
   // Mancınık (bölüm 20): ağır ağır, uzaktan taş atar - en yakın düşmana, surun ardındakine de (siper korumaz).
   const CP = T.catapult;
@@ -1127,6 +1144,46 @@ function walls(b, dt) {
     u.climbed = (u.climbed ?? 0) + n; // ekran: bunlar ölmedi, tırmandı
     if (u.men < 0.5) { u.men = 0; u.gone = true; u.absorbed = true; }
   }
+}
+
+/** Gizli birlik açığa çıkar: pusu süresi başlar (ekranda "Pusu!"). */
+function spring(b, u) {
+  u.hidden = false;
+  u.ambush = b.t + K().ambush.time;
+  b.fx.push({ kind: "ambush", x: u.x, y: u.y, t: b.t, side: u.side });
+}
+
+/** Pusu kuranın vuruşu: süresi içinde x bonus; ilk değdiği düşmanın morali bir kere sarsılır. */
+function ambushOf(b, u, v) {
+  if (!(u.ambush > b.t)) return 1;
+  if (v && !u.shocked) { u.shocked = true; v.morale -= K().ambush.shock; }
+  return K().ambush.bonus;
+}
+
+/**
+ * Bilgisayarın pususu (bölüm 29i; main.js, insanla savaşta bilgisayarın tarafı için): kendi bölgesinde orman varsa,
+ * karşı tarafa en yakın orman noktasına bir birlik (önce atlı) gizlenir. Dönen: o birlik ya da null.
+ */
+export function lurk(b, side) {
+  if (b.walls) return null;
+  const F = b.field, Z = deployZone(b, side), E = deployZone(b, side === "att" ? "def" : "att");
+  const ex = (E.x0 + E.x1) / 2, ey = (E.y0 + E.y1) / 2;
+  let best = null, bd = Infinity;
+  for (let y = Math.ceil(Z.y0 + 3); y < Z.y1 - 3; y++) {
+    for (let x = Math.ceil(Z.x0 + 3); x < Z.x1 - 3; x++) {
+      if (kindAt(F, x + 0.5, y + 0.5) !== FOREST || !passable(F, x + 0.5, y + 0.5)) continue;
+      // Ormanın içinde (çevresi de orman): kenarda duran görünür.
+      if ([[-2, 0], [2, 0], [0, -2], [0, 2]].some(([dx, dy]) => kindAt(F, x + 0.5 + dx, y + 0.5 + dy) !== FOREST)) continue;
+      const d = Math.hypot(x - ex, y - ey);
+      if (d < bd) { bd = d; best = { x: x + 0.5, y: y + 0.5 }; }
+    }
+  }
+  if (!best) return null;
+  const pool = b.units.filter((u) => u.side === side && u.type !== "gen" && u.type !== "siege");
+  const u = pool.find((v) => v.mounted || v.type === "cav") ?? pool.find((v) => v.kind !== "arch") ?? null;
+  if (!u) return null;
+  Object.assign(u, { x: best.x, y: best.y, px: best.x, py: best.y, facing: Math.atan2(ey - best.y, ex - best.x), hidden: true, lurk: true, still: K().ambush.hide });
+  return u;
 }
 
 /** Birliğin kalan morali (kayıplar düşülmüş): 0 ve altı bozulma; derinlik kaybın etkisini değiştirir. */

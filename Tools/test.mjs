@@ -1557,6 +1557,51 @@ section("Deniz savaşı sahada (bölüm 29h)");
   check("sahadaki deniz savaşının sonucu haritaya yazılır", ev?.won && S.armyById(g, x1.id).ships === 2 && !S.armyById(g, y1.id));
 }
 
+section("Pusu (bölüm 29i)");
+{
+  // Kullanıcı 28.10 (önerilerden 6.): "ormandaki birlik düşman yaklaşana kadar görünmez; pusu kurup yandan vurursun;
+  // bilgisayar da sana kurar".
+  const TP = await import("../src/rules/tactics.js"), FP = await import("../src/rules/field.js");
+  const wood = () => {
+    const F = FP.flatField();
+    for (let y = 10; y < 50; y++) for (let x = 70; x < 90; x++) F.kind[y * F.w + x] = FP.FOREST;
+    return F;
+  };
+  const b = TP.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 40, cav: 30 }, null, 3, wood());
+  const u = TP.lurk(b, "def");
+  check("bilgisayar kendi bölgesindeki ormana bir atlıyı gizler", !!u && u.hidden && (u.mounted || u.type === "cav") && FP.kindAt(b.field, u.x, u.y) === FP.FOREST);
+  const open = TP.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 40, cav: 30 }, null, 3);
+  check("ormansız sahada pusu yok, surlu savaşta da", TP.lurk(open, "def") === null && TP.lurk(TP.setupBattle({ civ: "rome", inf: 80 }, { civ: "gaul", inf: 40 }, "city", 3), "def") === null);
+  // Gizli birliğe ok atılmaz, bilgisayar onu hedef seçmez: düşman uzaktayken gizli kalır.
+  for (let i = 0; i < 10; i++) TP.step(b, 0.1);
+  check("düşman uzaktayken gizli kalır", u.hidden);
+  // Düşman yaklaşınca açığa çıkar, pusu kurmuş sayılır ("Pusu!").
+  const e = b.units.find((v) => v.side === "att");
+  Object.assign(e, { x: u.x - 6, y: u.y, px: u.x - 6, py: u.y });
+  TP.step(b, 0.1);
+  check("düşman yaklaşınca açığa çıkar, pusu başlar", !u.hidden && u.ambush > b.t && b.fx.some((x) => x.kind === "ambush" && x.side === "def"));
+  // Pusudaki vuruş: aynı çarpışma pusuyla daha kanlı, ilk değdiğinin morali sarsılır.
+  const hit = (ambush) => {
+    const q = TP.setupBattle({ civ: "rome", inf: 40 }, { civ: "gaul", inf: 40 }, null, 5);
+    const [x, y] = [q.units.find((v) => v.side === "att"), q.units.find((v) => v.side === "def")];
+    Object.assign(x, { x: 50, y: 30, px: 50, py: 30, facing: 0 });
+    Object.assign(y, { x: 50 + TP.footprint(x).d / 2 + TP.footprint(y).d / 2 - 0.3, y: 30, facing: Math.PI });
+    y.px = y.x; y.py = y.y;
+    if (ambush) y.ambush = 99;
+    const m0 = x.morale;
+    for (let i = 0; i < 10; i++) TP.step(q, 0.1);
+    return { lost: 40 - x.men, shaken: m0 - x.morale };
+  };
+  const plain = hit(false), amb = hit(true);
+  check("pusudan vuran daha çok öldürür, değdiğinin morali sarsılır", amb.lost > plain.lost * 1.3 && amb.shaken > plain.shaken + N.tactics.ambush.shock * 0.9, `${plain.lost.toFixed(1)} -> ${amb.lost.toFixed(1)}`);
+  // Oyuncunun birliği de ormanda kıpırdamadan durunca gizlenir.
+  const p = TP.setupBattle({ civ: "rome", inf: 40, cav: 20 }, { civ: "gaul", inf: 40 }, null, 7, wood());
+  const mineU = p.units.find((v) => v.side === "def");
+  Object.assign(mineU, { x: 80, y: 30, px: 80, py: 30 });
+  for (let i = 0; i < 20; i++) TP.step(p, 0.1);
+  check("ormanda kıpırdamadan duran birlik birkaç saniyede gizlenir", mineU.hidden);
+}
+
 section("Sahada komutan (bölüm 29e)");
 {
   // Kullanıcı 27.10: komutan sahada - muhafızıyla, yanındakileri güçlendirir, düşerse ordu sarsılır.

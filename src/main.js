@@ -37,7 +37,7 @@ import { record } from "./rules/chronicle.js";
 import { sendSpy } from "./rules/spies.js";
 import { SCENE_MS } from "./view/battle.js";
 import { makeField } from "./rules/field.js";
-import { aiOrders, useAbility, command as tacCommand, deployZone, merge as tacMerge, orderLine, outcome, placeAt as tacPlace, placeLine, planLine, reshape, setupBattle, split as tacSplit, step as stepBattle } from "./rules/tactics.js";
+import { aiOrders, lurk, useAbility, command as tacCommand, deployZone, merge as tacMerge, orderLine, outcome, placeAt as tacPlace, placeLine, planLine, reshape, setupBattle, split as tacSplit, step as stepBattle } from "./rules/tactics.js";
 import { incomingFor, incomingSides, resolveIncoming } from "./rules/incoming.js";
 import { drawTactics, toField, unitAt } from "./view/tactics.js";
 import { aiNaval, navalCommand, navalOutcome, setupNaval, shipAt, stepNaval } from "./rules/naval.js";
@@ -255,7 +255,7 @@ function battleSounds(B, now) {
   if ((sky === "rain" || sky === "snow") && now >= (B.skyAt ?? 0)) { B.skyAt = now + 900; sound.weather(sky); }
   // General düştü: alçak, inen bir boru. Takviye geldi: saldırı borusu, geldiği yandan.
   for (const e of B.b.fx) if (e.kind === "genFell" && !e.heard) { e.heard = true; sound.genFell(e.side === B.me ? -0.3 : 0.3); }
-  for (const e of B.b.fx) if (e.kind === "reinforce" && !e.heard) { e.heard = true; sound.charge(e.side === "att" ? -0.8 : 0.8); }
+  for (const e of B.b.fx) if ((e.kind === "reinforce" || e.kind === "ambush") && !e.heard) { e.heard = true; sound.charge(e.side === "att" ? -0.8 : 0.8); }
 }
 
 /** Deniz savaşının sesleri: yürüyen gemilerin kürekleri, çarpma, gemiye çıkanların dövüşü, batan gemi. */
@@ -344,7 +344,7 @@ function battleOrder(p) {
     if (inZone(B, fp)) { tacPlace(b, sel.map((u) => u.id), fp); sound.click(); }
     return;
   }
-  const foe = (b.naval ? shipAt : unitAt)(b, fp, B.foe);
+  const foe = (b.naval ? shipAt : unitAt)(b, fp, B.foe, false);
   const order = b.naval ? navalCommand : tacCommand;
   if (foe) order(b, sel.map((u) => u.id), { unit: foe.id });
   else {
@@ -361,6 +361,8 @@ function battleOrder(p) {
 function openBattle(o) {
   // Deniz savaşı (bölüm 29h): saha deniz, birlikler gemiler, dizilme yok.
   const b = o.naval ? setupNaval(o.att, o.def, o.field.seed) : setupBattle(o.att, o.def, o.walls, o.field.seed, makeField(o.field));
+  // Bilgisayar ormana pusu kurar (bölüm 29i).
+  if (!o.naval) lurk(b, o.me === "att" ? "def" : "att");
   ui.battle = {
     b,
     me: o.me, foe: o.me === "att" ? "def" : "att", deploy: !o.naval, finish: o.finish, army: o.army ?? null,

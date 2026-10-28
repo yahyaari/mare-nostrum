@@ -1552,3 +1552,18 @@ filoya saldırırken (ya da denizde sana saldırıldığında) "⚔ Savaş" art�
   dönerek kaybolur, ele geçenin yelkeni iner. Rozet: tür, tayfa, gövde ve moral çubukları. Sesler: kürek şıpırtısı,
   mahmuzun gümlemesi, gemiye çıkanların kılıçları, batan geminin gıcırtısı.
 - Ayar (`node Tools/naval-cal.mjs`, 289 savaş): kazanan otomatik deniz savaşıyla %85 aynı.
+
+### 29i. Pusu
+
+Kullanıcı 28.10 (önerilerden 6.: "ormandaki birlik düşman yaklaşana kadar görünmez; pusu kurup yandan ya da arkadan
+vurursun; bilgisayar da sana kurar"). tactics.js `spring`, `ambushOf`, `lurk`; `N.tactics.ambush`.
+
+- Ormanda (surun içinde değil) 1.5 saniye kıpırdamadan duran birlik **gizlenir**: düşman onu görmez - okçular ona atmaz,
+  bilgisayar onu hedef seçmez, ekranda çizilmez, tıklanmaz. Kendi gizli birliğin soluk ve rozetinin yanında yeşil yaprak.
+- Açığa çıkar: görünen bir düşman 7 birim yaklaşınca, ormandan çıkınca, dövüşe girince ya da ok atınca. Gizliyken açığa
+  çıkan **pusu kurmuş** olur: 5 saniye hücumda ve göğüs göğüse x1.5, ilk değdiği düşmanın morali -25. Ekranda "Pusu!"
+  (seninki "Pusumuz vurdu!") ve borazan.
+- **Bilgisayar da kurar** (yalnız insanla savaşta, main.js `openBattle`; surlu savaşta değil): kendi dizilme bölgesinde
+  orman varsa, karşı tarafa en yakın ormanın içine (kenarına değil) bir birlik - önce atlı - gizler; dizilirken de
+  görünmez. Pusudaki birlik düşman yaklaşana kadar bekler. Ormandan geçerken gizlenen öteki birlikler yoluna devam eder.
+- Fotoğraflar: `node Tools/ambushfilm.mjs`.

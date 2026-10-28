@@ -139,6 +139,9 @@ export const N = {
     // kaybı x`steady`.
     // Mancınık (yerinde yapılan): `every` saniyede bir, `range` birim uzağa taş; bölüğü başına `kills` asker düşürür.
     catapult: { every: 4.5, range: 46, kills: 3, flight: 1.8, stand: 20 },
+    // Pusu (bölüm 29i): ormanda `hide` sn kıpırdamadan duran birlik gizlenir; düşman `reveal` birime girince açığa çıkar
+    // ve `time` sn pusu kurmuş sayılır: dövüşte ve hücumda x`bonus`, ilk değdiği düşmanın morali -`shock`.
+    ambush: { hide: 1.5, reveal: 7, time: 5, bonus: 1.5, shock: 25 },
     climb: { stage: 10, wait: 15, rate: 3, guard: 4, repel: 0.6, join: 8, steady: 0.5, breach: 30, ram: 2, tower: 3, towerRepel: 0.5, bridge: 6, gapHalf: 4, wallZone: 8, cover: 0.75 },
     timeWalls: 300, turn: { march: 3, fight: 0.5, idle: 1.2, near: 14 }, minSplit: 5, mergeReach: 20,
   },
