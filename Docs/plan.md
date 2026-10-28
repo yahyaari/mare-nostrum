@@ -7,9 +7,10 @@
 
 ## NEREDE KALDIK (28.10) - önce bunu oku
 
-Son commit **c60cdbb**, hepsi push'lu, **2453 test** geçiyor, kayıt sürümü **20** (yeni alanlar isteğe bağlı: `pl.spec`,
-`army.works`). 27.10 akşamından beri (madde 35-36): geç oyun canlı, müttefikler savaşa katılıyor; sonra kullanıcı önerdiğim
-üç işe "dediklerini de yapalım": kuşatmada koçbaşı, şehrin yolu (uzmanlık), 160. tur sonrası birikme. Kullanıcının
+Son commit **fb45368** (ve bu plan), hepsi push'lu, **2479 test** geçiyor, kayıt sürümü **20** (yeni alanlar isteğe bağlı:
+`pl.spec`, `army.works` {ram, tower, catapult}, `army.workType`, `army.gear` {arms, armour}). 27.10 akşamından beri (madde 35-37):
+geç oyun canlı, müttefikler savaşa katılıyor; kuşatmada koçbaşı, şehrin yolu, 160. tur sonrası; sonra kullanıcı "keyifli
+olması, güzel görünmesi için ne yapabiliriz" dedi, önerdiğim yedi işe "sırayla hepsini yap" (madde 37). Kullanıcının
 çizgisi: süs sistemi yok (nutuk, alay...), yalnız inşa ve savaşı eğlenceli yapan şeyler. Sırada: kullanıcı oynayıp söyleyecek.
 
 (27.10 akşamki durum: commit bf0b56b, 2424 test.)
@@ -194,6 +195,18 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     - Geç oyun: kurallar.md 11 (ai.js `late`, `starvable`, `frontOf`; ittifak çatlar, cepheye toplanma, büyük filo). Ölçüm aracı
       `node Tools/late.mjs '{}' 8`.
     - Denge (70 oyun): ilk düşüş 43 -> 38, ayakta 295 -> 296.
+
+37. **Yedi iş: görünüş ve keyif** (kullanıcı 28.10: "tamam sırayla hepsini yap"; her biri ayrı push):
+    1. Şehir manzarası (392fc2d): kurallar.md 12e; view/city.js `drawCityView`, ui.js `cityViewModal`, `spotInfo`. `Tools/cityfilm.mjs`.
+    2. Haritada yaşayan şehirler (76cb3a2): 12e; draw.js `surroundings`, `plume`; atlas.js `drawPetals`; main.js `view.works`
+       (flip / wetRight: yapılar kara yanında). `Tools/mapfilm.mjs`.
+    3. Savaş efektleri (716d275): 29d sonu; view/tactics.js `marksOf`, `groundMarks`, `airMarks`, `hoofDust`. `Tools/fxfilm.mjs`.
+    4. Resim yuvaları (495842e): 12d; art.js `coverArt`; Docs/gorseller.md (building/, unit/, spec/, city/backdrop).
+    5. Kuşatma aletini seç (24f95b3): 20; siege.js `WORKS`, `worksOf`, `setWorkType`; combat.js `towersMul`; tactics.js kule
+       köprüsü (`b.bridges`), mancınık taşı (`stone` atış). Denge: ilk düşüş 38, ayakta 304.
+    6. Pusu (b9a1df0): 29i; tactics.js `spring`, `ambushOf`, `lurk`. `Tools/ambushfilm.mjs`.
+    7. Donanım (fb45368): 6d; state.js `GEAR`, `gearInfo`, `equip`; combat.js `gearPow`, `armourTaken`. `Tools/gearfilm.mjs`.
+       Denge (hepsi birlikte): ilk düşüş 38, ayakta 288.
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 

@@ -302,6 +302,8 @@ harcama yeri olur, inşa ile savaş birbirine bağlanır"). state.js `GEAR`, `ge
   silah seviyesi kadar altın, zırh seviyesi kadar gümüş çizgi.
 - Bilgisayar şehrindeki 40+ askerlik ordusunu, silah yedeği (20) ve para yedeği (30) kalacaksa donatır: önce silah,
   sonra zırh. `node Tools/gearfilm.mjs`.
+- Denge (70 oyun, 28.10, kuşatma aletleri ve pusu dahil): ilk düşüş 38 (aynı), ayakta kalan 304 -> 288 (donanımlı ordular
+  geç oyunda daha çok yer alıyor).
 
 ## 7. Savaş (otomatik)
 
