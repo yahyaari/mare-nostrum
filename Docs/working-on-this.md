@@ -61,6 +61,7 @@ node Tools/peek.mjs http://localhost:8060/ Logs/peek-phone 390 844     telefon, 
 node Tools/battlefilm.mjs                           taktik savaşın girişi ve bitişi, kare kare (Logs/battlefilm)
 node Tools/noticefilm.mjs tr                        görselli bildirimlerin hepsi, tek tek fotoğraf (Logs/notices; Docs/gorseller.md)
 node Tools/buildfilm.mjs tr                         şehrin yolu kartı ve penceresi, kuşatmanın koçbaşıları (harita, kart, saha) (Logs/buildfilm)
+node Tools/cityfilm.mjs tr                          şehir manzarası: başta, gelişmiş liman, kış, kuşatma, ipucu (Logs/cityfilm)
 node Tools/soundcheck.mjs                           seslerin gerçekten ses ürettiğini ölç (çevrimdışı)
 node Tools/playtest.mjs http://localhost:8060/ saka 60 easy             tarayıcıda, düğmelere basarak 60 tur oyna
 node Tools/tutorial.mjs tr rome                     öğreticiyi tarayıcıda gerçek basışlarla baştan sona oyna

@@ -200,7 +200,7 @@ export function field(ctx, x, y, w, i = 0) {
   ctx.stroke();
 }
 
-function barn(ctx, x, y, s) {
+export function barn(ctx, x, y, s) {
   ctx.beginPath();
   ctx.rect(x - 5 * s, y - 7 * s, 10 * s, 7 * s);
   ctx.fillStyle = "#8c5a36";
@@ -271,7 +271,7 @@ export function tent(ctx, x, y, w, owner) {
   ctx.stroke();
 }
 
-function palisade(ctx, x, y, w, s) {
+export function palisade(ctx, x, y, w, s) {
   ctx.fillStyle = "#7a5a3a";
   for (let px = x - w / 2; px < x + w / 2; px += 3.2 * s) {
     ctx.beginPath();
@@ -285,7 +285,7 @@ function palisade(ctx, x, y, w, s) {
   }
 }
 
-function flag(ctx, x, y, s, owner) {
+export function flag(ctx, x, y, s, owner) {
   ctx.strokeStyle = "#3b3024";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -301,7 +301,7 @@ function flag(ctx, x, y, s, owner) {
   ctx.fill();
 }
 
-function boat(ctx, x, y, s, net) {
+export function boat(ctx, x, y, s, net) {
   ctx.beginPath();
   ctx.moveTo(x - 10 * s, y - 4 * s);
   ctx.quadraticCurveTo(x, y + 2 * s, x + 10 * s, y - 4 * s);
@@ -330,7 +330,7 @@ function boat(ctx, x, y, s, net) {
   }
 }
 
-function hull(ctx, x, y, s) {
+export function hull(ctx, x, y, s) {
   ctx.beginPath();
   ctx.moveTo(x - 16 * s, y - 6 * s);
   ctx.quadraticCurveTo(x - 4 * s, y + 4 * s, x + 16 * s, y - 8 * s);
@@ -350,7 +350,7 @@ function hull(ctx, x, y, s) {
   }
 }
 
-function crane(ctx, x, y, s) {
+export function crane(ctx, x, y, s) {
   ctx.strokeStyle = "#5a3f26";
   ctx.lineWidth = 1.6 * s;
   ctx.beginPath();
@@ -365,7 +365,7 @@ function crane(ctx, x, y, s) {
   ctx.stroke();
 }
 
-function amphora(ctx, x, y, s) {
+export function amphora(ctx, x, y, s) {
   ctx.beginPath();
   ctx.ellipse(x, y - 4 * s, 2.2 * s, 4 * s, 0, 0, TAU);
   ctx.fillStyle = "#b8643c";
@@ -373,7 +373,7 @@ function amphora(ctx, x, y, s) {
   ctx.fillRect(x - 0.8 * s, y - 10 * s, 1.6 * s, 3 * s);
 }
 
-function tower(ctx, x, y, s, n) {
+export function tower(ctx, x, y, s, n) {
   const h = (20 + 4 * Math.min(4, n)) * s;
   ctx.beginPath();
   ctx.rect(x - 6 * s, y - h, 12 * s, h);
@@ -413,7 +413,7 @@ export function stall(ctx, x, y, s, owner) {
   ctx.fillRect(x - 4 * s, y - 4 * s, 8 * s, 2 * s);
 }
 
-function scroll(ctx, x, y, s) {
+export function scroll(ctx, x, y, s) {
   ctx.fillStyle = "#f3e7c9";
   ctx.fillRect(x - 6 * s, y - 8 * s, 12 * s, 7 * s);
   ctx.fillStyle = "#c9a45a";
@@ -431,7 +431,7 @@ function scroll(ctx, x, y, s) {
   }
 }
 
-function dome(ctx, x, y, s) {
+export function dome(ctx, x, y, s) {
   ctx.fillStyle = "#e8dcc0";
   ctx.fillRect(x - 11 * s, y - 8 * s, 22 * s, 8 * s);
   ctx.beginPath();

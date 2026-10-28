@@ -54,6 +54,8 @@ import { estimate, explain, fight, nextRankXp, veteranMul, veteranRank } from ".
 import { incomingSides } from "../rules/incoming.js";
 import { drawMinimap, drawVignette, placeOnScreen } from "./draw.js";
 import { buildingArt } from "./buildings.js";
+import { drawCityView } from "./city.js";
+import { seasonOf } from "../rules/season.js";
 import { toScreen } from "./camera.js";
 import { SIZE } from "../geo.js";
 
@@ -884,6 +886,75 @@ function specArt(ctx, k, x, y, w, h, owner) {
 }
 
 /**
+ * Şehir manzarası (view/city.js; kullanıcı 28.10, önerilerden 1.: "Total War'daki yerleşim görünümü gibi"): soldaki
+ * kartın resmine basınca. Yapılan her şey yerinde; üstüne gelince adı, seviyesi ve getirdiği. Kendi şehrinde bir yapıya
+ * basınca yükselir (yükseltilebiliyorsa; olmuyorsa ipucunda neden), sancağa basınca şehrin yolu penceresi açılır.
+ * Başkasının şehrinde gördüğün ya da casusunun söylediği kadarı.
+ */
+function cityViewModal(ctx, cam, game, ui, boxes, T, m) {
+  const id = m.id, pl = game.places[id], p = byId[id];
+  if (!pl) return;
+  const f = factsOf(game, ui, id), own = pl.owner === game.player;
+  if (!f.works) return;
+  const W = Math.min(cam.w - 40, 1120), sw = W - 40, sh = Math.min(Math.round(sw * 0.345), cam.h - 190);
+  const r = modalFrame(ctx, cam, boxes, sh + 130, W);
+  text(ctx, p.name[ui.lang], r.x + r.w / 2, r.y + 36, { title: true, bold: true, size: 21, align: "center" });
+  fit(ctx, kindLine(id, game, T) + (pl.owner ? " · " + civName(pl.owner, ui.lang) : ""), r.x + r.w / 2, r.y + 56, r.w - 40, { italic: true, size: 12.5, color: INK.soft, align: "center" });
+  const sr = { x: r.x + 20, y: r.y + 68, w: Math.min(sw, sh / 0.345), h: sh };
+  sr.x = r.x + (r.w - sr.w) / 2;
+  const sieger = game.armies.find((a) => a.besieging === id);
+  const g = f.garrison ? men(f.garrison) + (f.inside ?? []).filter((a) => a.owner === pl.owner).reduce((n, a) => n + a.men, 0) : 0;
+  const spots = drawCityView(ctx, {
+    id, owner: pl.owner, kind: p.kind, capital: p.capital, port: p.port, walls: wallsOf(game, id), works: f.works, builds: f.builds ?? [],
+    guards: g, fleet: f.live ? fleetOf(pl) : 0, besieger: sieger ? sieger.owner : undefined, wonders: wondersAt(game, id).map((w) => w.id), season: seasonOf(game.turn),
+  }, sr, performance.now());
+  ctx.strokeStyle = "#2a2016";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(sr.x + 0.5, sr.y + 0.5, sr.w - 1, sr.h - 1);
+  // Üstüne gelinen yer altın çerçeveyle; ipucu ve basınca ne olacağı.
+  for (const s of spots) {
+    const info = spotInfo(game, id, s.what, T, own);
+    if (over(s.x, s.y, s.w, s.h)) {
+      ctx.save();
+      ctx.shadowColor = "rgba(255,210,110,0.9)";
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = GOLD_LIGHT;
+      ctx.lineWidth = 2;
+      roundRect(ctx, s.x, s.y, s.w, s.h, 6);
+      ctx.stroke();
+      ctx.restore();
+    }
+    boxes.push({ x: s.x, y: s.y, w: s.w, h: s.h, act: info.act, tip: info.tip });
+  }
+  const by = r.y + r.h - 50;
+  if (own) {
+    buildersRow(ctx, game, boxes, T, id, r.x + 22, by + 6, 260);
+    fit(ctx, T.cityViewHint, r.x + 300, by + 21, r.w - 500, { italic: true, size: 12.5, color: INK.soft });
+  } else if (!f.live) fit(ctx, fill(T.spyOld, f.age ?? 0), r.x + 22, by + 21, r.w - 240, { italic: true, size: 12.5, color: INK.warn });
+  button(ctx, boxes, { x: r.x + r.w - 180, y: by, w: 160, h: 36, label: T.closeBtn, size: 14, act: { do: "close" } });
+}
+
+/** Manzarada bir yerin ipucu ve basınca yapılacak iş (kendi şehrinde yükselt / yolu seç). */
+function spotInfo(game, id, what, T, own) {
+  const pl = game.places[id];
+  if (what.startsWith("wonder:")) { const [name, gift] = T.wonders[what.slice(7)]; return { act: null, tip: [name, gift] }; }
+  if (what === "walls") return { act: null, tip: [T.walls, wallsText(wallsOf(game, id), T), fill(T.cityViewGuards, men(defenders(game, id)))] };
+  if (what === "fleet") return { act: null, tip: [T.ships, String(fleetOf(pl))] };
+  if (what === "spec") {
+    const k = pl.spec ?? specBuild(pl)?.what.slice(5);
+    return { act: own ? { do: "open", modal: "spec", id } : null, tip: [`${T.specCard} · ${T.specs[k][0]}`, specText(k, T), own ? [T.cityViewSpec, "good"] : null] };
+  }
+  const name = what === "level" ? T.cityCard : T[what];
+  if (!own) return { act: null, tip: [`${name} · ${fill(T.levelOf, pl[what] ?? 0)}`] };
+  const u = upgradeInfo(game, id, what);
+  const b = u.building;
+  const why = b ? [fill(T.cityViewBusy, b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left)), "warn"]
+    : u.why === "max" ? [T.maxShort, null] : u.why ? [u.why === "done" ? T.whyJustTaken : u.why === "needLevel" ? fill(T.lockLevel, u.now + 1 - extraOf(pl, what)) : whyText(u.why, T), "bad"]
+    : [fill(T.cityViewUp, u.cost, turnsText(u.turns, T)), "good"];
+  return { act: !u.why ? { do: "upgrade", id, what } : null, tip: [`${name} · ${fill(T.levelOf, u.now)}`, nowFx(game, id, what, T), why] };
+}
+
+/**
  * Şehrin yolu penceresi (bölüm 4c): dört yolun kartı yan yana (resmi, adı, kısa getirdiği; seçili olan SEÇİLİ,
  * yapılan ilerlemesiyle), altında uzun açıklaması. Karta basınca yol yapılmaya başlar.
  */
@@ -1468,6 +1539,22 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
   // Görsel: yerin kendi arazisinde maketi; içi biliniyorsa önünde garnizonu kadar asker.
   const vr = { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: VH };
   drawVignette(ctx, id, pl.owner, vr, pl.level, 2.6, f.works);
+  if (f.works) {
+    // Sağ üst köşede büyüteç; resmin her yeri şehrin manzarasını açar.
+    const hot = over(vr.x, vr.y, vr.w, vr.h), mx = vr.x + vr.w - 16, my = vr.y + 16;
+    ctx.beginPath();
+    ctx.arc(mx, my, 11, 0, TAU);
+    ctx.fillStyle = hot ? "rgba(20,14,8,0.85)" : "rgba(20,14,8,0.55)";
+    ctx.fill();
+    ctx.strokeStyle = hot ? GOLD_LIGHT : "rgba(243,231,201,0.7)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(mx - 1.5, my - 1.5, 4.5, 0, TAU);
+    ctx.moveTo(mx + 1.8, my + 1.8);
+    ctx.lineTo(mx + 6, my + 6);
+    ctx.stroke();
+    boxes.push({ ...vr, act: { do: "open", modal: "cityView", id }, tip: [T.cityViewOpen, T.cityViewTip] });
+  }
   if (f.garrison) {
     const g = f.garrison, total = men(g);
     const n = Math.min(6, Math.ceil(total / 30));
@@ -2013,7 +2100,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, slots: slotsModal, trade: tradeModal, incoming: incomingModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, spec: specModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, spec: specModal, cityView: cityViewModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }

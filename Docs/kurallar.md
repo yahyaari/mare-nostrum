@@ -738,6 +738,25 @@ arka plan görsel olsun - bütün bildirimlerde, araştırmada da; sonra hepsine
   yoksa kodla çizilmiş temsili sahne (`src/view/art.js`). Dosya adları ve önerilen boyutlar: `Docs/gorseller.md`.
   Hepsini görmek için `node Tools/noticefilm.mjs`.
 
+### 12e. Şehir manzarası
+
+Kullanıcı 28.10 ("başka ne yapabiliriz, keyifli olması ve güzel görünmesi için"; önerdiğim yedi işin ilki, "sırayla
+hepsini yap"): Total War'daki yerleşim görünümü gibi. Soldaki şehir kartının resmine basınca (sağ üst köşede büyüteç)
+şehrin geniş bir sahnesi açılır (`src/view/city.js drawCityView`, ui.js `cityViewModal`):
+
+- Arkada akropolde tapınak (seviyesiyle büyür), harika, okul, hamam (buharı tüter), akademi; surların ardında evler
+  (şehir seviyesi kadar sıra); önde sur, kuleler, kapı ve üstünde nöbetçiler (garnizonun her 25 askerine bir); sursuz
+  yerde alçak çit. Solda tarlalar (tarla seviyesinin iki katı şerit, ambarlar), sağda (limanda solda) demirhaneler
+  (dumanı tüter), önde kapının solunda pazar, sağında kışlanın talim alanı (çadırlar, talim eden askerler). Limanda
+  rıhtım ve iskeleler, demirli savaş gemileri, balıkçılar, tersanede kızak ve vinç, amforalar ve tüccar gemileri,
+  dalgakıranın ucunda fener (liman kalesiyle yükselir, 2. seviyeden sonra ateşi yanar).
+- Şehrin yolu kapının üstünde sancak (simgesiyle); tarım şehrinde ambarlar, demirhanede ocaklar kızıl, ticaret şehrinde
+  kapıya kervan, kışla şehrinde daha çok çadır ve asker. Süren inşaatın üstünde iskele. Kuşatılan şehrin önünde düşman
+  kampı, içinden dumanlar. Mevsimle gök, toprak ve tarlalar değişir (kışın kar).
+- Üstüne gelinen yapı altın çerçeveli; ipucunda adı, seviyesi, getirdiği. Kendi şehrinde basınca yükselir (olmuyorsa
+  ipucunda neden), sancağa basınca şehrin yolu penceresi. Yabancı şehirde gördüğün ya da casusunun söylediği kadarı.
+  Fotoğraflar: `node Tools/cityfilm.mjs`.
+
 ## 12b. Casuslar
 
 Kullanıcı 22.10: "casus gönder şeyi yapacağız, şehirler hakkında bilgi toplamak için, mesafeye

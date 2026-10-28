@@ -188,7 +188,7 @@ function redraw() {
     if (ui.fight && !ui.fight.done && now - ui.fight.t0 > SCENE_MS) { ui.fight.done = true; ui.modal ??= next(); }
     if (ui.fight && now - ui.fight.t0 > FIGHT_MS) ui.fight = null;
     const scene = !!ui.fight;
-    const opening = (ui.modal && now - ui.modalAt < MODAL_MS) || (ui.modal?.kind === "summary" && ui.modal.playing);
+    const opening = (ui.modal && now - ui.modalAt < MODAL_MS) || (ui.modal?.kind === "summary" && ui.modal.playing) || ui.modal?.kind === "cityView";
     const sliding = ui.screen === "start" && now - (ui.pickAt ?? 0) < 320;
     if (anim.busy() || gliding || scene || opening || sliding) redraw();
     // Canlı harita: bulutlar süzülür, sancaklar dalgalanır - saniyede 20 kare, sekme arkadayken hiç.
