@@ -54,30 +54,42 @@ export function drawCityView(ctx, o, r, now) {
   ctx.translate(r.x, r.y - TOP * k);
   ctx.scale(k, k);
 
+  // Kendi resmin (art/city/<yer> ya da art/city/backdrop; Docs/gorseller.md): gökü ve uzak tepeleri kaplar, şehir önüne çizilir.
+  if (o.backdrop) {
+    const img = o.backdrop, bw = VW, bh = HORIZON + 60 - TOP, s2 = Math.max(bw / img.width, bh / img.height);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, TOP, bw, bh);
+    ctx.clip();
+    ctx.drawImage(img, (bw - img.width * s2) / 2, TOP + (bh - img.height * s2) / 2, img.width * s2, img.height * s2);
+    ctx.restore();
+  }
   // Gök, güneş, bulutlar.
   const sky = ctx.createLinearGradient(0, 0, 0, HORIZON + 20);
   sky.addColorStop(0, S.sky[0]);
   sky.addColorStop(1, S.sky[1]);
   ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, VW, HORIZON + 20);
+  if (!o.backdrop) ctx.fillRect(0, 0, VW, HORIZON + 20);
   const sun = ctx.createRadialGradient(170, 135, 4, 170, 135, 70);
   sun.addColorStop(0, "rgba(255,246,214,0.95)");
   sun.addColorStop(0.25, "rgba(255,236,190,0.5)");
   sun.addColorStop(1, "rgba(255,236,190,0)");
   ctx.fillStyle = sun;
-  ctx.fillRect(100, 65, 140, 140);
-  for (let i = 0; i < 5; i++) {
+  if (!o.backdrop) ctx.fillRect(100, 65, 140, 140);
+  for (let i = 0; i < (o.backdrop ? 0 : 5); i++) {
     const cx = ((i * 260 + t * (6 + i * 1.5)) % (VW + 260)) - 130, cy = 118 + (i % 3) * 18;
     cloud(ctx, cx, cy, 0.7 + (i % 2) * 0.4);
   }
-  // Uzak dağlar ve tepeler.
-  ctx.fillStyle = shade(S.ground[1], -0.05);
-  ctx.globalAlpha = 0.45;
-  ridge(ctx, 0, HORIZON - 30, VW, 34, rnd, 9);
-  ctx.globalAlpha = 0.75;
-  ctx.fillStyle = shade(S.ground[0], -0.12);
-  ridge(ctx, 0, HORIZON - 8, VW, 20, rnd, 14);
-  ctx.globalAlpha = 1;
+  // Uzak dağlar ve tepeler (kendi resmin yoksa).
+  if (!o.backdrop) {
+    ctx.fillStyle = shade(S.ground[1], -0.05);
+    ctx.globalAlpha = 0.45;
+    ridge(ctx, 0, HORIZON - 30, VW, 34, rnd, 9);
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = shade(S.ground[0], -0.12);
+    ridge(ctx, 0, HORIZON - 8, VW, 20, rnd, 14);
+    ctx.globalAlpha = 1;
+  }
   // Toprak.
   const ground = ctx.createLinearGradient(0, HORIZON, 0, VH);
   ground.addColorStop(0, S.ground[0]);

@@ -36,6 +36,23 @@ function load(e, key, i) {
 }
 
 /**
+ * Kartların resim yuvası (kullanıcı 28.10, önerilerden 4.): `art/<anahtar>` yüklendiyse kutuyu kaplayarak çizer (oran
+ * korunur, taşan kırpılır) ve true döner; yoksa hiçbir şey çizmez, false (çağıran kendi çizimini yapar).
+ */
+export function coverArt(ctx, key, x, y, w, h) {
+  const img = artImage(key);
+  if (!img) return false;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  const k = Math.max(w / img.width, h / img.height), iw = img.width * k, ih = img.height * k;
+  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+  ctx.restore();
+  return true;
+}
+
+/**
  * Bir görseli kutuya çiz: resmi varsa kaplayarak (oran korunur, taşan kırpılır), yoksa temsili sahne. `o.owner`,
  * `o.them`: sahnedeki sancakların renkleri; `o.round`: köşe yarıçapı; `o.pic`: temsili sahnenin yüksekliği (altı koyu).
  */

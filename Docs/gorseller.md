@@ -63,3 +63,53 @@ işe yarasın diye konuyu çok kenara koymamak iyi.
 | `tech/fortification.jpg` | Surculuk |
 | `tech/navigation.jpg` | Seyir |
 | `tech/medicine.jpg` | Tıp |
+
+## Bina, asker, gemi ve yol kartları (kullanıcı 28.10, önerilerden 4.)
+
+Kartın resmi kartın üst kısmını kaplar (ortalanıp taşanı kırpılır); altında koyu bir şeritte fiyat, sağ üst köşede
+seviye rozeti. Kartlar sekmeye göre dar ya da geniş (60-260 piksel en, 110-150 piksel boy): **önerilen boyut 400 x 400
+piksel**, konusu **ortada**, alt beşte biri sade (fiyat şeridi oraya düşer). Resim her seviyede aynıdır; seviye köşedeki
+rozette yazar. Dosya yoksa kodla çizilen sahne (seviyesiyle zenginleşen).
+
+| Dosya | Kart |
+|---|---|
+| `building/level.jpg` | Şehir (şehir seviyesi) |
+| `building/farms.jpg` | Tarla |
+| `building/industry.jpg` | Sanayi |
+| `building/barracks.jpg` | Kışla |
+| `building/fishery.jpg` | Balıkçılık |
+| `building/shipyard.jpg` | Tersane |
+| `building/trade.jpg` | Ticaret (liman) |
+| `building/fort.jpg` | Liman kalesi |
+| `building/temple.jpg` | Tapınak |
+| `building/market.jpg` | Pazar |
+| `building/school.jpg` | Okul |
+| `building/baths.jpg` | Hamam |
+| `building/academy.jpg` | Akademi |
+| `unit/inf.jpg` | Piyade (birlik kartı ve Asker bas kartı) |
+| `unit/arch.jpg` | Okçu |
+| `unit/cav.jpg` | Süvari |
+| `unit/siege.jpg` | Kuşatma makinesi |
+| `unit/elite-rome.jpg` | Lejyoner (özel birlikler medeniyete göre: `unit/elite-<medeniyet>`) |
+| `unit/elite-carthage.jpg` | Savaş fili |
+| `unit/elite-egypt.jpg` | Savaş arabası |
+| `unit/elite-macedon.jpg` | Falanks |
+| `unit/elite-parthia.jpg` | Katafrakt |
+| `unit/elite-gaul.jpg` | Savaşçı |
+| `unit/elite-saka.jpg` | Atlı okçu |
+| `unit/ships.jpg` | Kadırga |
+| `unit/trireme.jpg` | Trireme |
+| `unit/quinq.jpg` | Kinkerem |
+| `spec/trade.jpg` | Ticaret şehri (Uzmanlık kartı ve yol penceresi) |
+| `spec/farm.jpg` | Tarım şehri |
+| `spec/forge.jpg` | Demirhane şehri |
+| `spec/camp.jpg` | Kışla şehri |
+| `spec/none.jpg` | Yol seçilmemiş şehrin Uzmanlık kartı |
+
+## Şehir manzarasının arka planı: `art/city/<yer>.jpg` ya da `art/city/backdrop.jpg`
+
+Şehir manzarasında (soldaki şehir kartının resmine basınca) gök ve uzak tepeler. Şehrin kendisi (surlar, evler,
+tarlalar, liman) kodla resmin önüne çizilir - yapılar değiştikçe değişsin diye - o yüzden resimde **şehir olmasın**: gök,
+bulutlar, uzak dağlar. Resim manzaranın üst kısmını kaplar (1000 x 170 oranında, yaklaşık 6:1); **önerilen boyut 2000 x
+340 piksel**, ufuk çizgisi resmin en altında. Bir yere özel resim (`city/rome.jpg`, adlar `src/data/world.js`'teki
+kimlikler) yoksa ortak `city/backdrop.jpg`, o da yoksa çizilmiş gök.

@@ -737,6 +737,9 @@ arka plan görsel olsun - bütün bildirimlerde, araştırmada da; sonra hepsine
 - Her görselin bir anahtarı var (`notice/raid`, `tech/irrigation`...): `art/<anahtar>.jpg` (.png, .webp) varsa o,
   yoksa kodla çizilmiş temsili sahne (`src/view/art.js`). Dosya adları ve önerilen boyutlar: `Docs/gorseller.md`.
   Hepsini görmek için `node Tools/noticefilm.mjs`.
+- **Kartlar ve şehir manzarası da** (kullanıcı 28.10, önerilerden 4.): bina kartları `building/<yapı>`, asker ve gemi kartları
+  `unit/<tür>` (özel birlik `unit/elite-<medeniyet>`), yol kartları `spec/<yol>`; şehir manzarasının göğü ve uzak tepeleri
+  `city/<yer>` ya da `city/backdrop` (şehrin kendisi kodla önüne çizilir). Dosya yoksa çizilen (art.js `coverArt`).
 
 ### 12e. Şehir manzarası
 

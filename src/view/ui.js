@@ -34,7 +34,7 @@ import {
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
 import { drift } from "../rules/loyalty.js";
-import { artBox, glassButton, lit, pictureFrame } from "./art.js";
+import { artBox, artImage, coverArt, glassButton, lit, pictureFrame } from "./art.js";
 import { appointInfo, capOf, chanceOf, features, generalsOf, leanings, officerFor } from "../rules/generals.js";
 import { options as letterOptions, ownerOf } from "../rules/events.js";
 import { progress as missionProgress, turnsLeft } from "../rules/missions.js";
@@ -847,6 +847,7 @@ function specCard(ctx, game, boxes, T, id, what, x, y, w, h) {
  * seçilmemişse şehir ve önünde dört kollu bir yol tabelası.
  */
 function specArt(ctx, k, x, y, w, h, owner) {
+  if (coverArt(ctx, k ? "spec/" + k : "spec/none", x, y, w, h)) return;
   buildingArt(ctx, k ? SPEC_BUILDING[k] : "level", x, y, w, h, k ? 4 : 3, owner);
   ctx.save();
   if (!k) {
@@ -906,6 +907,7 @@ function cityViewModal(ctx, cam, game, ui, boxes, T, m) {
   const g = f.garrison ? men(f.garrison) + (f.inside ?? []).filter((a) => a.owner === pl.owner).reduce((n, a) => n + a.men, 0) : 0;
   const spots = drawCityView(ctx, {
     id, owner: pl.owner, kind: p.kind, capital: p.capital, port: p.port, walls: wallsOf(game, id), works: f.works, builds: f.builds ?? [],
+    backdrop: artImage("city/" + id) ?? artImage("city/backdrop"),
     guards: g, fleet: f.live ? fleetOf(pl) : 0, besieger: sieger ? sieger.owner : undefined, wonders: wondersAt(game, id).map((w) => w.id), season: seasonOf(game.turn),
   }, sr, performance.now());
   ctx.strokeStyle = "#2a2016";
@@ -1002,7 +1004,7 @@ function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
   const b = u.building;
   actionCard(ctx, boxes, {
     x, y, w, h, act: { do: "upgrade", id, what }, label: "▲",
-    art: (ix, iy, iw, ih) => buildingArt(ctx, what, ix, iy, iw, ih, u.now, pl.owner),
+    art: (ix, iy, iw, ih) => coverArt(ctx, "building/" + what, ix, iy, iw, ih) || buildingArt(ctx, what, ix, iy, iw, ih, u.now, pl.owner),
     badge: u.now, name: what === "level" ? T.cityCard : T[what],
     sub: why ?? nowFx(game, id, what, T), subColor: u.now > 0 ? GOLD_LIGHT : "rgba(243,231,201,0.5)",
     state: b ? "busy" : u.why === "max" ? "max" : locked ? "locked" : u.why ? "off" : "ready",
@@ -1195,6 +1197,7 @@ function nowFx(game, id, what, T) {
  * deniz); piyade ve okçu üç asker, süvari bir atlı, kuşatma makinesi; gemiler türüne göre.
  */
 function troopArt(ctx, type, owner, ix, iy, iw, ih, k) {
+  if (coverArt(ctx, type === "elite" ? `unit/elite-${owner}` : "unit/" + type, ix, iy, iw, ih)) return;
   const ground = iy + ih * 0.8;
   ctx.save();
   roundRect(ctx, ix, iy, iw, ih, 2);
