@@ -23,7 +23,7 @@ import { random } from "./rng.js";
 import { aiResearch, unlocked } from "./research.js";
 import { dealOf, moodOf, persona, warMoodMul } from "./leaders.js";
 import {
-  SPECS, armiesAt, armiesOf, armyById, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men, specInfo, startSpec,
+  GEAR, equip, gearInfo, SPECS, armiesAt, armiesOf, armyById, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men, specInfo, startSpec,
   freeBuilders, grainCap, humansOf, isHuman, muster, rush, rushInfo, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, startWonder, station, strength, together, upgrade, upgradeInfo, wonderInfo,
 } from "./state.js";
 
@@ -519,6 +519,15 @@ function military(state, civ, events) {
     const o = men(a) >= 40 ? officerFor(state, a) : null;
     if (o) appoint(state, a.id, o.id);
     else if (men(a) >= 80 && !appointInfo(state, a.id).why && state.civs[civ].money >= N.generals.cost + 25) appoint(state, a.id);
+  }
+
+  // 1c. Donanım (bölüm 6d): şehrindeki büyük ordu, silah yedeği (asker basmaya) kalacaksa önce silah, sonra zırh.
+  for (const a of mine()) {
+    if (!a.at || men(a) < 40) continue;
+    for (const k of GEAR) {
+      const g = gearInfo(state, a.id, k);
+      if (!g.why && state.civs[civ].weapons >= g.cost.weapons + 20 && state.civs[civ].money >= g.cost.money + 30) { equip(state, a.id, k); break; }
+    }
   }
 
   // 2. Her ordu: bu tur yetişebildiği kolay hedefe saldır; yoksa yanındaki surlu bir yeri kuşat

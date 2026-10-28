@@ -970,6 +970,55 @@ section("Dinlenme (bölüm 6c)");
   check("barbar kampı toparlanmaz", camp.inf === 23);
 }
 
+section("Donanım (bölüm 6d)");
+{
+  // Kullanıcı 28.10 (önerilerden 7.): "demirhanede ordulara zırh ve silah yükseltmesi; silahın yeni bir harcama yeri".
+  const C5 = await import("../src/rules/combat.js");
+  const g = S.newGame("rome", 7);
+  Object.assign(g.civs.rome, { weapons: 300, money: 300 });
+  g.places.rome.industry = 1;
+  const a = S.formArmy(g, "rome", 10, 0);
+  a.inf = 95;
+  check("bölük başına seviye kadar silah ve yarısı kadar para (95 asker = 10 bölük)", S.gearInfo(g, a.id, "arms").cost.weapons === 10 && S.gearInfo(g, a.id, "arms").cost.money === 5);
+  const w0 = g.civs.rome.weapons;
+  check("kendi şehrinde silah 1. seviye: silah ve para ödenir", S.equip(g, a.id, "arms") && S.gearOf(a).arms === 1 && g.civs.rome.weapons === w0 - 10);
+  check("2. seviye için şehrin sanayisi 2 olmalı", S.gearInfo(g, a.id, "arms").why === "needIndustry");
+  g.places.rome.industry = 3;
+  S.equip(g, a.id, "arms"); S.equip(g, a.id, "arms");
+  check("en çok 3. seviye", S.gearOf(a).arms === 3 && S.gearInfo(g, a.id, "arms").why === "max");
+  a.at = null;
+  check("şehrin dışında donatılmaz", S.gearInfo(g, a.id, "armour").why === "notHome");
+  a.at = "rome";
+  S.equip(g, a.id, "armour");
+  const base = { civ: "rome", inf: 100 }, foe = { civ: "gaul", inf: 100, arch: 40 };
+  check("silah ve zırh gücü artırır, dökümde satırı", C5.fight({ ...base, gear: a.gear }, foe, null, [1, 1]).attPow > C5.fight(base, foe, null, [1, 1]).attPow * 1.2
+    && C5.explain({ ...base, gear: a.gear }, foe, null).att.some(([k]) => k === "gear"));
+  check("zırh oklardan kaybı azaltır", C5.armourTaken({ gear: { armour: 2 } }) === 1 - 2 * N.gear.armour && C5.armourTaken({}) === 1);
+  // Birleşince donanım askerlere göre karışır; ayrılan bölük donanımıyla gider.
+  const b = S.formArmy(g, "rome", 10, 0);
+  b.inf = 95;
+  S.merge(g, a.id, b.id);
+  check("birleşen ordunun donanımı askerlere göre karışır", Math.abs(S.gearOf(a).arms - 1.5) < 0.01);
+  const part = S.detach(g, a.id, { inf: 20 });
+  check("ayrılan bölük donanımıyla gider", part && Math.abs(S.gearOf(part).arms - S.gearOf(a).arms) < 1e-9);
+  // Savunanın içerideki donanımlı ordusu sayılır.
+  const d = S.newGame("gaul", 7);
+  Object.assign(d.civs.rome, { weapons: 300, money: 300 });
+  const inside = S.formArmy(d, "rome", 10, 0);
+  inside.inf = 100;
+  S.equip(d, inside.id, "armour");
+  const att = S.formArmy(d, "tarentum", 10, 0);
+  check("savunanın içerideki ordusunun donanımı sayılır", (M.sides(d, att, "gaul", "rome").def.gear?.armour ?? 0) > 0);
+  // Bilgisayar silahı bol olunca şehrindeki büyük orduyu donatır.
+  const h = S.newGame("gaul", 7);
+  Object.assign(h.civs.rome, { weapons: 400, money: 600 });
+  const ra = S.formArmy(h, "rome", 10, 0);
+  ra.inf = 60;
+  const { aiTurn: aiG } = await import("../src/rules/ai.js");
+  aiG(h, "rome", []);
+  check("bilgisayar şehrindeki ordusunu donatır", h.armies.some((x) => x.owner === "rome" && (S.gearOf(x).arms > 0 || S.gearOf(x).armour > 0)));
+}
+
 section("Büyük krizler (bölüm 27)");
 
 {

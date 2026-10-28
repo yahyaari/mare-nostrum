@@ -238,6 +238,10 @@ export const N = {
   // Oyuncu `step` `step` artırır. Bilgisayar kasası `aiReserve` + yer başına `aiPerPlace`ın iki katını geçince tavana kadar,
   // bir katını geçince yarısına kadar alır.
   grain: { price: 3, base: 4, market: 2, port: 4, step: 2, aiReserve: 150, aiPerPlace: 25 },
+  // Donanım (bölüm 6d; kullanıcı 28.10, önerilerden 7.): ordunun silahı ve zırhı, en çok `max` seviye. Kendi şehrinde, sanayisi
+  // gidilen seviye kadar olan yerde; bölük başına seviye x `weapons` silah ve x `money` para. Silah her seviye gücü +`arms`;
+  // zırh her seviye gücü +`armourPow`, oklardan kaybı -`armour`.
+  gear: { max: 3, weapons: 1, money: 0.5, arms: 0.06, armourPow: 0.03, armour: 0.1 },
   // Hızlandırma (bölüm 4): süren inşaatın kalan turları, turluk payının `rush` katı parayla; iş o tur sonunda biter.
   rush: 2,
   // Şehir uzmanlığı (bölüm 4c; kullanıcı 28.10): `level`. seviyedeki şehir `cost` paraya, `turns` turda bir yol seçer.

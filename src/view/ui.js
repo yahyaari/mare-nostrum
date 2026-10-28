@@ -30,7 +30,7 @@ import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turns
 import { N, SHIPS, UNITS, trait, uniqueOf } from "../rules/numbers.js";
 import {
   ACADEMY, BUILDINGS, PORT_UPGRADES, SPECS, SPEC_BUILDING, UPGRADES, extraOf, rushInfo, specBuild, specInfo, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
-  recruitInfo, relation, strength, upgradeInfo,
+  recruitInfo, relation, strength, upgradeInfo, GEAR, gearInfo, gearOf,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
 import { drift } from "../rules/loyalty.js";
@@ -447,6 +447,13 @@ function unitCard(ctx, boxes, T, c, owner, x, y, w, h, on, act, rest = false) {
   const ix = x + 3, iy = top + 3, iw = w - 6, ih = h - strip - 5;
   const boat = SHIPS.includes(c.type);
   troopArt(ctx, c.type, owner, ix, iy, iw, ih, k);
+  // Donanım (bölüm 6d): sol üstte silah seviyesi kadar altın çizgi, altında zırh seviyesi kadar gümüş çizgi.
+  if (c.gear && !boat) {
+    for (const [row, key, color] of [[0, "arms", GOLD_LIGHT], [1, "armour", "#c8d0d4"]]) {
+      ctx.fillStyle = color;
+      for (let i = 0; i < Math.round(c.gear[key] ?? 0); i++) ctx.fillRect(ix + 3 + i * 5 * k, iy + 3 + row * 4 * k, 3.5 * k, 2.2 * k);
+    }
+  }
   // Alt şerit: kaç kişi, ve gücü (yarım bölük yarım çubuk).
   const sy = top + h - strip;
   if (boat) text(ctx, T.shipNames[c.type], x + w / 2, sy + strip / 2 + 1, { bold: true, size: Math.max(9, 10 * k), color: CREAM, align: "center", base: "middle" });
@@ -513,7 +520,7 @@ function cardGrid(ctx, boxes, T, ui, u, owner, of, r, mine) {
   if (!cards.length) text(ctx, T.noTroops, r.x, r.y + 24, { italic: true, size: 13, color: INK.soft });
   cards.slice(page * per, page * per + per).forEach((c, j) => {
     const i = page * per + j;
-    unitCard(ctx, boxes, T, c, owner, r.x + (j % cols) * (cw + gap), r.y + 4 + Math.floor(j / cols) * (ch + gap), cw, ch, picks.has(i), mine ? { do: "pickCard", of, i } : null, !!r.rest);
+    unitCard(ctx, boxes, T, { ...c, gear: u.gear }, owner, r.x + (j % cols) * (cw + gap), r.y + 4 + Math.floor(j / cols) * (ch + gap), cw, ch, picks.has(i), mine ? { do: "pickCard", of, i } : null, !!r.rest);
   });
   return { pages, page, count: cards.length, picked: picks.size };
 }
@@ -1415,7 +1422,25 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   }
   // Tecrübe: rütbe şeritleri, adı ve savaştaki artısı; üstüne gelince ne zaman yükseleceği.
   const rk = veteranRank(a.xp), xp = a.xp ?? 0;
-  if (rk || mine) {
+  const gr = gearOf(a);
+  if (rk || mine || gr.arms || gr.armour) {
+    // Donanım (bölüm 6d): sağda kılıç ve kalkan, seviyeleri; kendi şehrinde basınca yükselir.
+    GEAR.forEach((k, i) => {
+      const gx = x + A - 104 + i * 54, gy = ly - 15, g = gearInfo(game, a.id, k), lvl = Math.round(gr[k] * 10) / 10;
+      const can = mine && !g.why, hot = can && over(gx, gy, 50, 20);
+      roundRect(ctx, gx, gy, 50, 20, 4);
+      ctx.fillStyle = hot ? "rgba(236,212,154,0.5)" : can ? "rgba(236,212,154,0.25)" : "rgba(90,70,40,0.08)";
+      ctx.fill();
+      ctx.strokeStyle = can ? GOLD_DARK : "rgba(90,70,40,0.25)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      if (k === "arms") icon(ctx, "weapons", gx + 4, gy + 3, 14, INK.ink);
+      else shield(ctx, a.owner, gx + 5, gy + 3, 11);
+      text(ctx, String(lvl) + (can ? " +" : ""), gx + 22, gy + 15, { bold: true, size: 12, color: lvl ? INK.ink : INK.soft });
+      const why = g.why === "max" ? [T.maxShort, null] : g.why === "notHome" ? [T.gearWhere, "warn"] : g.why === "needIndustry" ? [fill(T.gearIndustry, g.next), "bad"]
+        : g.why ? [whyText(g.why, T), "bad"] : [fill(T.gearBuy, g.next, g.cost.weapons, g.cost.money), "good"];
+      boxes.push({ x: gx, y: gy, w: 50, h: 20, act: can ? { do: "equip", army: a.id, kind: k } : null, tip: [`${T[k === "arms" ? "gearArms" : "gearArmour"]} · ${fill(T.levelOf, lvl)}`, T[k === "arms" ? "gearArmsTip" : "gearArmourTip"], mine ? why : null] });
+    });
     if (rk) chevrons(ctx, rk, x, ly - 13, 10);
     const rx = x + (rk ? 16 : 0);
     const rw = text(ctx, T.ranks[rk], rx, ly, { size: 13, bold: true, color: rk ? INK.warn : INK.soft });
@@ -1423,7 +1448,8 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
     if (rk) text(ctx, ` · +${fill(T.pct, bonus)}`, rx + rw, ly, { size: 13, color: INK.soft });
     const next = nextRankXp(xp);
     const line = next === null ? fill(T.rankTipTop, T.ranks[rk], bonus, xp) : fill(T.rankTip, T.ranks[rk], bonus, xp, next);
-    boxes.push({ x, y: ly - 14, w: A, h: 18, act: null, tip: [T.mods.veteran, line, T.rankHow] });
+    // Sağda donanım düğmeleri var: rütbenin ipucu onlara kadar.
+    boxes.push({ x, y: ly - 14, w: A - 110, h: 18, act: null, tip: [T.mods.veteran, line, T.rankHow] });
     ly += 20;
   }
   ly += (lines(ctx, troops(T, a), x, ly, A, { size: 13 }, 2, 16) - 1) * 16 + 20;

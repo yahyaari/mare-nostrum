@@ -314,12 +314,21 @@ export function sides(state, unit, civ, id) {
   // Takviye: saldıranın yakındaki orduları (denizden saldırıda değil), savunanın yerin dışındaki orduları.
   const sea = !!from && bySea(from, POS[id]);
   return {
-    att: withHelp({ civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, elite: unit.elite ?? 0, works: unit.besieging === id ? unit.works ?? 0 : 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
+    att: withHelp({ civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, elite: unit.elite ?? 0, works: unit.besieging === id ? unit.works ?? 0 : 0, gear: unit.gear ?? null, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
       sea ? [] : helpersOf(state, civ, POS[id], [unit], null, pl.owner), POS[id], state),
-    def: withHelp({ ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
+    def: withHelp({ ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), gear: insideGear(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
       helpersOf(state, pl.owner, POS[id], [unit], id, civ), POS[id], state),
     walls: wallsOf(state, id), ter, sea,
   };
+}
+
+/** İçeridekilerin donanımı (bölüm 6d): orduların donanımı kişi sayısıyla tartılı (garnizon donanımsız). */
+function insideGear(state, id) {
+  const pl = state.places[id];
+  const own = armiesAt(state, id).filter((a) => a.owner === pl.owner && a.gear);
+  const total = men(pl) + armiesAt(state, id).filter((a) => a.owner === pl.owner).reduce((n, a) => n + men(a), 0);
+  if (!own.length || !total) return null;
+  return { arms: own.reduce((n, a) => n + (a.gear.arms ?? 0) * men(a), 0) / total, armour: own.reduce((n, a) => n + (a.gear.armour ?? 0) * men(a), 0) / total };
 }
 
 /** İçeridekilerin tecrübe çarpanı: orduların rütbesi, kişi sayısıyla tartılı (garnizon acemi). */
@@ -398,8 +407,8 @@ function dropEmpty(state, list, minMen = 1) {
 
 /** Meydan muharebesinin iki tarafı: { att, def }. Dağda duran savunan dağ geçidi gibi güçlü. */
 export const fieldSides = (state, army, b) => ({
-  att: withHelp({ civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp), mods: modsOf(state, army.owner) }, helpersOf(state, army.owner, b, [army, b], null, b.owner ?? null), b, state),
-  def: withHelp({ civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp), mods: modsOf(state, b.owner),
+  att: withHelp({ civ: army.owner, ...pickUnits(army), gen: army.general ?? null, vet: veteranMul(army.xp), gear: army.gear ?? null, mods: modsOf(state, army.owner) }, helpersOf(state, army.owner, b, [army, b], null, b.owner ?? null), b, state),
+  def: withHelp({ civ: b.owner, ...pickUnits(b), gen: b.general ?? null, vet: veteranMul(b.xp), gear: b.gear ?? null, mods: modsOf(state, b.owner),
     terrain: isMountain(cellOf(b.x, b.y)) ? N.ground.pass : 1 }, helpersOf(state, b.owner, b, [army, b], null, army.owner), b, state),
 });
 

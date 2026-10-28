@@ -28,7 +28,7 @@ import { TEXT, fill } from "./text.js";
 import { clamp, focus, makeCamera, panBy, resize, toMap, toScreen, zoomAt } from "./view/camera.js";
 import * as anim from "./view/anim.js";
 import * as sound from "./view/sound.js";
-import { relation, startSpec } from "./rules/state.js";
+import { equip, relation, startSpec } from "./rules/state.js";
 import { eyes, seen as seenBy, sight } from "./rules/sight.js";
 import { plagueAt } from "./rules/crises.js";
 import { closeRoute, flowing, openRoute, routesFrom, routesOf, slotsOf, valueOf } from "./rules/trade.js";
@@ -1092,6 +1092,11 @@ function dispatch(act) {
         anim.rise(act.id, `${T()[act.what]} · ${b.total === 1 ? T().turnsOne : fill(T().turnsN, b.total)}`, INK.good);
         anim.pulse(act.id, INK.good);
       }
+      save();
+      break;
+    case "equip":
+      // Donanım (bölüm 6d): ordu kartında silah ya da zırh.
+      if (equip(game, act.army, act.kind)) { sound.build(); anim.rise(game.armies.find((x) => x.id === act.army)?.at ?? null, T()[act.kind === "arms" ? "gearArms" : "gearArmour"], INK.good); }
       save();
       break;
     case "workType":

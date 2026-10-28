@@ -733,6 +733,46 @@ export function muster(state, id, want) {
   return army;
 }
 
+// ---- donanım (bölüm 6d) ----
+
+/** Donanım türleri: silah ve zırh. */
+export const GEAR = ["arms", "armour"];
+
+/** Ordunun donanımı: { arms, armour } (birleşen ordularda kesirli olabilir). */
+export const gearOf = (a) => ({ arms: a?.gear?.arms ?? 0, armour: a?.gear?.armour ?? 0 });
+
+/**
+ * Ordunun silahı ya da zırhı bir seviye artabilir mi: { now, next, cost: { weapons, money }, why }. why: "kind" | "max" |
+ * "notHome" (kendi şehrinin içinde değil) | "needIndustry" (şehrin sanayisi gidilecek seviyeden az) | "weapons" | "money" |
+ * null. Fiyat bölük başına: seviye x N.gear.weapons silah, x N.gear.money para.
+ */
+export function gearInfo(state, armyId, kind) {
+  const a = armyById(state, armyId);
+  if (!a || !GEAR.includes(kind)) return { now: 0, next: 1, cost: { weapons: 0, money: 0 }, why: "kind" };
+  const now = gearOf(a)[kind], next = Math.floor(now + 1e-9) + 1, G = N.gear;
+  const companies = Math.max(1, Math.ceil(men(a) / N.company));
+  const cost = { weapons: Math.ceil(companies * next * G.weapons), money: Math.ceil(companies * next * G.money) };
+  const pl = a.at ? state.places[a.at] : null, civ = state.civs[a.owner];
+  let why = null;
+  if (next > G.max) why = "max";
+  else if (!pl || pl.owner !== a.owner) why = "notHome";
+  else if ((pl.industry ?? 0) < next) why = "needIndustry";
+  else if (civ.weapons < cost.weapons) why = "weapons";
+  else if (civ.money < cost.money) why = "money";
+  return { now, next, cost, why };
+}
+
+/** Silah ya da zırh bir seviye: silah ve para şimdi ödenir. */
+export function equip(state, armyId, kind) {
+  const g = gearInfo(state, armyId, kind);
+  if (g.why) return false;
+  const a = armyById(state, armyId), civ = state.civs[a.owner];
+  civ.weapons -= g.cost.weapons;
+  civ.money -= g.cost.money;
+  a.gear = { ...gearOf(a), [kind]: g.next };
+  return true;
+}
+
 /** Kısaca: asker türleri ve kadırga sayısı. */
 export const formArmy = (state, id, inf, arch, cav = 0, siege = 0, ships = 0) => muster(state, id, { inf, arch, cav, siege, ships });
 
@@ -755,6 +795,7 @@ export function merge(state, intoId, fromId) {
   // Tecrübe askerlere göre karışır: 100 seçkin ile 100 acemi orta bir ordu olur.
   const ma = men(a), mb = men(b);
   if (ma + mb > 0) a.xp = Math.round((((a.xp ?? 0) * ma + (b.xp ?? 0) * mb) / (ma + mb)) * 10) / 10;
+  if (ma + mb > 0 && (a.gear || b.gear)) a.gear = Object.fromEntries(GEAR.map((k) => [k, Math.round(((gearOf(a)[k] * ma + gearOf(b)[k] * mb) / (ma + mb)) * 100) / 100]));
   for (const k of KEYS) a[k] = (a[k] ?? 0) + (b[k] ?? 0);
   a.mp = Math.min(a.mp, b.mp);
   // İki general varsa daha tecrübelisi komutayı alır, öteki emekli olur (adı yine kullanılabilir).
@@ -777,7 +818,7 @@ export function detach(state, armyId, want) {
   const rest = Object.fromEntries(keys.map((k) => [k, (a[k] ?? 0) - part[k]]));
   if (empty(part) || empty(rest)) return null;
   for (const k of keys) a[k] = rest[k];
-  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, x: a.x, y: a.y, ...part, mp: a.mp, route: [], general: null, xp: a.xp ?? 0 };
+  const b = { id: state.nextArmy++, owner: a.owner, at: a.at, x: a.x, y: a.y, ...part, mp: a.mp, route: [], general: null, xp: a.xp ?? 0, ...(a.gear ? { gear: { ...a.gear } } : {}) };
   state.armies.push(b);
   return b;
 }

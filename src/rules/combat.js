@@ -26,6 +26,11 @@ export const enginesOf = (att) => Math.min(1, ((att.siege ?? 0) / N.company + wo
 /** Aletlerin söktüğü, makine bölüğü cinsinden: koçbaşı 1, kule ve mancınık yarım (sayı: hepsi koçbaşı). */
 const worksBreach = (w) => (typeof w === "number" ? w : Object.entries(w ?? {}).reduce((n, [k, v]) => n + v * (N.siege.works.kinds[k]?.breach ?? 0), 0));
 
+/** Donanımın gücü (bölüm 6d): silah her seviye +%6, zırh +%3. */
+export const gearPow = (s) => (1 + (s.gear?.arms ?? 0) * N.gear.arms) * (1 + (s.gear?.armour ?? 0) * N.gear.armourPow);
+/** Zırhın oklardan koruması: her seviye kayıp -%10. */
+export const armourTaken = (s) => Math.max(0, 1 - (s.gear?.armour ?? 0) * N.gear.armour);
+
 /** Kuşatma kulelerinin saldırıya katkısı (otomatik savaşta; sahada kuleler sura köprü kurar). */
 export const towersMul = (att) => 1 + (typeof att.works === "object" ? att.works?.tower ?? 0 : 0) * N.siege.works.kinds.tower.power;
 
@@ -59,15 +64,16 @@ export function fight(att, def, walls, luck = [1, 1]) {
   const chargeD = Math.max(0, Math.round(rush(d, ud, def) * N.charge * (wx.charge ?? 1) - stop(a, ua)));
   d.arch = Math.max(0, d.arch - chargeA);
   a.arch = Math.max(0, a.arch - chargeD);
-  lose(d, byAtt);
-  lose(a, byDef);
+  // Zırh oklardan korur (bölüm 6d).
+  lose(d, Math.round(byAtt * armourTaken(def)));
+  lose(a, Math.round(byDef * armourTaken(att)));
 
   // 2. Göğüs göğüse
   // Surculuk (araştırma) savunanın surunu güçlendirir; makineler ve kuşatma ustası onu da söker.
   const wall = breach(walls ? (walls === "castle" ? N.castleWall : N.cityWall) * tech(def, "walls") : 1);
   // Arazi (ground.js): nehir geçen saldıran, dağ geçidini tutan savunan (çarpan dışarıdan gelir).
-  const attPow = power(a, att, false, !!walls) * siege * might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * (walls ? towersMul(att) : 1) * luck[0];
-  const defPow = power(d, def, true, false) * wall * might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * luck[1];
+  const attPow = power(a, att, false, !!walls) * siege * might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * (walls ? towersMul(att) : 1) * gearPow(att) * luck[0];
+  const defPow = power(d, def, true, false) * wall * might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * gearPow(def) * luck[1];
 
   // 3. Sonuç. Savunan kimse kalmadıysa saldıran kayıpsız girer; eşitlikte savunan kazanır.
   // Kuşatma makinesinin mürettebatı tek başına bir yeri alamaz ve savunamaz.
@@ -180,8 +186,8 @@ export function sideMuls(att, def, walls) {
   const wall = breach(walls ? (walls === "castle" ? N.castleWall : N.cityWall) * tech(def, "walls") : 1);
   const steppe = walls ? trait(att.civ, "siege") : 1;
   return {
-    att: { power: might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * steppe, volley: (has(att.gen, "archer") ? 1.5 : 1) * steppe },
-    def: { power: might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * wall, volley: (has(def.gen, "archer") ? 1.5 : 1) * breach(walls === "castle" ? N.castleVolley : 1) },
+    att: { power: might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * gearPow(att) * steppe, volley: (has(att.gen, "archer") ? 1.5 : 1) * steppe, armour: armourTaken(att) },
+    def: { power: might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * gearPow(def) * wall, armour: armourTaken(def), volley: (has(def.gen, "archer") ? 1.5 : 1) * breach(walls === "castle" ? N.castleVolley : 1) },
   };
 }
 
@@ -250,6 +256,8 @@ export function explain(att, def, walls) {
   }
   put(A, "general", might(att.gen));
   put(A, "veteran", att.vet ?? 1);
+  put(A, "gear", gearPow(att));
+  put(D, "gear", gearPow(def));
   put(A, "river", att.terrain ?? 1);
   units(att, A, false);
   if (walls) {

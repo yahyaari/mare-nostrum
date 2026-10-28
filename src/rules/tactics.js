@@ -977,7 +977,7 @@ export function step(b, dt) {
   for (const s of b.shots.filter((x) => x.t1 <= b.t)) {
     const v = unitById(b, s.to);
     // Kaplumbağa ve çember okları az yer; ateşli ok morali çok kırar.
-    if (v && alive(v)) { hurt(b, v, s.kills * modsNow(b, v).arrows); v.morale -= T.morale.arrow * (s.fire || 1); }
+    if (v && alive(v)) { hurt(b, v, s.kills * modsNow(b, v).arrows * (b.sides[v.side].muls.armour ?? 1)); v.morale -= T.morale.arrow * (s.fire || 1); }
   }
   b.shots = b.shots.filter((x) => x.t1 > b.t);
   // 5. Moral: kayıp oranı (derin birlik daha dayanıklı, ince hat daha kırılgan), kuşatılma; dövüşmeyen

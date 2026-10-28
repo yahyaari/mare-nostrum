@@ -46,7 +46,12 @@ export function replenish(state, events) {
   for (const [id, pl] of Object.entries(state.places)) if (restPlace(state, pl, id)) fill(pl, id);
   for (const a of state.armies) {
     const at = restPlace(state, a);
-    if (at) fill(a, at);
+    if (!at) continue;
+    const before = UNITS.reduce((n, k) => n + (a[k] ?? 0), 0);
+    fill(a, at);
+    // Donanımsız acemiler katıldı: donanım askerlere göre incelir (bölüm 6d).
+    const after = UNITS.reduce((n, k) => n + (a[k] ?? 0), 0);
+    if (a.gear && after > before) for (const k of Object.keys(a.gear)) a.gear[k] = Math.round(((a.gear[k] * before) / after) * 100) / 100;
   }
   for (const [civ, men] of Object.entries(gained)) if (isHuman(state, civ)) events.push({ type: "refill", turn: state.turn, civ, men });
 }

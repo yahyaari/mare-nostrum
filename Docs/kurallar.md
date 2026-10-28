@@ -286,6 +286,23 @@ Kullanıcının istediği "olmazsa olmazlar"ın ikincisi (26.10; Total War'daki 
 
 ---
 
+### 6d. Donanım
+
+Kullanıcı 28.10 (önerilerden 7.: "demirhanede ordulara zırh ve silah yükseltmesi, kartlarda görünür; silahın yeni bir
+harcama yeri olur, inşa ile savaş birbirine bağlanır"). state.js `GEAR`, `gearOf`, `gearInfo`, `equip`; `N.gear`.
+
+- Her ordunun **silahı** ve **zırhı** var, 0-3. seviye. Ordu kendi şehrinin içindeyken ordu kartında (rütbenin sağında kılıç
+  ve kalkan) basınca bir seviye: şehrin **sanayisi** gidilen seviye kadar olmalı (demirhane şehrinde sanayi şehir
+  seviyesini geçebildiği için 3. seviye kolay). Fiyat bölük başına: seviye x 1 silah, x 0.5 para (100 asker 3. seviye
+  silah: 30 silah, 15 para).
+- Silah her seviye gücü +%6; zırh her seviye gücü +%3 ve oklardan kaybı -%10 (otomatik savaşta ve sahada; dökümde
+  "Silah ve zırh" satırı). Savunanın içerideki ordularının donanımı kişi sayısıyla tartılır (garnizon donanımsız).
+- Ordular birleşince donanım askerlere göre karışır (tecrübe gibi); ayrılan bölük donanımıyla gider; garnizona katılan
+  asker donanımını bırakır; dinlenip dolan orduya gelen acemiler donanımı inceltir. Birlik kartlarının sol üst köşesinde
+  silah seviyesi kadar altın, zırh seviyesi kadar gümüş çizgi.
+- Bilgisayar şehrindeki 40+ askerlik ordusunu, silah yedeği (20) ve para yedeği (30) kalacaksa donatır: önce silah,
+  sonra zırh. `node Tools/gearfilm.mjs`.
+
 ## 7. Savaş (otomatik)
 
 Bir ordu menzilindeki (0.8 birim) bir düşman ya da bağımsız yerleşime saldırınca savaş çıkar.
