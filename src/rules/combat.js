@@ -18,7 +18,13 @@ import { has, might } from "./generals.js";
 import { N, SHIPS, UNITS, trait, uniqueOf } from "./numbers.js";
 
 /**
- * `att`, `def`: { civ, inf, arch, cav, siege, gen?, vet?, terrain?, mods? } (bağımsızın civ'i null; gen:
+ * Surun bonusunun sökülen payı: saldıranın kuşatma makineleri (her bölük `N.siegeBreach`) ve kuşatmada yerinde yaptığı
+ * aletler (`works`, her biri bir bölük kadar; siege.js). En çok hepsi.
+ */
+export const enginesOf = (att) => Math.min(1, ((att.siege ?? 0) / N.company + (att.works ?? 0)) * N.siegeBreach);
+
+/**
+ * `att`, `def`: { civ, inf, arch, cav, siege, works?, gen?, vet?, terrain?, mods? } (bağımsızın civ'i null; gen:
  * o tarafın generali; vet: tecrübe çarpanı; mods: araştırmanın savaş çarpanları, research.js
  * modsOf; olmayan tür 0 sayılır). `walls`: null | "city" | "castle".
  * `luck`: [saldıran, savunan] çarpanları.
@@ -26,9 +32,9 @@ import { N, SHIPS, UNITS, trait, uniqueOf } from "./numbers.js";
 export function fight(att, def, walls, luck = [1, 1]) {
   const siege = walls ? trait(att.civ, "siege") : 1;
   const a = pick(att), d = pick(def);
-  // Surun bonusunu söken iki şey: kuşatma ustası general (yarıya) ve kuşatma makineleri (her
-  // bölük dörtte bir). Sadece SALDIRANIN makineleri; savunmadakiler burada dövüşmüyor.
-  const engines = Math.min(1, (a.siege / N.company) * N.siegeBreach);
+  // Surun bonusunu söken iki şey: kuşatma ustası general (yarıya) ve kuşatma makineleri ile yerinde yapılan aletler
+  // (her biri beşte bir). Sadece SALDIRANIN makineleri; savunmadakiler burada dövüşmüyor.
+  const engines = enginesOf(att);
   const breach = (m) => 1 + (m - 1) * (has(att.gen, "siege") ? 0.5 : 1) * (1 - engines);
   const volleyOf = (gen) => (has(gen, "archer") ? 1.5 : 1);
 
@@ -163,7 +169,7 @@ function power(u, s, defending, assault) {
  * okçu generalinin oku.
  */
 export function sideMuls(att, def, walls) {
-  const engines = Math.min(1, ((att.siege ?? 0) / N.company) * N.siegeBreach);
+  const engines = enginesOf(att);
   const breach = (m) => 1 + (m - 1) * (has(att.gen, "siege") ? 0.5 : 1) * (1 - engines);
   const wall = breach(walls ? (walls === "castle" ? N.castleWall : N.cityWall) * tech(def, "walls") : 1);
   const steppe = walls ? trait(att.civ, "siege") : 1;
@@ -243,8 +249,10 @@ export function explain(att, def, walls) {
   if (walls) {
     put(A, "steppeWalls", trait(att.civ, "siege"));
     if ((att.cav ?? 0) > 0) put(A, "cavWalls", N.cavWall);
-    const engines = Math.min(1, ((att.siege ?? 0) / N.company) * N.siegeBreach);
-    if (engines > 0) A.push(["engines", engines]);
+    // Makineler ve yerinde yapılan aletler ayrı satır.
+    const machines = Math.min(1, ((att.siege ?? 0) / N.company) * N.siegeBreach), engines = enginesOf(att);
+    if (machines > 0) A.push(["engines", machines]);
+    if (engines > machines) A.push(["works", engines - machines]);
     if (has(att.gen, "siege")) A.push(["siegeGeneral", 0.5]);
     const breach = (m) => 1 + (m - 1) * (has(att.gen, "siege") ? 0.5 : 1) * (1 - engines);
     const fort = tech(def, "walls") > 1 ? "Tech" : "";

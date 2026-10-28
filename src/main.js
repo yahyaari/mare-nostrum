@@ -28,7 +28,7 @@ import { TEXT, fill } from "./text.js";
 import { clamp, focus, makeCamera, panBy, resize, toMap, toScreen, zoomAt } from "./view/camera.js";
 import * as anim from "./view/anim.js";
 import * as sound from "./view/sound.js";
-import { relation } from "./rules/state.js";
+import { relation, startSpec } from "./rules/state.js";
 import { eyes, seen as seenBy, sight } from "./rules/sight.js";
 import { plagueAt } from "./rules/crises.js";
 import { closeRoute, flowing, openRoute, routesFrom, routesOf, slotsOf, valueOf } from "./rules/trade.js";
@@ -291,6 +291,7 @@ function beginBattle(B) {
 function unitLabel(u, owner) {
   if (u.type === "gen") return `★ ${u.name ?? T().tacGeneral}`;
   if (u.ship) return T().shipNames[u.type];
+  if (u.work) return T().ram;
   const s = u.type === "elite" ? T().eliteOf[owner]?.[0] ?? T().elite : T()[u.type];
   return s[0].toLocaleUpperCase() + s.slice(1);
 }
@@ -570,6 +571,7 @@ function mapView() {
     float: a.at ? null : { x: a.x, y: a.y },
     sea: !a.at && !isLand(cellOf(a.x, a.y)),
     camp: !!a.besieging || !!a.bandit || !!a.camp,
+    works: a.besieging ? a.works ?? 0 : 0,
     barb: !!a.camp,
     horde: !!a.horde,
   }));
@@ -1005,6 +1007,8 @@ function dispatch(act) {
         caption: captionOf,
       });
       // Biten inşaatlar: kamera döndükten sonra şehrin üstünden yükselir.
+      // Şehrin yolu seçildi: adı şehrin üstünden yükselir.
+      game.events.filter((e) => e.type === "specDone" && e.civ === me).forEach((e) => anim.rise(e.place, T().specs[e.spec][0], INK.good, showEnd - anim.clock()));
       game.events.filter((e) => e.type === "built" && e.civ === me).forEach((e, i) => {
         // Ne kazandırdığı da: "Tarla 2 · +4 buğday" (kullanıcı 26.10: yükseltme bir şey yapıyormuşum gibi hissettirmedi).
         anim.rise(e.place, `${T()[e.what] ?? ""} ${e.level} · ${gainText(game, e.place, e.what, ui.lang)}`, INK.good, showEnd - anim.clock() + i * 250);
@@ -1076,6 +1080,16 @@ function dispatch(act) {
         const b = game.places[act.id].builds.at(-1);
         anim.rise(act.id, `${T()[act.what]} · ${b.total === 1 ? T().turnsOne : fill(T().turnsN, b.total)}`, INK.good);
         anim.pulse(act.id, INK.good);
+      }
+      save();
+      break;
+    case "spec":
+      // Şehrin yolu (bölüm 4c): seçim penceresinden.
+      if (startSpec(game, act.id, act.spec)) {
+        sound.build();
+        anim.rise(act.id, `${T().specs[act.spec][0]} · ${fill(T().turnsN, N.spec.turns)}`, INK.good);
+        anim.pulse(act.id, INK.good);
+        ui.modal = null;
       }
       save();
       break;

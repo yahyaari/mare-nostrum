@@ -60,6 +60,7 @@ node Tools/peek.mjs http://localhost:8060/ Logs/peek 1280 720          ekran fot
 node Tools/peek.mjs http://localhost:8060/ Logs/peek-phone 390 844     telefon, dikey
 node Tools/battlefilm.mjs                           taktik savaşın girişi ve bitişi, kare kare (Logs/battlefilm)
 node Tools/noticefilm.mjs tr                        görselli bildirimlerin hepsi, tek tek fotoğraf (Logs/notices; Docs/gorseller.md)
+node Tools/buildfilm.mjs tr                         şehrin yolu kartı ve penceresi, kuşatmanın koçbaşıları (harita, kart, saha) (Logs/buildfilm)
 node Tools/soundcheck.mjs                           seslerin gerçekten ses ürettiğini ölç (çevrimdışı)
 node Tools/playtest.mjs http://localhost:8060/ saka 60 easy             tarayıcıda, düğmelere basarak 60 tur oyna
 node Tools/tutorial.mjs tr rome                     öğreticiyi tarayıcıda gerçek basışlarla baştan sona oyna
@@ -67,6 +68,7 @@ node Tools/experiment.mjs '{"victory.wonders":99}' 70   denge deneyi (sayıları
 node Tools/tactics-cal.mjs                          taktik savaş otomatik savaşla tutarlı mı (açık / surlu)
 node Tools/tactics-stuck.mjs                        taktik savaşta takılan birlik var mı (engelli sahalar)
 node Tools/naval-cal.mjs                            deniz savaşı sahada otomatik deniz savaşıyla tutarlı mı
+node Tools/late.mjs '{}' 8                          geç oyun: 160-200. turlarda savaş, sahadaki asker, garnizon, kuşatma (bölüm 11)
 node Tools/geo.mjs                                  kıyıları Natural Earth'ten yeniden üret
 node Tools/route.mjs                                denize giren yol için ara nokta öner
 ```

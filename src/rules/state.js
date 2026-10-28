@@ -304,10 +304,12 @@ export function output(state, id) {
   const W = N.wonders;
   const trade = p.port ? pl.trade * N.port.tradePerLevel * castle * (holds(state, c, "colossus") ? W.colossusTrade : 1) * (holds(state, c, "harbour") ? W.harbourTrade : 1) * techMul(state, c, "trade") : 0;
   const pilgrims = (holds(state, c, "artemis") ? W.artemisMoney : 1) * (holds(state, c, "treasury") ? W.treasuryMoney : 1);
+  // Şehrin yolu (bölüm 4c).
+  const sp = (k, v) => (pl.spec === k ? 1 + v : 1);
   return {
-    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * techMul(state, c, "money") * (1 + (pl.market ?? 0) * N.buildings.market) * ai * pilgrims * (shut ? N.navy.blockadeMoney : 1),
-    weapons: pl.industry * castle * trait(c, "weapons") * techMul(state, c, "weapons") * ai,
-    food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") * techMul(state, c, "wheat") + fish) * ai,
+    money: (pl.pop / N.taxPer + trade) * trait(c, "money") * techMul(state, c, "money") * (1 + (pl.market ?? 0) * N.buildings.market) * ai * pilgrims * (shut ? N.navy.blockadeMoney : 1) * sp("trade", N.spec.trade.money),
+    weapons: pl.industry * castle * trait(c, "weapons") * techMul(state, c, "weapons") * ai * sp("forge", N.spec.forge.weapons),
+    food: (pl.farms * N.wheatPerFarm * castle * trait(c, "wheat") * techMul(state, c, "wheat") + fish) * ai * sp("farm", N.spec.farm.food),
   };
 }
 
@@ -326,7 +328,7 @@ export function grainCap(state, civ) {
   let n = G.base;
   for (const id of placesOf(state, civ)) {
     const pl = state.places[id];
-    n += (pl.market ?? 0) * G.market + (byId[id].port && (pl.trade ?? 0) > 0 ? G.port : 0);
+    n += (pl.market ?? 0) * G.market + (byId[id].port && (pl.trade ?? 0) > 0 ? G.port : 0) + (pl.spec === "trade" ? N.spec.trade.grain : 0);
   }
   return n;
 }
@@ -396,6 +398,59 @@ export const BUILDINGS = ["temple", "market", "school", "baths"];
 /** Komutanlar sekmesindeki bina (bölüm 14b): akademi komutan yetiştirir. */
 export const ACADEMY = "academy";
 
+/**
+ * Şehir uzmanlığı (bölüm 4c; kullanıcı 28.10): 3. seviyedeki bir şehir tek bir yol seçer - ticaret, tarım, demirhane ya
+ * da kışla şehri. Seçmek bir inşaat (bir inşaatçı, `N.spec.turns` tur); değiştirmek de öyle. Her yol bu şehrin bir
+ * üretimini artırır ve bir yapısının (SPEC_BUILDING) şehir seviyesini bir geçmesine izin verir.
+ */
+export const SPECS = ["trade", "farm", "forge", "camp"];
+export const SPEC_BUILDING = { trade: "market", farm: "farms", forge: "industry", camp: "barracks" };
+/** Bu yapı, şehrin yolu sayesinde şehir seviyesini kaç geçebilir. */
+export const extraOf = (pl, what) => (pl.spec && SPEC_BUILDING[pl.spec] === what ? N.spec.extra : 0);
+/** Bu şehirde süren uzmanlık inşaatı. */
+export const specBuild = (pl) => pl.builds?.find((b) => b.what.startsWith("spec:")) ?? null;
+
+/**
+ * Bu şehir `k` yolunu seçebilir mi: { cost, turns, building, why }. why: "castle" | "specLevel" | "same" (zaten bu yolda) |
+ * "specBuilding" (bir yol yapılıyor) | "done" | "busy" | "money" | null.
+ */
+export function specInfo(state, id, k) {
+  const pl = state.places[id];
+  const cost = Math.round(N.spec.cost * techMul(state, pl.owner, "build"));
+  const building = specBuild(pl);
+  let why = null;
+  if (byId[id].kind === "castle") why = "castle";
+  else if (pl.level < N.spec.level) why = "specLevel";
+  else if (pl.spec === k) why = "same";
+  else if (building) why = "specBuilding";
+  else if (pl.upgraded) why = "done";
+  else if (freeBuilders(state, id) <= 0) why = "busy";
+  else if (state.civs[pl.owner].money < cost) why = "money";
+  return { cost, turns: N.spec.turns, building, why };
+}
+
+/** Yolu seçmeye başla: para şimdi, bir inşaatçı `turns` tur çalışır. */
+export function startSpec(state, id, k) {
+  const si = specInfo(state, id, k);
+  if (!SPECS.includes(k) || si.why) return false;
+  const pl = state.places[id];
+  state.civs[pl.owner].money -= si.cost;
+  pl.builds.push({ what: "spec:" + k, left: si.turns, total: si.turns, paid: si.cost });
+  return true;
+}
+
+/** Yol bitti: eski yolun fazladan seviyesi şehir seviyesine iner (sürüyorsa parası döner). */
+function setSpec(state, id, k, events) {
+  const pl = state.places[id], old = pl.spec && SPEC_BUILDING[pl.spec];
+  if (old && old !== SPEC_BUILDING[k]) {
+    if (pl[old] > pl.level) pl[old] = pl.level;
+    const b = pl.builds.find((x) => x.what === old);
+    if (b && pl[old] >= pl.level) { state.civs[pl.owner].money += b.paid; pl.builds = pl.builds.filter((x) => x !== b); }
+  }
+  pl.spec = k;
+  events.push({ type: "specDone", turn: state.turn, civ: pl.owner, place: id, spec: k });
+}
+
 /** Bir yükseltmenin fiyatı ve yapılıp yapılamayacağı. `why`: neden olmuyor. */
 /** İnşaatçı sayısı: şehirde 2, kalede 1. */
 export const buildersOf = (id) => (byId[id].kind === "castle" ? N.builders.castle : N.builders.city);
@@ -414,7 +469,7 @@ export const buildTurns = (what, next) => Math.max(1, next + (N.buildExtra[what]
 export function upgradeInfo(state, id, what) {
   const pl = state.places[id], p = byId[id];
   const now = pl[what];
-  const max = what === "level" ? (p.kind === "castle" ? N.maxCastle : N.maxCity) : pl.level;
+  const max = what === "level" ? (p.kind === "castle" ? N.maxCastle : N.maxCity) : pl.level + extraOf(pl, what);
   const cost = Math.round((now + 1) * N.upgradeCost * (what === "level" ? N.levelCostMul : 1) * techMul(state, pl.owner, "build"));
   const building = pl.builds?.find((b) => b.what === what) ?? null;
   let why = null;
@@ -484,6 +539,10 @@ export function progressBuilds(state, events) {
     for (const b of pl.builds.filter((x) => x.left <= 0)) {
       if (b.what.startsWith("wonder:")) {
         finishWonder(state, id, b.what.slice(7), b, events);
+        continue;
+      }
+      if (b.what.startsWith("spec:")) {
+        setSpec(state, id, b.what.slice(5), events);
         continue;
       }
       pl[b.what] += 1;
@@ -625,13 +684,16 @@ export function recruitInfo(state, id, type) {
   else if (type === "cav" && pl.barracks < 3) why = "needBarracks3";
   else if (type === "siege" && pl.industry < 3) why = "needIndustry3";
   else if (type === "elite" && pl.barracks < N.eliteBarracks) why = "needBarracks";
-  else if (pl.recruited >= pl.barracks) why = "done";
+  else if (pl.recruited >= slotsOf(pl)) why = "done";
   else if (pl.pop < N.company + 10) why = "pop"; // şehri boşaltma: en az 10 kişi kalsın
   else if (civ.money < cost.money) why = "money";
   else if (civ.weapons < cost.weapons) why = "weapons";
   else if (civ.food < cost.food) why = "food";
-  return { cost, why, left: Math.max(0, pl.barracks - pl.recruited) };
+  return { cost, why, left: Math.max(0, slotsOf(pl) - pl.recruited) };
 }
+
+/** Turda kaç bölük basılır: kışla seviyesi, kışla şehrinde bir fazla (bölüm 4c). */
+const slotsOf = (pl) => pl.barracks + (pl.spec === "camp" ? N.spec.camp.recruit : 0);
 
 export function recruit(state, id, type) {
   const r = recruitInfo(state, id, type);
@@ -665,6 +727,8 @@ export function muster(state, id, want) {
   for (const k of KEYS) pl[k] -= w[k];
   const m = POS[id];
   const army = { id: state.nextArmy++, owner: pl.owner, at: id, x: m.x, y: m.y, ...w, mp: N.march.mp * trait(pl.owner, "moves"), route: [], general: null };
+  // Kışla şehrinden çıkan ordu Kıdemli (bölüm 4c).
+  if (pl.spec === "camp") army.xp = N.veteran.xp[0];
   state.armies.push(army);
   return army;
 }

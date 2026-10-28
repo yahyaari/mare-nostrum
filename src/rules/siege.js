@@ -3,7 +3,9 @@
 // üretmez, sadakati düşer; garnizon tükenince yer teslim olur. Kuşatma makineleri erimeyi
 // hızlandırır. Ordu yürürse, saldırırsa ya da yer artık düşman değilse kuşatma kalkar.
 //
-// Kuşatılan yer ordunun `besieging` alanında (`siege` alanı kuşatma makinelerinin sayısı).
+// Kuşatılan yer ordunun `besieging` alanında (`siege` alanı kuşatma makinelerinin sayısı). Kuşatan ordu her tur
+// yerinde bir alet yapar (`works`: koçbaşı, merdiven; en çok N.siege.works.max): saldırınca surun bir kısmını söker
+// (combat.js enginesOf), taktik savaşta koçbaşı olarak sahaya çıkar. Ya aç bırakıp beklemek ya aletleri yapıp saldırmak.
 
 import { access, bySea, canAttack, capture, defenders, hostile, wallsOf } from "./moves.js";
 import { POS, dist } from "./map.js";
@@ -41,14 +43,18 @@ export function besiege(state, armyId, id, events = null) {
   return true;
 }
 
-/** Kuşatmayı kaldır. */
+/** Kuşatmayı kaldır: aletler kampta kalır (yakılır). */
 export function lift(state, armyId) {
   const a = armyById(state, armyId);
   if (!a?.besieging) return false;
   delete a.besieging;
   delete a.besiegedSince;
+  delete a.works;
   return true;
 }
+
+/** Kuşatan ordu bu tur alet yapabilir mi: en az `crew` dövüşen askeri var ve tavana varmadı. */
+export const canBuildWorks = (a) => men(a) - (a.siege ?? 0) >= N.siege.works.crew && (a.works ?? 0) < N.siege.works.max;
 
 /** Bir yeri kuşatan ordular. */
 export const besiegers = (state, id) => state.armies.filter((a) => a.besieging === id);
@@ -73,6 +79,8 @@ export function tickSieges(state, events = []) {
     state.armies = state.armies.filter((b) => !(b.at === id && b.owner === pl.owner && empty(b)));
     // Kampta da salgın ve kaçak: kuşatan ordu turda %3 erir (aşağı yuvarlanır; küçük ordu erimez ama zaten bir şey yapamaz).
     for (const k of UNITS) a[k] -= Math.floor(a[k] * N.siege.camp);
+    // Aletler: her tur bir koçbaşı ya da merdiven.
+    if (canBuildWorks(a)) a.works = (a.works ?? 0) + 1;
     if (pl.owner) pl.loyalty = Math.max(0, pl.loyalty - N.siege.loyalty);
     if (men(defenders(state, id)) > 0) continue;
     // Teslim: kuşatan ordu içeri girer.

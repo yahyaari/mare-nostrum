@@ -1900,6 +1900,52 @@ section("Şehir binaları (bölüm 4b)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Şehrin yolu (bölüm 4c)");
+
+{
+  // Kullanıcı 28.10: "şehir uzmanlığı" - bir şehir ticaret, tarım, demirhane ya da kışla şehri olur.
+  const { TEXT } = await import("../src/text.js");
+  const fresh = () => { const g = S.newGame("rome", 7); g.civs.rome.money = 500; Object.assign(g.places.rome, { level: 3, farms: 3, industry: 3, barracks: 2 }); return g; };
+  let g = fresh();
+  for (const lang of ["en", "tr"]) check(`${lang}: dört yolun adı, açıklaması, kısası`, S.SPECS.every((k) => TEXT[lang].specs[k]?.[0] && TEXT[lang].specs[k]?.[1] && TEXT[lang].specShort[k]));
+  check("2. seviye şehir yol seçemez, kale hiç", (() => { const t = S.newGame("rome", 7); return S.specInfo(t, "tarentum", "farm").why === "specLevel"; })()
+    && S.specInfo(g, Object.keys(g.places).find((id) => byId[id].kind === "castle"), "farm").why === "castle");
+  const m0 = g.civs.rome.money, food0 = S.output(g, "rome").food;
+  check("yol seçmek bir inşaat: para başta, bir inşaatçı", S.startSpec(g, "rome", "farm") && g.civs.rome.money === m0 - N.spec.cost && S.freeBuilders(g, "rome") === S.buildersOf("rome") - 1);
+  check("yol yapılırken ikinci yol başlamaz", S.specInfo(g, "rome", "trade").why === "specBuilding");
+  const ev = [];
+  for (let i = 0; i < N.spec.turns; i++) S.progressBuilds(g, ev);
+  check("yol birkaç turda biter, haber", g.places.rome.spec === "farm" && ev.some((e) => e.type === "specDone" && e.spec === "farm") && S.freeBuilders(g, "rome") === S.buildersOf("rome"));
+  check("tarım şehri: buğday +%50", Math.abs(S.output(g, "rome").food - food0 * (1 + N.spec.farm.food)) < 1e-9);
+  check("yolun yapısı şehir seviyesini bir geçer, ötekiler geçmez", S.upgradeInfo(g, "rome", "farms").max === 4 && S.upgradeInfo(g, "rome", "industry").why === "needLevel");
+  check("seçili yol yeniden seçilmez", S.specInfo(g, "rome", "farm").why === "same");
+  // Yol değişince eski yolun fazladan seviyesi gider.
+  g.places.rome.farms = 4;
+  g.places.rome.upgraded = false;
+  S.startSpec(g, "rome", "trade");
+  for (let i = 0; i < N.spec.turns; i++) S.progressBuilds(g, []);
+  check("yol değişir; tarla şehir seviyesine iner", g.places.rome.spec === "trade" && g.places.rome.farms === 3);
+  g = fresh();
+  const money0 = S.output(g, "rome").money, cap0 = S.grainCap(g, "rome"), arms0 = S.output(g, "rome").weapons;
+  g.places.rome.spec = "trade";
+  check("ticaret şehri: para +%25, tahıl tavanı +4", Math.abs(S.output(g, "rome").money - money0 * (1 + N.spec.trade.money)) < 1e-9 && S.grainCap(g, "rome") === cap0 + N.spec.trade.grain);
+  g.places.rome.spec = "forge";
+  check("demirhane şehri: silah +%50", Math.abs(S.output(g, "rome").weapons - arms0 * (1 + N.spec.forge.weapons)) < 1e-9);
+  g.places.rome.spec = "camp";
+  check("kışla şehri: turda bir bölük fazla", S.recruitInfo(g, "rome", "inf").left === g.places.rome.barracks + N.spec.camp.recruit);
+  const vet = S.formArmy(g, "rome", 10, 0), plain = S.formArmy(g, "tarentum", 10, 0);
+  check("kışla şehrinden çıkan ordu Kıdemli, öteki acemi", C.veteranRank(vet.xp) === 1 && C.veteranRank(plain.xp) === 0);
+  // Bilgisayar 3. seviye şehrine yol seçer: yiyeceği darsa tarım.
+  const h = S.newGame("gaul", 7);
+  h.civs.rome.money = 900;
+  h.civs.rome.food = 0;
+  Object.assign(h.places.rome, { level: 3, farms: 3 });
+  const { aiTurn } = await import("../src/rules/ai.js");
+  aiTurn(h, "rome", []);
+  check("bilgisayar 3. seviye şehrine bir yol seçer", h.places.rome.builds.some((b) => b.what.startsWith("spec:")), JSON.stringify(h.places.rome.builds.map((b) => b.what)));
+}
+
+// ---------------------------------------------------------------------------------------------
 section("Aynı bilgisayarda birkaç oyuncu (bölüm 25)");
 
 {
@@ -3204,6 +3250,44 @@ const SG = await import("../src/rules/siege.js");
   a.siege = 40;
   check("makineyle teslim süresi kısalır", SG.turnsToFall(s, a, "mediolanum") < slow && slow > 3);
 
+  // Yerinde aletler (kullanıcı 28.10): kuşatan ordu her tur bir koçbaşı yapar, en çok N.siege.works.max.
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  SG.besiege(s, a.id, "mediolanum");
+  const built = [];
+  for (let i = 0; i < N.siege.works.max + 1; i++) { SG.tickSieges(s, []); built.push(a.works ?? 0); }
+  check("kuşatan ordu her tur bir alet yapar, tavanda durur", built.join() === [1, 2, 3, 3].join() && N.siege.works.max === 3, built.join());
+  const sw = M.sides(s, a, "rome", "mediolanum");
+  check("aletler yalnız kuşatılan yere saldırıda sayılır", sw.att.works === 3 && M.sides(s, a, "rome", "ariminum").att.works === 0);
+  const C3 = await import("../src/rules/combat.js");
+  const exw = C3.explain(sw.att, sw.def, sw.walls).att.find(([k]) => k === "works");
+  check("savaşın dökümünde ayrı satır: surun %60'ı koçbaşılarla söküldü", !!exw && Math.abs(exw[1] - 0.6) < 1e-9);
+  const plain = C3.fight({ ...sw.att, works: 0 }, sw.def, sw.walls, [1, 1]), rams = C3.fight(sw.att, sw.def, sw.walls, [1, 1]);
+  check("aletlerle surun bonusu azalır (savunanın gücü düşer)", rams.defPow < plain.defPow && C3.enginesOf({ siege: 20, works: 3 }) === 1);
+  // Taktik savaşta koçbaşı birlikleri: sahada var, sonuçta asker sayılmaz.
+  const TB = await import("../src/rules/tactics.js");
+  const tb = TB.setupBattle(sw.att, sw.def, sw.walls, 5);
+  const ramsOn = tb.units.filter((u) => u.work);
+  tb.over = { winner: "att" };
+  check("taktik savaşta her alet bir koçbaşı; sonuçta asker sayılmaz", ramsOn.length === 3 && ramsOn.every((u) => u.type === "siege" && u.side === "att") && TB.outcome(tb).att.siege === 0);
+  a.mp = 1;
+  M.attack(s, a.id, "mediolanum", [1, 1]);
+  check("saldırıda aletler kullanılır, biter", !(S.armyById(s, a.id)?.works));
+  // Kuşatmayı bırakan aletleri yakar; küçük ordu alet yapamaz.
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  SG.besiege(s, a.id, "mediolanum");
+  SG.tickSieges(s, []);
+  SG.lift(s, a.id);
+  check("kuşatma kalkınca aletler biter", a.works === undefined);
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  a.inf = N.siege.works.crew - 1;
+  a.siege = 30;
+  SG.besiege(s, a.id, "mediolanum");
+  SG.tickSieges(s, []);
+  check("az dövüşen askerli ordu (makineler sayılmaz) alet yapamaz", !a.works);
+
   // Bilgisayar da kuşatır: kolay olmayan surlu hedefin önünde, yeterince büyük orduyla.
   const g = S.newGame("gaul", 7);
   const ra = before(S.formArmy(g, "ariminum", 10, 0), "mediolanum");
@@ -3227,6 +3311,34 @@ const SG = await import("../src/rules/siege.js");
   h.places.mediolanum.inf = 220;
   aiTurn(h, "rome", []);
   check("bilgisayar umutsuz hedefi kuşatmaz", M.forecast(h, { x: rb.x, y: rb.y, inf: 160, arch: 0 }, "rome", "mediolanum").odds === "hopeless" && !h.armies.some((x) => x.besieging === "mediolanum"));
+  // Geç oyunda (kullanıcı 28.10: "160. turdan sonra garnizonlar birikiyor"): saldırısı umutsuz surlu yeri de kuşatır,
+  // ordusu savunanların N.aiSiegeLate katıysa - açlık ve koçbaşılar işi bitirir.
+  const lateGame = (turn) => {
+    const q = S.newGame("gaul", 7);
+    q.turn = turn;
+    const ra2 = before(S.formArmy(q, "ariminum", 10, 0), "mediolanum");
+    ra2.inf = 190;
+    q.places.ariminum.inf = 20;
+    for (const id of Object.keys(q.places)) if (id !== "mediolanum" && q.places[id].owner === null) q.places[id].owner = "egypt";
+    q.places.mediolanum.level = 3;
+    q.places.mediolanum.inf = 220;
+    return { q, ra2 };
+  };
+  const early = lateGame(30), lateG = lateGame(N.aiLate[1] + 20);
+  check("hedef saldırıyla umutsuz, ordu savunanların N.aiSiegeLate katından büyük", M.forecast(early.q, early.ra2, "rome", "mediolanum").odds === "hopeless" && 190 >= 220 * N.aiSiegeLate);
+  aiTurn(early.q, "rome", []);
+  aiTurn(lateG.q, "rome", []);
+  check("erken oyunda umutsuz hedef kuşatılmaz, geç oyunda kuşatılır", !early.q.armies.some((x) => x.besieging === "mediolanum") && lateG.q.armies.some((x) => x.owner === "rome" && x.besieging === "mediolanum"));
+  // Geç oyunda ortak düşmanı kalmayan bilgisayar ittifakı çatlar; oyuncunun ittifakı değil.
+  const crack = S.newGame("gaul", 7);
+  crack.turn = N.aiLate[1] + 20;
+  crack.relations[S.key("rome", "carthage")] = "ally";
+  crack.relations[S.key("rome", "gaul")] = "ally";
+  const keep = N.aiAllyCrack;
+  N.aiAllyCrack = 1;
+  aiTurn(crack, "rome", []);
+  N.aiAllyCrack = keep;
+  check("geç oyunda ortak düşmansız bilgisayar ittifakı bozulur, oyuncununki durur", S.relation(crack, "rome", "carthage") === "neutral" && S.relation(crack, "rome", "gaul") === "ally");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3497,7 +3609,7 @@ section("Bot: oyun boyunca değişmezler");
       for (const k of ["pop", ...UNITS, ...SHIPS, "level", "farms", "industry", "barracks"]) {
         if (!Number.isInteger(p[k]) || p[k] < 0) bad.push(`t${s.turn} ${id}.${k}=${p[k]}`);
       }
-      for (const k of ["farms", "industry", "barracks"]) if (p[k] > p.level) bad.push(`t${s.turn} ${id}.${k} > seviye`);
+      for (const k of ["farms", "industry", "barracks"]) if (p[k] > p.level + S.extraOf(p, k)) bad.push(`t${s.turn} ${id}.${k} > seviye`);
       if (!Number.isInteger(p.loyalty) || p.loyalty < 0 || p.loyalty > 100) bad.push(`t${s.turn} ${id}.loyalty=${p.loyalty}`);
       for (const k of S.PORT_UPGRADES) {
         if (!Number.isInteger(p[k]) || p[k] < 0 || (k !== "shipyard" && p[k] > p.level)) bad.push(`t${s.turn} ${id}.${k}=${p[k]}`);

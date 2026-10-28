@@ -892,6 +892,11 @@ function block(ctx, f, B, u, owner, selected, dt) {
     ctx.fillStyle = GOLD_LIGHT;
     ctx.fill();
   }
+  if (u.work) {
+    ram(ctx, f, u, color);
+    ctx.restore();
+    return;
+  }
   // Falanks: ön sıralardan ileri uzanan mızraklar.
   if (u.stance === "phalanx") {
     ctx.strokeStyle = "rgba(60,44,26,0.85)";
@@ -919,6 +924,34 @@ function block(ctx, f, B, u, owner, selected, dt) {
     ctx.stroke();
   }
   ctx.restore();
+}
+
+/**
+ * Kuşatmada yerinde yapılan koçbaşı (bölüm 20): deri kaplı çatılı ahşap sundurma, önünden çıkan tunç başlı kütük,
+ * çatısında sahibinin renginde şerit. Sura dayanınca kütük ileri geri gider.
+ */
+function ram(ctx, f, u, color) {
+  // Birliğin kutusunu doldursun: çizim 5.2 x 3.4 birimlik, kutunun boyuna göre büyür.
+  const fp = footprint(u), z = Math.min(fp.d * 0.8 / 5.2, fp.w * 0.8 / 3.4);
+  const k = f.k * z, swing = u.ram > 0 ? Math.sin(u.ram * 9) * 0.5 : 0;
+  ctx.translate(f.x + u.x * f.k, f.y + u.y * f.k);
+  ctx.rotate(u.facing);
+  ctx.fillStyle = "#5a3e22";
+  ctx.fillRect(-1 * k + swing * k, -0.35 * k, 4.4 * k, 0.7 * k);
+  ctx.fillStyle = "#b08a3a";
+  ctx.fillRect(3.2 * k + swing * k, -0.55 * k, 0.7 * k, 1.1 * k);
+  roundRect(ctx, -2.6 * k, -1.7 * k, 5.2 * k, 3.4 * k, 0.4 * k);
+  ctx.fillStyle = "#7a5634";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(20,14,8,0.85)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(40,28,16,0.6)";
+  ctx.beginPath();
+  for (let i = 1; i < 4; i++) { ctx.moveTo((-2.6 + i * 1.3) * k, -1.7 * k); ctx.lineTo((-2.6 + i * 1.3) * k, 1.7 * k); }
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fillRect(-2.6 * k, -0.25 * k, 5.2 * k, 0.5 * k);
 }
 
 /** Bir birliğin dikdörtgen yolu (saha birimiyle merkez, cephe yönü, yarı derinlik, yarı genişlik). */
@@ -1288,7 +1321,7 @@ function endPanel(ctx, cam, B, T, lang, boxes, now) {
   if (s < 1) boxes = [];
   panel(ctx, x, y, w, h);
   text(ctx, won ? T.tacWon : B.b.over.retreat ? T.tacFled : T.tacLost, cam.w / 2, y + 42, { title: true, bold: true, size: 24, align: "center", color: won ? INK.good : INK.bad });
-  const lost = (s) => B.b.naval ? B.b.units.filter((u) => u.side === s && (u.dead || u.taken)).length : Math.round(B.b.units.filter((u) => u.side === s).reduce((n, u) => n + (u.start - Math.floor(u.dead ? 0 : u.men)), 0));
+  const lost = (s) => B.b.naval ? B.b.units.filter((u) => u.side === s && (u.dead || u.taken)).length : Math.round(B.b.units.filter((u) => u.side === s && !u.work).reduce((n, u) => n + (u.start - Math.floor(u.dead ? 0 : u.men)), 0));
   const fled = (s) => B.b.units.filter((u) => u.side === s && (u.routed || u.gone) && !u.dead).reduce((n, u) => n + Math.floor(u.men), 0);
   text(ctx, `${B.b.naval ? T.navalYourLoss : T.tacYourLoss}: ${lost(B.me)}  ·  ${B.b.naval ? T.navalTheirLoss : T.tacTheirLoss}: ${lost(B.foe)}`, cam.w / 2, y + 74, { size: 14, align: "center" });
   const note = B.b.over.timeout ? (B.me === "def" ? T.tacTimeoutHeld : T.tacTimeout) : won ? (fled(B.foe) ? `${T.tacTheyFled}: ${fled(B.foe)}` : "") : fled(B.me) ? `${T.tacWeFled}: ${fled(B.me)}` : "";

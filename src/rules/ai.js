@@ -5,13 +5,13 @@
 // Kararlar basit önceliklerle (kurallar.md bölüm 11).
 
 import { CIVS } from "../data/world.js";
-import { angerOf, canDeclare, canPropose, declareWar, proposeAlliance, proposePeace } from "./diplomacy.js";
+import { angerOf, breakAlliance, canDeclare, canPropose, declareWar, proposeAlliance, proposePeace } from "./diplomacy.js";
 import { offer } from "./events.js";
 import { appoint, appointInfo, officerFor } from "./generals.js";
 import { rebels } from "./loyalty.js";
 import { byId, neighbours } from "./graph.js";
 import {
-  access, advance, attack, avoidFor, bySea, canAttack, canStrike, defenders, forecast, forecastField, hostile, nearest, order, reachOf, refresh, routeTo, strike,
+  access, advance, attack, avoidFor, bySea, canAttack, canStrike, defenders, forecast, forecastField, hostile, nearest, order, reachOf, refresh, routeTo, strike, wallsOf,
 } from "./moves.js";
 import { POS, centre, dist } from "./map.js";
 import { BUILDABLE, wondersAt } from "./wonders.js";
@@ -23,7 +23,7 @@ import { random } from "./rng.js";
 import { aiResearch, unlocked } from "./research.js";
 import { dealOf, moodOf, persona, warMoodMul } from "./leaders.js";
 import {
-  armiesAt, armiesOf, armyById, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men,
+  SPECS, armiesAt, armiesOf, armyById, blockaded, budget, buildShip, canSail, carryOf, enemiesOf, fleetOf, gamesInfo, holdGames, info, key, merge, men, specInfo, startSpec,
   freeBuilders, grainCap, humansOf, isHuman, muster, rush, rushInfo, placesOf, popCap, recruit, recruitInfo, relation, shipInfo, shipsToCarry, startWonder, station, strength, together, upgrade, upgradeInfo, wonderInfo,
 } from "./state.js";
 
@@ -133,6 +133,16 @@ function diplomacy(state, civ, events) {
     }
   }
 
+  // Geç oyunda ortak düşmanı kalmamış ittifak çatlar (iki bilgisayar arasında): dünya tek bir ittifakta donmasın.
+  if (late(state)) {
+    for (const c of CIVS) {
+      const o = c.id;
+      if (o === civ || isHuman(state, o) || relation(state, civ, o) !== "ally") continue;
+      if (enemiesOf(state, o).some((e) => enemiesOf(state, civ).includes(e))) continue;
+      if (random(state) < N.aiAllyCrack) { const ev = breakAlliance(state, civ, o); if (ev) events.push(ev); }
+    }
+  }
+
   // İttifak: aynı düşmana karşı.
   for (const o of neighbourCivs(state, civ)) {
     if (isHuman(state, o) || !canPropose(state, civ, o) || random(state) > 0.3) continue;
@@ -210,11 +220,32 @@ function build(state, civ) {
   for (const id of mine) {
     const pl = state.places[id];
     if (pl.upgraded) continue; // alındığı tur
+    specialise(state, civ, id, reserve);
     // Boş her inşaatçıya bir iş: istekler her seferinde yeniden (bütçe değişti).
     for (let slot = freeBuilders(state, id); slot > 0; slot--) {
       if (!buildOne(state, civ, id, mine, reserve)) break;
     }
   }
+}
+
+/**
+ * Şehrin yolu (bölüm 4c): 3. seviyeye varan şehir, yolu yoksa, zaten iyi olduğu işe göre seçer - en yüksek yapısı;
+ * yiyecek darsa tarım, silah darsa demirhane, savaştaysa kışla, başkent ya da ticaretli liman ticarete yakın.
+ */
+function specialise(state, civ, id, reserve) {
+  const pl = state.places[id];
+  if (pl.spec || pl.level < N.spec.level || info(id).kind === "castle") return false;
+  const b = budget(state, civ);
+  const score = {
+    trade: (pl.market ?? 0) + (info(id).port ? pl.trade ?? 0 : 0) + (info(id).capital ? 1.5 : 0),
+    farm: pl.farms + (b.food < 4 ? 3 : 0),
+    forge: pl.industry + (b.weapons < 2 ? 2 : 0),
+    camp: pl.barracks + (enemiesOf(state, civ).length ? 1 : 0),
+  };
+  const k = SPECS.reduce((m, x) => (score[x] > score[m] ? x : m), SPECS[0]);
+  const si = specInfo(state, id, k);
+  if (si.why || state.civs[civ].money < si.cost + reserve + 20) return false;
+  return startSpec(state, id, k);
 }
 
 /** Bir yere bir inşaat başlat: en çok istenene para yetmiyorsa biriktirir. Başladıysa true. */
@@ -273,7 +304,7 @@ function shipyard(state, civ) {
     // Filo ancak denizin karşısında alınacak bir yer varsa; yoksa savunma için tek gemi. (Her
     // limana 6 gemi yapınca limanı olanlar bakımdan eriyordu, limansız Galya Roma'yı yutuyordu.)
     const overseas = across.some((n) => hostile(access(state, civ, n)));
-    const want = overseas ? Math.min(6, Math.max(1, Math.ceil(spare / N.navy.types.ships.carry))) : 1;
+    const want = overseas ? Math.min(late(state) ? N.aiFleetLate : 6, Math.max(1, Math.ceil(spare / N.navy.types.ships.carry))) : 1;
     for (let guard = 0; guard < 3 && fleetOf(pl) < want; guard++) {
       const type = overseas && carryOf(pl) < spare ? "ships" : warship(state, pl);
       // Gemi de yer: yiyecek darsa tersane durur (yoksa bilgisayar kıtlığa giriyordu).
@@ -363,6 +394,23 @@ function threat(state, civ, id) {
     if (dist(POS[o], POS[id]) <= N.reach.threat) n += (men(pl) + armiesAt(state, o).reduce((k, a) => k + men(a), 0)) * garrisonThreat(state);
   }
   return n;
+}
+
+/** Geç oyun mu (`N.aiLate`[1]. turdan sonra): bilgisayar kale kale beklemesin. */
+const late = (state) => state.turn >= N.aiLate[1];
+
+/** Geç oyunda saldırısı umutsuz da olsa kuşatılacak yer: surlu ve ordu savunanların `N.aiSiegeLate` katı. */
+const starvable = (state, a, id) => late(state) && !!wallsOf(state, id) && men(a) >= men(defenders(state, id)) * N.aiSiegeLate;
+
+/**
+ * Cephe: savaştığı bir medeniyetin yerine en yakın kendi yeri. Geç oyunda hedefsiz ordular eve değil buraya gider,
+ * garnizona katılır; garnizonun fazlası büyük bir ordu olup çıkar.
+ */
+function frontOf(state, civ) {
+  const foes = Object.keys(state.places).filter((id) => { const o = state.places[id].owner; return o && relation(state, civ, o) === "war"; });
+  let best = null, d = Infinity;
+  for (const id of placesOf(state, civ)) for (const f of foes) { const k = dist(POS[id], POS[f]); if (k < d) { d = k; best = id; } }
+  return best;
 }
 
 /** Bir yerde bırakılması gereken asker. */
@@ -487,7 +535,7 @@ function military(state, civ, events) {
     let siege = null, score = -Infinity;
     for (const id of Object.keys(state.places)) {
       if (!canBesiege(state, a, id) || men(a) < men(defenders(state, id)) * 0.5) continue;
-      if (forecast(state, a, civ, id).odds === "hopeless") continue;
+      if (forecast(state, a, civ, id).odds === "hopeless" && !starvable(state, a, id)) continue;
       const s = worth(state, id);
       if (s > score) { siege = id; score = s; }
     }
@@ -523,6 +571,7 @@ function military(state, civ, events) {
       muster(state, id, { ...force, ...shipsFor(pl, force) });
     }
   }
+  const front = late(state) ? frontOf(state, civ) : null;
   for (const a of mine()) {
     if (!alive(a) || a.mp <= 0 || a.route.length || a.besieging || men(a) <= 0) continue;
     // Kendi limanındaysa gemiye bin: denizden de hedef seçebilsin.
@@ -533,6 +582,8 @@ function military(state, civ, events) {
     }
     const goal = farTarget(state, civ, a);
     if (goal) order(state, a.id, { place: goal });
+    // Geç oyunda hedefsiz ordu cepheye: orada birleşip büyük ordu olur.
+    else if (front && a.at !== front) order(state, a.id, { place: front });
     else if (a.at && state.places[a.at].owner === civ) station(state, a.id);
     else {
       // Gidecek yer yok: en yakın kendi yerine dön.
@@ -552,7 +603,7 @@ function farTarget(state, civ, a) {
     .filter((id) => hostile(access(state, civ, id)))
     .sort((x, y) => dist(a, POS[x]) - dist(a, POS[y]))
     .slice(0, 6)
-    .filter((id) => forecast(state, a, civ, id).odds !== "hopeless");
+    .filter((id) => forecast(state, a, civ, id).odds !== "hopeless" || starvable(state, a, id));
   let best = null, cost = Infinity;
   const extra = avoidFor(state, civ);
   for (const id of cands.slice(0, 4)) {

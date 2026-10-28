@@ -137,7 +137,7 @@ export const N = {
     // Bilgisayar sura saldırırken önce surun `stage` birim önünde toplanır (en çok `wait` sn bekler).
     // Tırmananlar içeride `join` birim yakınındaki aynı türden köprübaşına katılır; köprübaşının kayıptan moral
     // kaybı x`steady`.
-    climb: { stage: 10, wait: 15, rate: 3, guard: 4, repel: 0.6, join: 8, steady: 0.5, breach: 30, gapHalf: 4, wallZone: 8, cover: 0.75 },
+    climb: { stage: 10, wait: 15, rate: 3, guard: 4, repel: 0.6, join: 8, steady: 0.5, breach: 30, ram: 2, gapHalf: 4, wallZone: 8, cover: 0.75 },
     timeWalls: 300, turn: { march: 3, fight: 0.5, idle: 1.2, near: 14 }, minSplit: 5, mergeReach: 20,
   },
   // Ticaret yolları (bölüm 28, trade.js): karadan `reach`, iki liman arasında `seaReach` birime kadar;
@@ -235,6 +235,10 @@ export const N = {
   grain: { price: 3, base: 4, market: 2, port: 4, step: 2, aiReserve: 150, aiPerPlace: 25 },
   // Hızlandırma (bölüm 4): süren inşaatın kalan turları, turluk payının `rush` katı parayla; iş o tur sonunda biter.
   rush: 2,
+  // Şehir uzmanlığı (bölüm 4c; kullanıcı 28.10): `level`. seviyedeki şehir `cost` paraya, `turns` turda bir yol seçer.
+  // Ticaret: bu şehrin parası +`money`, tahıl tavanı +`grain`; tarım: buğdayı +`food`; demirhane: silahı +`weapons`;
+  // kışla: turda +`recruit` bölük, buradan çıkan ordu Kıdemli. Yolun yapısı şehir seviyesini `extra` geçebilir.
+  spec: { level: 3, cost: 60, turns: 3, extra: 1, trade: { money: 0.25, grain: 4 }, farm: { food: 0.5 }, forge: { weapons: 0.5 }, camp: { recruit: 1 } },
   // Hava ve gün saati (bölüm 29g, weather.js): mevsime göre yağmur, sis, kar ihtimali; `north` enleminin kuzeyinde
   // yağmur ve sis sık, `south`un güneyinde az. Gün saati: gece, şafak, akşam. Etkiler: ok, ok menzili, hücum, hız.
   weather: {
@@ -305,6 +309,14 @@ export const N = {
   // `aiGarrisonThreat`[0] `aiLate`[0]. tura kadar, sonra `aiLate`[1]. tura doğru [1]e iner. Pay hep 0.5 iken geç oyunda herkesin
   // garnizonu birbirini büyütüyor, ordular sefere çıkmıyordu; hep 0.2 olunca da erken oyun fazla kanlıydı.
   aiGarrisonThreat: [0.5, 0.2], aiLate: [60, 100],
+  // Geç oyunda (`aiLate`[1]. turdan sonra) bilgisayar saldırısı umutsuz surlu yeri de kuşatır - ordusu savunanların
+  // `aiSiegeLate` katıysa (açlık ve koçbaşılar işi bitirir); hedefsiz orduları eve değil cepheye (düşmana en yakın kendi
+  // yerine) gider, orada birleşip büyük ordu olur.
+  aiSiegeLate: 0.8,
+  // Geç oyunda ortak düşmanı kalmamış iki bilgisayarın ittifakı her tur `aiAllyCrack` ihtimalle bozulur (oyuncunun
+  // ittifakları değil): herkes herkesle müttefik olup savaş bitmesin. Denizaşırı hedefi olan liman `aiFleetLate` gemiye
+  // kadar yapar (erken oyunda 6).
+  aiAllyCrack: 0.03, aiFleetLate: 16,
   aiElite: 0.2, // ordunun özel birlik payı ...
   aiEliteFrom: 15, // ... bu turdan sonra (erken basınca yayılma yavaşlıyordu)
 
@@ -368,7 +380,9 @@ export const N = {
   missions: { from: 3, spacing: 5, chance: 0.5, max: 2, failLoyalty: 5 },
   // Kuşatma (bölüm 20): garnizon turda %10 erir, her 10 kuşatma makinesi +%2, en fazla %25;
   // kuşatılan yerin sadakati turda 5 düşer; kamptaki ordu da salgından turda %3 erir.
-  siege: { starve: 0.1, perEngines: 0.02, max: 0.25, loyalty: 5, camp: 0.03 },
+  // Aletler (kullanıcı 28.10): kuşatan ordu, en az `crew` dövüşen askeri varsa her tur bir koçbaşı / merdiven yapar,
+  // en çok `max`; her biri bir makine bölüğü kadar sur söker (siegeBreach). Kuşatma kalkınca ya da saldırınca biter.
+  siege: { starve: 0.1, perEngines: 0.02, max: 0.25, loyalty: 5, camp: 0.03, works: { crew: 20, max: 3 } },
   // Arazi ve mevsim (bölüm 22): nehir geçen yoldan saldıran x0.85, dağ geçidini savunan x1.25.
   // Kışın deniz yolunda yürüyen ya da denizden saldıran ordu %25 ihtimalle fırtınaya yakalanır
   // (askerinin %10'u ve bir gemisi gider); kışın bütün ordular %3 yıpranır.

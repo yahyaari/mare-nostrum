@@ -5,10 +5,14 @@
 >
 > Son güncelleme: **27.10.2026** (taktik savaş: saha, arazi, sur, dizilme, sana saldırılar). Önceki: 26.10 (barbarlar, kartlar, özel birlikler, dinlenme, kayıt yuvaları, krizler, ticaret); **23.10.2026** (zafer yolları, canlı savaşlar, öğretici, araştırma, liderler, harika yarışı, aynı bilgisayarda oyuncular, şehir binaları, geri çekilme ve dağlar, oyun sonu özeti).
 
-## NEREDE KALDIK (27.10 akşam) - önce bunu oku
+## NEREDE KALDIK (28.10) - önce bunu oku
 
-Son commit **bf0b56b**, hepsi push'lu, **2424 test** geçiyor, kayıt sürümü **20**. Kullanıcı son durum için
-"tamam şimdi çok güzel olmuş" dedi. Sırada: kullanıcı oynayıp söyleyecek.
+Son commit **(bu adım)**, hepsi push'lu, **2453 test** geçiyor, kayıt sürümü **20** (yeni alanlar isteğe bağlı: `pl.spec`,
+`army.works`). 27.10 akşamından beri (madde 35-36): geç oyun canlı, müttefikler savaşa katılıyor; sonra kullanıcı önerdiğim
+üç işe "dediklerini de yapalım": kuşatmada koçbaşı, şehrin yolu (uzmanlık), 160. tur sonrası birikme. Kullanıcının
+çizgisi: süs sistemi yok (nutuk, alay...), yalnız inşa ve savaşı eğlenceli yapan şeyler. Sırada: kullanıcı oynayıp söyleyecek.
+
+(27.10 akşamki durum: commit bf0b56b, 2424 test.)
 
 **Bu iki günün özü (ayrıntı aşağıdaki 10-27. maddelerde ve kurallar.md'de):**
 - 26.10: oyunun başı tutmuyordu -> barbar kampları (bölüm 26), Total War gibi kartlar (bina / asker / gemi;
@@ -181,8 +185,17 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     kurallar.md 11 (ai.js garrisonThreat, N.aiGarrisonThreat / aiLate), 7b (moves.js helpersOf müttefik). Denge: ilk düşüş 43,
     ayakta 295. Açık: 160. turdan sonra garnizonlar yine birikiyor.
 
-**Sırada:** kullanıcı oynayıp söyleyecek. Not: bilgisayarın kasası geç oyunda on binlerce para (harcayacak
-yeri yok) - ekonomide bir para çıkışı eksik; gerekirse ele alınır.
+36. **Koçbaşı, şehrin yolu, 160. tur sonrası** ((bu adım); kullanıcı: "tamam dediklerini de yapalım güzel fikirler"):
+    - Kuşatmada koçbaşı: kurallar.md 20 (siege.js `canBuildWorks`, ordunun `works`; combat.js `enginesOf`; tactics.js `u.work`
+      birlikleri; view: `ram`, haritada `ramGlyph`). Yolda bulunan: makineler sahada piyadenin sur yerini alıyor, tayfası
+      bozulup yanındakileri sarsıyordu - artık kapının iki yanında, bozulmaz (29a).
+    - Şehrin yolu: kurallar.md 4c (state.js `SPECS`, `specInfo`, `startSpec`, `extraOf`; ui.js `specCard`, `specModal`, `specArt`;
+      ai.js `specialise`). Fotoğraflar: `node Tools/buildfilm.mjs tr`.
+    - Geç oyun: kurallar.md 11 (ai.js `late`, `starvable`, `frontOf`; ittifak çatlar, cepheye toplanma, büyük filo). Ölçüm aracı
+      `node Tools/late.mjs '{}' 8`.
+    - Denge (70 oyun): ilk düşüş 43 -> 38, ayakta 295 -> 296.
+
+**Sırada:** kullanıcı oynayıp söyleyecek.
 
 ## ÖNCEKİLER (22.10 akşam)
 

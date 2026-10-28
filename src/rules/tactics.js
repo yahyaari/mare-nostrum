@@ -167,6 +167,18 @@ export function setupBattle(att, def, walls, seed = 1, field = null) {
       (groups[u.mounted || u.type === "cav" ? "cav" : u.kind === "arch" ? "arch" : u.type === "siege" ? "siege" : "front"] ??= []).push(u);
       b.units.push(u);
     }
+    // Kuşatmada yerinde yapılan aletler (bölüm 20): her biri bir koçbaşı, makine bölüğü gibi gedik açar; ordunun
+    // askeri değil, sonuçta sayılmaz.
+    if (side === "att" && walls) {
+      for (let i = 0; i < (s.works ?? 0); i++) {
+        for (const u of troops(side, s, { siege: N.company }, false)) {
+          u.work = true;
+          u.cols = 3; // dar ve uzun: sura burnuyla dayanır
+          (groups.siege ??= []).push(u);
+          b.units.push(u);
+        }
+      }
+    }
     help.forEach((h, i) => {
       const R = N.reinforce, d = s.near ? Math.hypot(h.x - s.near.x, h.y - s.near.y) : R.reach;
       const units = troops(side, s, part[i] ?? h, false);
@@ -715,7 +727,8 @@ export function aiOrders(b, side, all = false) {
     return { x: Math.max(2, Math.min(T.w - 2, q.x + q.nx * (out + ex))), y: Math.max(2, Math.min(T.h - 2, q.y + q.ny * (out + ex))), facing: Math.atan2(-q.ny, -q.nx) };
   };
   if (plan && !b.assault) {
-    const climbers = b.units.filter((v) => plan.has(v.id) && alive(v) && !v.routed && !v.inside);
+    // Makineler yavaş: tırmananlar onları beklemez (makine kendi hızıyla gelip gedik açar).
+    const climbers = b.units.filter((v) => plan.has(v.id) && alive(v) && !v.routed && !v.inside && v.type !== "siege");
     if (!climbers.length || climbers.every((v) => dist(v, post(v, T.climb.stage)) < 4) || b.t > T.climb.wait) b.assault = true;
   }
   for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed && v.type !== "gen")) {
@@ -952,6 +965,8 @@ export function step(b, dt) {
   }
   for (const u of b.units.filter((v) => alive(v) && !v.routed)) {
     if (!u.engaged) u.morale = Math.min(u.moraleMax ?? 110, u.morale + T.morale.recover * dt * (u.aura ? G.recover : 1));
+    // Makine ve koçbaşı bozulup kaçmaz: tayfası ölene kadar iter (kimseyi de sarsmaz).
+    if (u.type === "siege") continue;
     if (moraleOf(u) <= T.morale.rout || u.men < u.start * T.morale.floor) {
       u.routed = true;
       u.order = null;
@@ -984,15 +999,18 @@ function siegePlan(b) {
   if (b.plan && [...b.units].every((v) => !want(v) || b.plan.has(v.id))) return b.plan;
   const land = ["W", "N", "S", "E"].filter((s) => wallShare(b.field, C, s) > 0.5);
   const pick = (s) => (land.includes(s) ? s : land[0] ?? "W");
-  const plan = new Map(), bySide = {};
+  const plan = new Map(), bySide = {}, engines = [];
   for (const v of b.units.filter(want)) {
-    const s = v.type === "siege" ? pick("W") : pick(v.y < C.y0 + 2 ? "N" : v.y > C.y1 - 2 ? "S" : "W");
+    if (v.type === "siege") { engines.push(v); continue; }
+    const s = pick(v.y < C.y0 + 2 ? "N" : v.y > C.y1 - 2 ? "S" : "W");
     (bySide[s] ??= []).push(v);
   }
   for (const [s, list] of Object.entries(bySide)) {
     list.sort((a, c) => (s === "W" || s === "E" ? a.y - c.y : a.x - c.x));
     list.forEach((v, i) => plan.set(v.id, { side: s, t: 0.12 + (0.76 * (i + 0.5)) / list.length }));
   }
+  // Makineler (koçbaşılar) piyadenin yerini almaz: batı kapısının iki yanına, ortaya sıkışık.
+  engines.sort((a, c) => a.y - c.y).forEach((v, i) => plan.set(v.id, { side: pick("W"), t: 0.5 + (i - (engines.length - 1) / 2) * 0.14 }));
   b.plan = plan;
   return plan;
 }
@@ -1028,7 +1046,8 @@ function walls(b, dt) {
     // Makine: sura dayandıkça gedik açar.
     if (u.type === "siege") {
       if (!atWall) continue;
-      u.ram = (u.ram ?? 0) + dt * (u.men / N.company);
+      // Yerinde yapılan koçbaşı surda makineden hızlı iş görür (C.ram kat).
+      u.ram = (u.ram ?? 0) + dt * (u.men / N.company) * (u.work ? C.ram : 1);
       if (u.ram >= C.breach) {
         b.gaps.push({ x: q.x, y: q.y, nx: q.nx, ny: q.ny, half: C.gapHalf });
         openBreach(b.field, q, C.gapHalf);
@@ -1104,7 +1123,7 @@ function hurt(b, u, k) {
 /** Bir tarafın sağ kalanları, türleriyle (bozulup kaçanlar dahil). */
 function survivors(b, side) {
   const out = Object.fromEntries(UNITS.map((k) => [k, 0]));
-  for (const u of b.units) if (u.side === side && !u.dead && u.type !== "gen") out[u.type] += Math.floor(u.men);
+  for (const u of b.units) if (u.side === side && !u.dead && u.type !== "gen" && !u.work) out[u.type] += Math.floor(u.men);
   for (const r of b.reserve ?? []) if (r.side === side && !r.in) for (const u of r.units) out[u.type] += Math.floor(u.men);
   return out;
 }

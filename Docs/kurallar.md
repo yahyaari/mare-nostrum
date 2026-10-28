@@ -156,6 +156,26 @@ Bilgisayar huzursuz şehre tapınak, sonra şehir seviyesinden sonra pazar ve ok
 hamam yapar. Kayıt 17. Denge (70 oyun, zaferler kapalı): ayakta kalan 298 -> 303, Partlar en büyük
 38 -> 31, ilk düşüş aynı.
 
+### 4c. Şehrin yolu (uzmanlık)
+
+Kullanıcı 28.10 ("dediklerini de yapalım"; önerim: her şehir aynı binaları sırayla dikmesin, gerçek bir inşa kararı
+olsun). 3. seviyedeki bir **şehir** (kale değil) tek bir yol seçer; Şehir sekmesinde beşinci kart **Uzmanlık**, basınca
+dört yolun penceresi (state.js `SPECS`, `specInfo`, `startSpec`; `N.spec`).
+
+| Yol | Bu şehirde | Şehir seviyesini bir geçebilen yapı |
+|---|---|---|
+| Ticaret şehri | Para +%25, turda 4 tahıl daha alınabilir | Pazar |
+| Tarım şehri | Buğday (balık dahil) +%50 | Tarla |
+| Demirhane şehri | Silah +%50 | Sanayi |
+| Kışla şehri | Turda bir bölük fazla; buradan çıkan ordu Kıdemli başlar | Kışla |
+
+- Seçmek bir inşaat: 60 para, 3 tur, bir inşaatçı (hızlandırılır, iptal edilir). Değiştirmek de aynı fiyat; eski yolun
+  yapısı şehir seviyesinin üstündeyse şehir seviyesine iner.
+- Yer el değiştirince yolu kalır (tarım kasabası yine tarım kasabası). Şehrin türünde yolun adı yazar ("Başkent ·
+  Tarım şehri · Liman · seviye 3").
+- Bilgisayar 3. seviyeye varan şehrine, zaten iyi olduğu işe göre yol seçer (en yüksek yapısı; yiyecek darsa tarım,
+  silah darsa demirhane, savaştaysa kışla, başkent ve ticaretli liman ticarete yakın).
+
 ## 5. Askerler
 
 Bir **bölük** 10 askerdir. Asker basmak şehrin nüfusundan düşer.
@@ -620,7 +640,16 @@ oyundan çıkar.
   sefere çıkmıyordu (120. turda sahada ~1.700, garnizonlarda ~14.000 asker). Şimdi bu pay 60. tura kadar yarı, 100. tura
   doğru beşte bire iner (`N.aiGarrisonThreat`, `N.aiLate`): 100. turda sahada ~7.500 (önce 3.800), 120. turda ~6.200
   (1.700). Hep beşte bir olunca erken oyun fazla kanlıydı (ilk düşüş 43 -> 35); evreye bağlı olunca ilk düşüş aynı (43),
-  ayakta kalan 318 -> 295 (geç oyunda yine savaşılıyor). 160. turdan sonra garnizonlar yeniden birikiyor (açık konu).
+  ayakta kalan 318 -> 295 (geç oyunda yine savaşılıyor). 160. turdan sonra garnizonlar yeniden birikiyordu.
+- **160. turdan sonra da savaş** (28.10): iki sebep çıktı. (1) Kalan medeniyetler hep birbirinin müttefiki oluyordu
+  (bir oyunda üçü de; ittifak sonsuz). (2) Düşman garnizonları büyük, saldırı hep "umutsuz"; hedefsiz ordu eve dönüp
+  garnizona katılıyordu (bir oyunda Makedonya Roma'da 11.660 asker tutuyordu, son düşman adadaydı, liman 6 gemiden fazla
+  yapmıyordu). Geç oyunda (`N.aiLate`[1] = 100. turdan sonra): ortak düşmanı kalmayan iki bilgisayarın ittifakı her tur
+  %3 ihtimalle bozulur (`N.aiAllyCrack`; oyuncunun ittifakı değil); saldırısı umutsuz surlu yer de kuşatılır, ordu
+  savunanların 0.8 katıysa (`N.aiSiegeLate`; açlık ve koçbaşılar); hedefsiz ordu eve değil cepheye (savaştığı yere en
+  yakın kendi yeri) gider, orada garnizona katılır, fazlası büyük ordu olup çıkar; denizaşırı hedefi olan liman 16 gemiye
+  kadar yapar (`N.aiFleetLate`). Ölçüm (8 oyun, 160-200. turlar, tur başı): savaşan çift 1.6 -> 2.8, sahadaki asker
+  4.200 -> 7.900, garnizon 12.700 -> 6.000, savaş 0.7 -> 2.0.
 
 ## 12. Ekran
 
@@ -885,7 +914,23 @@ Surlu bir yere (kale, başkent, 3. seviye ve üstü şehir) **hemen saldırmak y
   söyler; ordu kartı "Kuşatıyor: X · n. tur · içeride N asker" gösterir.
 - **Bilgisayar da kuşatır:** komşusunda kolay hedef yoksa, surlu bir hedefin savunanlarının en
   az yarısı kadar askeri varsa ve hedef "umutsuz" değil "zor"sa kuşatır; hedef kolaylaşınca
-  saldırır, yoksa bekler.
+  saldırır, yoksa bekler. Geç oyunda (100. turdan sonra) saldırısı umutsuz yeri de kuşatır - ordusu
+  savunanların 0.8 katıysa (bölüm 11).
+- **Yerinde aletler (koçbaşı)** (kullanıcı 28.10; önerim: "kuşatan ordu her tur alet yapar, aç bırakıp beklemek ya da
+  koçbaşı yapıp saldırmak arasında seçim çıkar"): kuşatan ordu, en az 20 dövüşen askeri varsa her tur sonunda bir koçbaşı
+  yapar, en çok 3 (`N.siege.works`; ordunun `works` alanı). Kuşattığı yere saldırınca her biri bir kuşatma makinesi
+  bölüğü kadar (%20) sur söker - savaşın dökümünde ayrı satır ("sur yerinde yapılan koçbaşılarla söküldü"; combat.js
+  `enginesOf`). Saldırıda kullanılır ve biter; kuşatma kalkınca (yürüyünce, kaldırınca) yakılır. Ordu kartında
+  "koçbaşı 2/3", haritada kampın önünde küçük koçbaşılar. Taktik savaşta her biri bir **Koçbaşı** birliği: çatılı
+  sundurma, sura dayanınca kütüğü işler, makineden iki kat hızlı gedik açar (`N.tactics.climb.ram`); ordunun askeri
+  değildir, sonuçta ve kayıplarda sayılmaz.
+  Ölçüm: 200 piyade + 40 okçu, 200 savunana karşı (20 savaş): koçbaşısız 19, üç koçbaşıyla 20 kazanır, 40 gedik.
+  İlk sürümde koçbaşılar batı surunda piyadenin yerini alıyor, tayfası okla bozulup yanındakileri sarsıyordu - 170
+  savunana karşı 20'de 7'ye düştü. Şimdi makineler kapının iki yanına dizilir, bozulup kaçmaz (kırılır), tırmananlar
+  onları beklemez (bölüm 29a).
+- **Denge (70 oyun, 28.10; koçbaşı, şehrin yolu ve geç oyun birlikte):** ilk düşüş 43 -> 38, ayakta kalan 295 -> 296.
+  Ayrı ayrı: koçbaşısız 42 / 274, uzmanlıksız 37 / 262 - koçbaşı ilk düşüşü öne çeker, uzmanlık şehirleri güçlendirip
+  ayakta kalanı artırır, geç oyun kuralları 100. turdan sonra fethi artırır.
 
 > Denge (70 oyun): kuşatma bilgisayarın elinde çok güçlü çıktı. Umutsuz hedefleri de kuşatınca
 > ilk düşüş 61 → 40-45 (erimeyi %7'ye, sadakati 3'e indirmek, eşiği dörtte üçe çıkarmak, kamp
@@ -1226,6 +1271,9 @@ tırmanıyormuş gibi olsun, kaç kişi gelirse gelsin surdan tek sıra halinde 
 arı kovanı gibi titriyorlar, düşmanlarla savaşsınlar".
 
 - **İç içe geçme:** dost birlikler birbirini itmez, içinden geçer (yalnız dizilirken açılırlar); düşmanla değer.
+- **Kuşatma makinesi ve koçbaşı** (28.10): bozulup kaçmaz, tayfası ölene kadar iter (kırılınca kimseyi sarsmaz);
+  bilgisayarın sur planında piyadenin yerini almaz, batı kapısının iki yanına dizilir; tırmanacaklar onu beklemez
+  (yavaş). Ölçüm (tactics-cal): açık sahada kazanan aynı %89, surlu %88; takılan birlik 0.
 - **Askerler tek tek** (`view/tactics.js soldiers`): her nokta kendi yerinde yaşar, birliğin dizilişindeki yerine
   yürür (birlik dönerken ya da kayıp verirken saflar akar). Dövüşte ön 3 sıra değdiği düşmanın kenarına yürür,
   iki taraf cephede karışır; cephesi taşan uçlar düşmanın yanına dolanır, arkadakiler ileri sıkışır. Titreme

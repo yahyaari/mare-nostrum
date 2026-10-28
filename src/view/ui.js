@@ -29,7 +29,7 @@ import { portrait } from "./leaders.js";
 import { TECHS, canResearch, costFor, knows, scienceOf, techById, techMul, turnsLeft as techTurns } from "../rules/research.js";
 import { N, SHIPS, UNITS, trait, uniqueOf } from "../rules/numbers.js";
 import {
-  ACADEMY, BUILDINGS, PORT_UPGRADES, UPGRADES, rushInfo, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
+  ACADEMY, BUILDINGS, PORT_UPGRADES, SPECS, SPEC_BUILDING, UPGRADES, extraOf, rushInfo, specBuild, specInfo, wonderInfo, humansOf, armiesAt, buildersOf, cardsOf, carryOf, fleetOf, together, startTroops, armyById, besieged, blockaded, budget, canSail, gamesInfo, key, men, output, placesOf, popCap, recruitCost, shipInfo,
   recruitInfo, relation, strength, upgradeInfo,
 } from "../rules/state.js";
 import { TEXT, fill } from "../text.js";
@@ -391,7 +391,7 @@ function fit(ctx, s, x, y, w, o) {
 
 function kindLine(id, game, T, hid = false) {
   const p = byId[id], pl = game.places[id];
-  return [p.capital ? T.capital : null, p.kind === "castle" ? T.castle : T.city, p.port ? T.port : null]
+  return [p.capital ? T.capital : null, pl.spec ? T.specs[pl.spec][0] : p.kind === "castle" ? T.castle : T.city, p.port ? T.port : null]
     .filter(Boolean).join(" · ") + " · " + fill(T.lvl, pl.level) + (fleetOf(pl) && !hid ? ` · ${fleetOf(pl)} ${T.ships}` : "");
 }
 
@@ -634,9 +634,9 @@ function cityCard(ctx, cam, game, ui, boxes, T) {
     vrule(ctx, xc - GAP / 2, top + 4, y + H - 14);
     fleetBlock(ctx, game, boxes, T, id, xc, y + 32, C, H - 32);
   } else {
-    // Şehir: dört yükseltme kartı bütün genişlikte (asker basma kendi sekmesinde).
+    // Şehir: dört yükseltme kartı ve şehrin yolu (uzmanlık, bölüm 4c) bütün genişlikte (asker basma kendi sekmesinde).
     buildersRow(ctx, game, boxes, T, id, x, top, BC);
-    buildingCards(ctx, game, boxes, T, id, UPGRADES, x, top + 26, BC, y + H - 12 - (top + 26));
+    buildingCards(ctx, game, boxes, T, id, p.kind === "castle" ? UPGRADES : [...UPGRADES, "spec"], x, top + 26, BC, y + H - 12 - (top + 26));
   }
   closeX(ctx, boxes, r);
   return r;
@@ -805,7 +805,112 @@ const turnsText = (n, T) => (n === 1 ? T.turnsOne : fill(T.turnsN, n));
  */
 function buildingCards(ctx, game, boxes, T, id, list, x, y, w, h) {
   const gap = 6, cw = (w - gap * (list.length - 1)) / list.length;
-  list.forEach((what, i) => buildingCard(ctx, game, boxes, T, id, what, x + i * (cw + gap), y, cw, h));
+  list.forEach((what, i) => (what === "spec" ? specCard : buildingCard)(ctx, game, boxes, T, id, what, x + i * (cw + gap), y, cw, h));
+}
+
+/** Bir yolun açıklaması, sayıları kurallardan (bölüm 4c). */
+const specText = (k, T) => {
+  const S = N.spec;
+  return fill(T.specs[k][1], ...({ trade: [Math.round(S.trade.money * 100), S.trade.grain], farm: [Math.round(S.farm.food * 100)], forge: [Math.round(S.forge.weapons * 100)], camp: [S.camp.recruit] }[k]));
+};
+/** Bir yolun kısa getirdiği (kartın altında). */
+const specShort = (k, T) => {
+  const S = N.spec;
+  return fill(T.specShort[k], { trade: Math.round(S.trade.money * 100), farm: Math.round(S.farm.food * 100), forge: Math.round(S.forge.weapons * 100), camp: S.camp.recruit }[k]);
+};
+
+/**
+ * Şehrin yolu (bölüm 4c; kullanıcı 28.10): uzmanlığın kartı - seçilmişse yolun resmi ve getirdiği, seçilmemişse yol
+ * ayrımı; basınca dört yolun penceresi açılır. Yol yapılıyorsa ilerleme, iptal ve hızlandırma. 3. seviyeden önce kilitli.
+ */
+function specCard(ctx, game, boxes, T, id, what, x, y, w, h) {
+  const pl = game.places[id], b = specBuild(pl), k = b ? b.what.slice(5) : pl.spec ?? null;
+  const locked = pl.level < N.spec.level;
+  const cost = specInfo(game, id, SPECS.find((s) => s !== pl.spec)).cost;
+  actionCard(ctx, boxes, {
+    x, y, w, h, act: { do: "open", modal: "spec", id }, label: "✦",
+    art: (ix, iy, iw, ih) => specArt(ctx, k, ix, iy, iw, ih, pl.owner),
+    badge: pl.spec ? 1 : 0, badgeText: pl.spec ? "✦" : "–", name: T.specCard,
+    sub: locked ? fill(T.lockLevel, N.spec.level) : b ? T.specs[k][0] : pl.spec ? specShort(pl.spec, T) : T.specNone, subColor: pl.spec ? GOLD_LIGHT : "rgba(243,231,201,0.5)",
+    state: b ? "busy" : locked ? "locked" : "ready",
+    cost: { money: cost }, purse: game.civs[pl.owner], maxText: T.maxShort,
+    busy: b && { part: (b.total - b.left) / b.total, text: b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left), act: { do: "cancelBuild", id, what: b.what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)],
+      rush: rushOf(game, id, b.what, T) },
+    tip: [pl.spec ? `${T.specCard} · ${T.specs[pl.spec][0]}` : T.specCard, pl.spec ? specText(pl.spec, T) : T.specTip, locked ? [fill(T.whySpecLevel, N.spec.level), "bad"] : null],
+  });
+}
+
+/**
+ * Yolun resmi: seçilen yolun yapısı (pazar, tarla, sanayi, kışla) dolu hâliyle ve sol üst köşede yolun simgesi;
+ * seçilmemişse şehir ve önünde dört kollu bir yol tabelası.
+ */
+function specArt(ctx, k, x, y, w, h, owner) {
+  buildingArt(ctx, k ? SPEC_BUILDING[k] : "level", x, y, w, h, k ? 4 : 3, owner);
+  ctx.save();
+  if (!k) {
+    // Yol tabelası: direk ve dört ok.
+    const cx = x + w * 0.5, base = y + h * 0.86;
+    ctx.fillStyle = "#5a3e22";
+    ctx.fillRect(cx - 1.5, base - h * 0.5, 3, h * 0.5);
+    for (let i = 0; i < 4; i++) {
+      const dir = i % 2 ? -1 : 1, ay = base - h * 0.46 + i * h * 0.09, aw = w * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(cx, ay);
+      ctx.lineTo(cx + dir * aw, ay);
+      ctx.lineTo(cx + dir * (aw + 5), ay + 3.5);
+      ctx.lineTo(cx + dir * aw, ay + 7);
+      ctx.lineTo(cx, ay + 7);
+      ctx.closePath();
+      ctx.fillStyle = "#c9a76a";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(40,28,16,0.8)";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+  } else {
+    // Yolun simgesi: sol üst köşede altın halkada.
+    const cx = x + 15, cy = y + 15;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 11, 0, TAU);
+    ctx.fillStyle = "rgba(20,14,8,0.7)";
+    ctx.fill();
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    if (k === "camp") shield(ctx, owner, cx - 5, cy - 6, 10);
+    else icon(ctx, { trade: "money", farm: "food", forge: "weapons" }[k], cx - 7, cy - 7, 14, GOLD_LIGHT);
+  }
+  ctx.restore();
+}
+
+/**
+ * Şehrin yolu penceresi (bölüm 4c): dört yolun kartı yan yana (resmi, adı, kısa getirdiği; seçili olan SEÇİLİ,
+ * yapılan ilerlemesiyle), altında uzun açıklaması. Karta basınca yol yapılmaya başlar.
+ */
+function specModal(ctx, cam, game, ui, boxes, T, m) {
+  const id = m.id, pl = game.places[id];
+  if (!pl) return;
+  const r = modalFrame(ctx, cam, boxes, 452, 720);
+  text(ctx, fill(T.specTitle, placeName(id, ui.lang)), r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  const sub = wrap(ctx, fill(T.specSub, N.spec.turns, N.spec.extra), r.w - 60, { size: 13, italic: true });
+  sub.slice(0, 2).forEach((l, i) => text(ctx, l, r.x + r.w / 2, r.y + 64 + i * 17, { size: 13, italic: true, color: INK.soft, align: "center" }));
+  const gap = 12, x0 = r.x + 22, cw = (r.w - 44 - gap * 3) / 4, cy = r.y + 104, ch = 178;
+  const b = specBuild(pl);
+  SPECS.forEach((k, i) => {
+    const x = x0 + i * (cw + gap), si = specInfo(game, id, k), mine = b && b.what === "spec:" + k;
+    actionCard(ctx, boxes, {
+      x, y: cy, w: cw, h: ch, act: { do: "spec", id, spec: k }, label: "✦",
+      art: (ix, iy, iw, ih) => specArt(ctx, k, ix, iy, iw, ih, pl.owner),
+      badge: pl.spec === k ? 1 : 0, badgeText: pl.spec === k ? "✦" : "–", name: T.specs[k][0], sub: specShort(k, T), subColor: GOLD_LIGHT,
+      state: mine ? "busy" : pl.spec === k ? "max" : si.why ? "off" : "ready",
+      cost: { money: si.cost }, purse: game.civs[pl.owner], maxText: T.specChosen,
+      busy: mine && { part: (b.total - b.left) / b.total, text: b.left === 1 ? T.turnsOne : fill(T.turnsN, b.left), act: { do: "cancelBuild", id, what: b.what }, tip: [T.cancelBuild, fill(T.refundTip, b.paid)],
+        rush: rushOf(game, id, b.what, T) },
+      tip: [T.specs[k][0], specText(k, T), si.why && si.why !== "same" ? [si.why === "specBuilding" ? T.whySpecBuilding : si.why === "done" ? T.whyJustTaken : whyText(si.why, T), "bad"] : null],
+    });
+    lines(ctx, specText(k, T), x + 2, cy + ch + 20, cw - 4, { size: 12, color: INK.ink }, 6, 15);
+  });
+  button(ctx, boxes, { x: r.x + r.w / 2 - 80, y: r.y + r.h - 52, w: 160, h: 36, label: T.closeBtn, size: 14, act: { do: "close" } });
 }
 
 /** Süren inşaatı hızlandırma (bölüm 4): basılırsa { act, tip, cost }; para yetmiyorsa basılmaz, ipucunda neden. */
@@ -822,7 +927,7 @@ function buildingCard(ctx, game, boxes, T, id, what, x, y, w, h) {
   const tip = [`${T[what]} · ${fill(T.levelOf, u.now)}`, T.tipUpgrade[what], next, u.why === "max" ? null : fill(T.takesTurns, turnsText(u.turns, T))];
   const locked = u.why === "needLevel" || u.why === "notPort" || !!u.why?.startsWith("tech_");
   // Kart dar: kısa neden (teknolojinin adı); uzun cümle ipucunda.
-  const why = !locked ? null : u.why === "needLevel" ? fill(T.lockLevel, u.now + 1) : u.why.startsWith("tech_") ? T.techs[u.why.slice(5)][0] : whyText(u.why, T);
+  const why = !locked ? null : u.why === "needLevel" ? fill(T.lockLevel, u.now + 1 - extraOf(pl, what)) : u.why.startsWith("tech_") ? T.techs[u.why.slice(5)][0] : whyText(u.why, T);
   const b = u.building;
   actionCard(ctx, boxes, {
     x, y, w, h, act: { do: "upgrade", id, what }, label: "▲",
@@ -946,7 +1051,7 @@ function actionCard(ctx, boxes, o) {
   ctx.strokeStyle = DARK;
   ctx.lineWidth = 1.6;
   ctx.stroke();
-  text(ctx, String(o.badge), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
+  text(ctx, o.badgeText ?? String(o.badge), rx, ry + 4.5, { bold: true, size: 12, color: DARK, align: "center" });
   // Ad ve altındaki satır (kilitliyse neden).
   fit(ctx, o.name, x + w / 2, iy + ih + 16, w - 3, { bold: true, size: 12, min: 7.5, color: CREAM, align: "center" });
   const sub = state === "locked" ? { color: "#e9a58f", italic: false } : { color: o.subColor, italic: !!o.subItalic };
@@ -1264,7 +1369,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   }
   if (a.besieging) {
     ly += 20;
-    lines(ctx, fill(T.siegeLine, placeName(a.besieging, ui.lang), game.turn - a.besiegedSince + 1, men(defenders(game, a.besieging))), x, ly, A, { size: 13, bold: true, color: INK.warn }, 2, 16);
+    lines(ctx, fill(T.siegeLine, placeName(a.besieging, ui.lang), game.turn - a.besiegedSince + 1, men(defenders(game, a.besieging)), a.works ?? 0, N.siege.works.max), x, ly, A, { size: 13, bold: true, color: INK.warn }, 3, 16);
   } else if (mine) lines(ctx, T.cardsHint, x, y + H - 34, A, { size: 12, italic: true, color: INK.soft }, 2, 15);
 
   // Birlikler: kart kart; kendi ordunsa altta eylemler.
@@ -1908,7 +2013,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, slots: slotsModal, trade: tradeModal, incoming: incomingModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, spec: specModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -1962,7 +2067,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   }
   const pow = sea && b ? null : fight(sd.att, sd.def, walls);
   const ex = sea && b ? { att: [], def: [] } : explain(sd.att, sd.def, walls);
-  const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id)), 552, { size: 12, italic: true }) : [];
+  const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id), N.siege.works.max, Math.round(N.siegeBreach * 100)), 552, { size: 12, italic: true }) : [];
   const modRows = Math.max(ex.att.length, ex.def.length);
   const r = modalFrame(ctx, cam, boxes, 360 + modRows * 18 + (sea ? 20 : 0) + hint.length * 17, 600);
   const x = r.x + 22, w = r.w - 44, cw = (w - 16) / 2;
@@ -2029,9 +2134,9 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   } else y += 6;
 
   // Artılar ve eksiler: her sütun kendi tarafının; yeşil o tarafa yarar, kırmızı zarar.
-  const fmt1 = (key, v) => (key === "engines" ? fill(T.pct, Math.round(v * 100))
+  const fmt1 = (key, v) => (key === "engines" || key === "works" ? fill(T.pct, Math.round(v * 100))
     : key === "siegeGeneral" ? "−" + fill(T.pct, 50) : (v > 1 ? "+" : "−") + fill(T.pct, Math.round(Math.abs(v - 1) * 100)));
-  const good = (key, v) => key === "engines" || key === "siegeGeneral" || v > 1;
+  const good = (key, v) => key === "engines" || key === "works" || key === "siegeGeneral" || v > 1;
   const list = (bx, mods) => mods.forEach(([key, v], i) => {
     const ly = y + 12 + i * 18;
     const s = fmt1(key, v);
@@ -2223,6 +2328,7 @@ export function eventLines(game, lang) {
     else if (e.type === "broke") out.push([fill(T.evBroke, name(e.by), name(e.with)), mine ? "bad" : null]);
     else if (e.type === "famine" && e.civ === me) out.push([fill(T.evFamine, e.lost), "bad"]);
     else if (e.type === "built" && e.civ === me) out.push([fill(T.evBuilt, placeName(e.place, lang), T[e.what], e.level), "good"]);
+    else if (e.type === "specDone" && e.civ === me) out.push([fill(T.evSpec, placeName(e.place, lang), T.specs[e.spec][0]), "good"]);
     else if (e.type === "officer" && e.civ === me) out.push([fill(T.evOfficer, placeName(e.place, lang), `${"★".repeat(e.level)} ${e.name}`, e.traits.map((t) => T.skills[t][0]).join(", ")), "good"]);
     else if (e.type === "battle" && mine && e.field && e.bandits && e.won) out.push([fill(T.evBandits, name(e.attacker), placeName(e.place, lang)), "good"]);
     else if (e.type === "battle" && mine && e.field) {
@@ -2404,7 +2510,7 @@ function wonderModal(ctx, cam, game, ui, boxes, T, m) {
 }
 
 /** İnşaatın adı: yapı (tarla, sanayi...) ya da harika. */
-const buildName = (T, what) => (what.startsWith("wonder:") ? T.wonders[what.slice(7)][0] : T[what]);
+const buildName = (T, what) => (what.startsWith("wonder:") ? T.wonders[what.slice(7)][0] : what.startsWith("spec:") ? T.specs[what.slice(5)][0] : T[what]);
 
 /**
  * Şehir kartında Harikalar sekmesi: inşa edilebilen altı harika iki sütunda. Her biri: adı,

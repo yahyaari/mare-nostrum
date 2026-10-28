@@ -226,6 +226,7 @@ export function advance(state, army) {
     // Yürüyen ordu kuşatmayı bırakır, yerleşimden çıkar.
     delete army.besieging;
     delete army.besiegedSince;
+    delete army.works;
     const pl = placeAtCell(next);
     const m = pl ? POS[pl] : centre(next);
     army.x = m.x;
@@ -313,7 +314,7 @@ export function sides(state, unit, civ, id) {
   // Takviye: saldıranın yakındaki orduları (denizden saldırıda değil), savunanın yerin dışındaki orduları.
   const sea = !!from && bySea(from, POS[id]);
   return {
-    att: withHelp({ civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, elite: unit.elite ?? 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
+    att: withHelp({ civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, elite: unit.elite ?? 0, works: unit.besieging === id ? unit.works ?? 0 : 0, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
       sea ? [] : helpersOf(state, civ, POS[id], [unit], null, pl.owner), POS[id], state),
     def: withHelp({ ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
       helpersOf(state, pl.owner, POS[id], [unit], id, civ), POS[id], state),
@@ -464,9 +465,6 @@ export const shipsAt = (state, id) => fleetOf(fleetAt(state, id));
 export function attack(state, armyId, id, luck = null, result = null) {
   const army = armyById(state, armyId);
   if (!canAttack(state, army, id)) return null;
-  // Saldırı kuşatmayı bitirir (kazansa da kaybetse de).
-  delete army.besieging;
-  delete army.besiegedSince;
   const pl = state.places[id];
   const from = { x: army.x, y: army.y };
   const sea = bySea(from, POS[id]);
@@ -494,6 +492,10 @@ export function attack(state, armyId, id, luck = null, result = null) {
     }
   }
   const sd = sides(state, army, army.owner, id);
+  // Saldırı kuşatmayı bitirir (kazansa da kaybetse de); kuşatmanın aletleri bu saldırıda kullanıldı (sd.att.works).
+  delete army.besieging;
+  delete army.besiegedSince;
+  delete army.works;
   const def = sd.def, walls = sd.walls, defGen = def.gen;
   // Takviye (bölüm 7b): iki tarafın yakındaki orduları; savaştan önceki askerleri (paylaştırmak için).
   const help = sd.att.help, defHelp = sd.def.help;
@@ -611,6 +613,7 @@ export function strike(state, armyId, targetId, luck = null, result = null) {
   if (!canStrike(state, army, b)) return null;
   delete army.besieging;
   delete army.besiegedSince;
+  delete army.works;
   const at = { x: b.x, y: b.y };
   const ev = {
     type: "battle", field: true, turn: state.turn, attacker: army.owner, defender: b.owner, place: nearestPlace(at), at,
@@ -736,6 +739,7 @@ function retreat(state, loser, winner, before, ratio, escaped = null) {
     Object.assign(loser, centre(c), { at: null, route: [], mp: 0 });
     delete loser.besieging;
     delete loser.besiegedSince;
+    delete loser.works;
     return true;
   }
   return false;

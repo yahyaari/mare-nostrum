@@ -833,7 +833,7 @@ function drawPlaces(ctx, cam, view, L) {
         tokens.push(fleetBox(a, s.x + before, s.y + 6 * zt, { moving: !!a.moving, flip: a.dir < 0 }));
         if (spot) beside[spot] = before + FLEET.tag * zt + tagW(a) * zt + 3;
       } else {
-        tokens.push({ x: s.x - 8 * zt + before, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), moving: !!a.moving, camp: !!a.camp });
+        tokens.push({ x: s.x - 8 * zt + before, y: s.y - 30 * zt, w: width(a), h: 32 * zt, army: a, label: label(a), moving: !!a.moving, camp: !!a.camp, works: a.works ?? 0 });
         if (spot) beside[spot] = before + width(a) + 3;
       }
     } else (at[a.at] ??= []).push(a);
@@ -917,6 +917,8 @@ function drawPlaces(ctx, cam, view, L) {
         tent(ctx, 1, h - 9, 9, army.owner);
         // Barbar kampı: çadırların önünde titreyen bir kamp ateşi (bağımsız ordudan ayırt edilsin).
         if (army.barb) campfire(ctx, -3, h + 1);
+        // Kuşatmanın aletleri (bölüm 20): çadırların önünde küçük koçbaşılar.
+        for (let i = 0; i < t.works; i++) ramGlyph(ctx, -14 + i * 7, h + 3);
       }
       // Karadaki ordunun gemileri varsa (limanda değil): ayağının altında küçük bir tekne.
       const boat = army.ships > 0;
@@ -968,6 +970,24 @@ function campfire(ctx, x, y) {
 }
 
 /** Kamp çadırı: krem bez, sahibinin renginde şerit, koyu kapı. (x, y) zeminin ortası. */
+/** Küçük koçbaşı (haritada kuşatanın kampında): çatılı sundurma, önünde kütük. */
+function ramGlyph(ctx, x, y) {
+  ctx.save();
+  ctx.fillStyle = "#5a3e22";
+  ctx.fillRect(x + 1, y - 2.2, 6, 1.4);
+  ctx.beginPath();
+  ctx.moveTo(x - 1, y);
+  ctx.lineTo(x + 2.5, y - 4.5);
+  ctx.lineTo(x + 6, y);
+  ctx.closePath();
+  ctx.fillStyle = "#7a5634";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(20,14,8,0.85)";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.restore();
+}
+
 function tent(ctx, x, y, s, owner) {
   ctx.beginPath();
   ctx.moveTo(x - s * 0.7, y);
