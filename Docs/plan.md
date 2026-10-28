@@ -7,7 +7,7 @@
 
 ## NEREDE KALDIK (28.10) - önce bunu oku
 
-Son commit: aşağıda 38. madde, hepsi push'lu, **2484 test** geçiyor, kayıt sürümü **20** (yeni alanlar isteğe bağlı:
+Son commit: aşağıda 39. madde, hepsi push'lu, **2491 test** geçiyor, kayıt sürümü **20** (yeni alanlar isteğe bağlı:
 `pl.spec`, `army.works` {ram, tower, catapult}, `army.workType`, `army.gear` {arms, armour}). 27.10 akşamından beri (madde 35-37):
 geç oyun canlı, müttefikler savaşa katılıyor; kuşatmada koçbaşı, şehrin yolu, 160. tur sonrası; sonra kullanıcı "keyifli
 olması, güzel görünmesi için ne yapabiliriz" dedi, önerdiğim yedi işe "sırayla hepsini yap" (madde 37). Kullanıcının
@@ -215,6 +215,13 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     playtest) önce Yeni oyun'a basar. `Tools/menufilm.mjs`.
     Sonraki adım (kullanıcı isteyince): yeni bir çağ - kendi yerleşimleri, medeniyetleri, yılı; newGame'in senaryoya göre
     kurması; season.js `yearOf` senaryonun başlangıç yılından.
+
+39. **Güçlü kaleler, kuşatma hazırlığı** (bu adım; kullanıcı 28.10: "kaleler başlangıçta güçlü olsun, çok kolay alıyorlar;
+    kale şehir kuşatmaya gidince büyüklüğe göre en az 1 tur kuşatma hazırlığı sürsün, kuşatılan medeniyet tepki verebilsin -
+    uzak bir yere şehir almaya gittim, o ara düşmanım 3 şehrimi hemen aldı"): kurallar.md 20. moves.js `prepOf`, `prepLeft`,
+    `prepared`, `inReach` (canAttack = inReach + hazırlık; attack yalnız inReach), `guardsOf` / `guarded`; ai.js `go` önce kuşatır;
+    öfke savaşı iki bilgisayar arasında barış döneminden sonra. Garnizonu büyütmek yiyeceği bozuyordu: yerine sur muhafızları.
+    Denge: ilk düşüş 38 -> 59, ayakta 288 -> 337. `Tools/prepfilm.mjs`.
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 

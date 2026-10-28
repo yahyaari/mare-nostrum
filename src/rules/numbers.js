@@ -179,6 +179,10 @@ export const N = {
   siegeBreach: 0.2, // bir kuşatma makinesi bölüğünün söktüğü sur bonusu payı (5 bölük suru tamamen açar)
   luck: 0.1, // ±%10
   winnerLoss: 0.5,
+  // Sur muhafızları (kullanıcı 28.10: "kaleler başlangıçta güçlü olsun, çok kolay alıyorlar, hiç karşı koyamıyor"): her yerin
+  // kendi bekçileri - yalnız saldırıya karşı piyade gibi dövüşür, yiyecek yemez, kuşatmada erimez, ölen yerine yenisi gelir.
+  // (Garnizonu büyütmek başlangıçta herkesin yiyeceğini eksiye düşürüyordu.)
+  guards: { castle: 30, capital: 30, walled: 20, town: 10 },
   castleWall: 1.5,
   castleVolley: 2,
   cityWall: 1.25,
@@ -396,6 +400,9 @@ export const N = {
   // +`starve` eritir (sahada uzaktan taş atar).
   siege: {
     starve: 0.1, perEngines: 0.02, max: 0.25, loyalty: 5, camp: 0.03,
+    // Kuşatma hazırlığı (kullanıcı 28.10): bir yere saldırmadan önce en az bu kadar tur kuşatılır - sursuz kasaba, surlu
+    // şehir, kale, başkent ya da en büyük şehir. Kuşatılan taraf bu arada yardım gönderir.
+    prep: { town: 1, walled: 2, castle: 2, great: 3 },
     works: { crew: 20, max: 3, kinds: { ram: { breach: 1 }, tower: { breach: 0.5, power: 0.08 }, catapult: { breach: 0.5, starve: 0.02 } } },
   },
   // Arazi ve mevsim (bölüm 22): nehir geçen yoldan saldıran x0.85, dağ geçidini savunan x1.25.

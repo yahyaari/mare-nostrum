@@ -261,7 +261,8 @@ bölüğü 10 asker; Asker bas sekmesinde yıldızlı beşinci kart, medeniyet s
 - **Tarafsızın toprağı** (kullanıcı 22.10: "girilsin ama ilişki bozulsun"): toprak, haritada
   çizildiği gibi en yakın yerleşimin (3.2 birime kadar). Tarafsız birinin toprağında (yerleşimin
   dışında) duran her ordu için o medeniyet turda bir öfkelenir; kimse girmeyince yarım söner. Öfke
-  3 olunca bilgisayar savaş açar - barış süresini beklemeden (gücü oyuncunun en az 0.7 katıysa).
+  3 olunca bilgisayar savaş açar - barış süresini beklemeden (gücü oyuncunun en az 0.7 katıysa). İki bilgisayar arasında ise
+  ilk 12 turluk barış döneminden sonra (28.10; kuşatma hazırlığı gelince sınırda bekleyen ordular barış döneminde savaş açtırıyordu).
   Öfkeli medeniyet ittifak istemez. Oyuncu yolu bir tarafsızın toprağından geçerse önce sorulur.
   Bilgisayar tarafsızların toprağından kaçınır.
 - **Gemiler:** gemileri bütün askerini taşıyabilen ordu kıyıdan denize açılır, istediği kıyıya
@@ -974,6 +975,23 @@ Surlu bir yere (kale, başkent, 3. seviye ve üstü şehir) **hemen saldırmak y
 - **Kuşatma kalkar:** ordu yürüyünce (o an), saldırınca (kazansa da kaybetse de), oyuncu
   "Kuşatmayı kaldır" deyince ya da yer artık düşman değilse (barış, ittifak). Kuşatan ordu
   istediği tur saldırabilir: aç kalmış garnizon zayıftır.
+- **Kuşatma hazırlığı** (kullanıcı 28.10: "kale şehir kuşatmaya gidince büyüklüğe göre en az 1 tur kuşatma hazırlığı sürsün,
+  kuşatılan medeniyet tepki verebilsin; uzak bir yere şehir almaya gitmiştim, o ara düşmanım 3 şehrimi hemen aldı"): bir
+  yerleşime ancak bir süre kuşattıktan sonra saldırılır - sursuz kasaba 1, surlu şehir ve kale 2, başkent ya da 5. seviye
+  şehir 3 tur (moves.js `prepOf`, `prepLeft`, `prepared`; `N.siege.prep`). Sursuz yer de kuşatılır (açlık onda da işler).
+  Denizden çıkarma ve barbar akınları beklemez. Saldırı penceresinde hazırlık bitmediyse Sonucu gör / Savaş kapalı, Kuşat
+  açık ve nedeni yazılı; ordu kartında "Saldırı · 2 tur"; haritada fareyle "Kuşat · saldırı 2 tur sonra hazır".
+  Bilgisayar da önce kuşatır (ai.js `go`), hazırlık bitince saldırır: kuşatılan haber alır ("X, Y önünde kuşatma kurdu") ve
+  yardım gönderebilir. `canAttack` hazırlığı da sorar (oyuncunun ve bilgisayarın kararı); `attack`ın kendisi menzile
+  (`inReach`) bakar - sana gelen saldırı çözülürken hazırlık zaten bitmişti. `node Tools/prepfilm.mjs`.
+- **Sur muhafızları** (kullanıcı 28.10: "kaleler başlangıçta güçlü olsun, çok kolay alıyorlar, hiç karşı koyamıyor"): her
+  yerin kendi bekçileri - kale ve başkent 30, surlu şehir 20, sursuz kasaba 10 (moves.js `guardsOf`; `N.guards`). Yalnız
+  saldırıya karşı piyade gibi dövüşürler (otomatik savaşta, sahada, akına karşı), yiyecek yemezler, kuşatmada erimezler,
+  ölenlerin yerine yenisi gelir. Bağımsız yerlerde yok (zaten büyük garnizonları var), onların hazırlığı da hep 1 tur
+  (yardıma gelecek medeniyetleri yok; erken yayılma eski hızında). Savaşın dökümünde "+30 sur muhafızı"; soldaki kartta surun yanında. (Önce garnizonları
+  büyüttüm: kale 20 piyade + 20 okçu... herkesin yiyeceği başlangıçta eksiye düşüyordu - geri alındı.)
+- Denge (70 oyun, hazırlık ve muhafızlar birlikte): ilk düşüş 38 -> 59 (en erken 18 -> 26), ayakta kalan 288 -> 337. Zayıf
+  oynayan tarayıcı test oyuncusu önce 20-24. turda düşüyordu, şimdi 21. turda 3 yeriyle ayakta.
 - **Saldırı penceresi** kuşatmanın turluk erimesini ve yaklaşık kaç turda teslim olacağını
   söyler; ordu kartı "Kuşatıyor: X · n. tur · içeride N asker" gösterir.
 - **Bilgisayar da kuşatır:** komşusunda kolay hedef yoksa, surlu bir hedefin savunanlarının en

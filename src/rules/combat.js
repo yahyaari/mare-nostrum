@@ -273,6 +273,7 @@ export function explain(att, def, walls) {
     const fort = tech(def, "walls") > 1 ? "Tech" : "";
     put(D, (walls === "castle" ? "castleWalls" : "cityWalls") + fort, breach((walls === "castle" ? N.castleWall : N.cityWall) * tech(def, "walls")));
   }
+  if (def.guards) D.push(["guards", def.guards]);
   put(D, "general", might(def.gen));
   put(D, "veteran", def.vet ?? 1);
   put(D, "pass", def.terrain ?? 1);

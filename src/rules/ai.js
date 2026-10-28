@@ -11,7 +11,7 @@ import { appoint, appointInfo, officerFor } from "./generals.js";
 import { rebels } from "./loyalty.js";
 import { byId, neighbours } from "./graph.js";
 import {
-  access, advance, attack, avoidFor, bySea, canAttack, canStrike, defenders, forecast, forecastField, hostile, nearest, order, reachOf, refresh, routeTo, strike, wallsOf,
+  access, advance, attack, avoidFor, bySea, canAttack, canStrike, defenders, forecast, forecastField, hostile, inReach, nearest, order, prepared, reachOf, refresh, routeTo, strike, wallsOf,
 } from "./moves.js";
 import { POS, centre, dist } from "./map.js";
 import { BUILDABLE, wondersAt } from "./wonders.js";
@@ -95,7 +95,9 @@ function diplomacy(state, civ, events) {
     const o = c.id;
     if (o === civ || !state.civs[o].alive || !canDeclare(state, civ, o)) continue;
     if (isHuman(state, o) && (state.truce[key(civ, o)] ?? 0) > state.turn) continue;
-    if (angerOf(state, civ, o) >= persona(civ).anger && me >= N.anger.ratio * strength(state, o)) events.push(declareWar(state, civ, o));
+    // Oyuncu bilerek girerse barış süresi beklenmez; iki bilgisayar arasında öfke savaşı barış döneminden sonra (kuşatmalar
+    // uzayınca sınırda bekleyen ordular erken savaş açtırıyordu).
+    if ((state.turn >= N.aiPeace || isHuman(state, o)) && angerOf(state, civ, o) >= persona(civ).anger && me >= N.anger.ratio * strength(state, o)) events.push(declareWar(state, civ, o));
   }
   if (state.turn < Math.min(N.aiPeace, level.peace)) return;
   // Harikalar zaferine giden medeniyet: herkes için hedef (gücü denkse savaş açılır).
@@ -450,7 +452,7 @@ function bestStrike(state, civ, a) {
   const near = N.reach.hold + 0.3, inward = 0.6;
   let best = null, score = -Infinity;
   for (const id of places) {
-    const here = canAttack(state, a, id);
+    const here = inReach(state, a, id);
     const n = here ? { cell: -1, cost: 0 } : nearest(f, POS[id], near);
     if (!(n.cost + (here ? 0 : inward) < a.mp - 1e-6)) continue;
     const at = here ? a : centre(n.cell);
@@ -473,11 +475,18 @@ function bestStrike(state, civ, a) {
 }
 
 /** Hedefe yürü ve saldır. Dönen olay ya da null. */
-function go(state, a, t) {
+function go(state, a, t, events = []) {
   // Oyuncuya saldırı: oyuncu kendi turunda karar verir (incoming.js; sonucu gör ya da kendin yönet).
   if (t.kind === "place") {
-    if (!canAttack(state, a, t.id)) order(state, a.id, { place: t.id });
-    if (!state.armies.includes(a) || !canAttack(state, a, t.id) || deferAttack(state, a, t)) return null;
+    if (!inReach(state, a, t.id)) order(state, a.id, { place: t.id });
+    if (!state.armies.includes(a) || !inReach(state, a, t.id)) return null;
+    // Kuşatma hazırlığı (bölüm 20): önce kuşat, hazırlık bitince saldır - kuşatılan bu arada yardım gönderir.
+    if (!prepared(state, a, t.id)) {
+      if (a.besieging !== t.id && canBesiege(state, a, t.id)) besiege(state, a.id, t.id, events);
+      a.mp = 0;
+      return null;
+    }
+    if (deferAttack(state, a, t)) return null;
     return attack(state, a.id, t.id);
   }
   const b = armyById(state, t.id);
@@ -536,7 +545,7 @@ function military(state, civ, events) {
     if (!alive(a) || a.mp <= 0 || men(a) <= 0) continue;
     const t = bestStrike(state, civ, a);
     if (t) {
-      const ev = go(state, a, t);
+      const ev = go(state, a, t, events);
       if (ev) events.push(ev);
       continue;
     }
@@ -571,7 +580,7 @@ function military(state, civ, events) {
     const dry = { ...probe, ships: 0, trireme: 0, quinq: 0 };
     const byLand = men(dry) > 0 && bestStrike(state, civ, dry)?.id === t.id;
     const a = muster(state, id, byLand ? { ...force, ships: 0, trireme: 0, quinq: 0 } : force);
-    const ev = a && go(state, a, t);
+    const ev = a && go(state, a, t, events);
     if (ev) events.push(ev);
   }
 

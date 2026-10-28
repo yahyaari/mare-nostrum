@@ -9,8 +9,7 @@ import { DEFAULT_SCENARIO } from "./data/scenarios.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace, proposeTrade } from "./rules/diplomacy.js";
 import { roadBetween } from "./rules/graph.js";
 import {
-  access, attack, canAttack, canStrike, defenders, fieldSides, navalSides, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, sides, strike, turnsFor, wallsOf,
-} from "./rules/moves.js";
+  access, attack, canAttack, canStrike, defenders, fieldSides, navalSides, forecast, forecastField, hostile, isFoe, menace, mpMax, nearestPlace, needsShips, order, routeTo, sides, strike, turnsFor, wallsOf, inReach, prepLeft } from "./rules/moves.js";
 import { PLACE_CELL, POS, cellOf, centre, dist, isLand, pathCost, regionOf, search, smooth, stepCost } from "./rules/map.js";
 import {
   VERSION, aliveHumans, armiesAt, armyById, buildShip, canSail, cancelBuild, chosen, detach, fleetOf, grainCap, holdGames, humansOf, merge, rush, men, migrate, muster, newGame, placesOf, recruit, startWonder, station, upgrade,
@@ -597,7 +596,7 @@ function mapView() {
   if (a) {
     view.marks = {};
     // Menzildeki saldırılabilecek yerler tahmin renginde.
-    if (a.mp > 0) for (const id of Object.keys(game.places)) if (canAttack(game, a, id)) view.marks[id] = forecast(game, a, a.owner, id).odds;
+    if (a.mp > 0) for (const id of Object.keys(game.places)) if (inReach(game, a, id)) view.marks[id] = forecast(game, a, a.owner, id).odds;
     // Seçili ordunun kalan yolu, her turun sonu işaretli.
     if (a.route.length) view.route = routeShape(a, [cellOf(a.x, a.y), ...a.route]);
     if (ui.preview) view.preview = ui.preview;
@@ -1621,6 +1620,8 @@ function goTo(a, target) {
     if (hostile(k) && dist(a, POS[id]) <= N.reach.strike) {
       if (a.mp <= 0) return { kind: "spent" };
       if (canAttack(game, a, id)) return { kind: "attack", odds: forecast(game, a, a.owner, id).odds };
+      // Kuşatma hazırlığı (bölüm 20): önce kuşatılır; pencere açılır, Kuşat düğmesiyle.
+      if (inReach(game, a, id)) return { kind: "siege", turns: prepLeft(game, a, id), odds: forecast(game, a, a.owner, id).odds };
       return { kind: "ships" };
     }
   } else if (target.army) {
@@ -1650,7 +1651,7 @@ function command(target) {
   ui.tip = null;
   ui.preview = null;
   hoverKey = "";
-  if (go.kind === "attack") {
+  if (go.kind === "attack" || go.kind === "siege") {
     ui.modal = { kind: "attack", army: a.id, id: target.place };
     return redraw();
   }

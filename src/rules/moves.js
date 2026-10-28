@@ -316,10 +316,23 @@ export function sides(state, unit, civ, id) {
   return {
     att: withHelp({ civ, inf: unit.inf ?? 0, arch: unit.arch ?? 0, cav: unit.cav ?? 0, siege: unit.siege ?? 0, elite: unit.elite ?? 0, works: unit.besieging === id ? unit.works ?? 0 : 0, gear: unit.gear ?? null, gen: unit.general ?? null, vet: veteranMul(unit.xp), terrain: ter.att, mods: modsOf(state, civ) },
       sea ? [] : helpersOf(state, civ, POS[id], [unit], null, pl.owner), POS[id], state),
-    def: withHelp({ ...defenders(state, id), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), gear: insideGear(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
+    def: withHelp({ ...guarded(defenders(state, id), guardsOf(state, id)), gen: bestAt(state, id, pl.owner), vet: insideVet(state, id), gear: insideGear(state, id), terrain: ter.def, mods: modsOf(state, pl.owner) },
       helpersOf(state, pl.owner, POS[id], [unit], id, civ), POS[id], state),
     walls: wallsOf(state, id), ter, sea,
   };
+}
+
+/** Savunanlara sur muhafızları piyade olarak katılır (`guards`: kaçı muhafız; savaşın dökümü için). */
+const guarded = (d, g) => ({ ...d, inf: (d.inf ?? 0) + g, guards: g });
+
+/** Sur muhafızları (bölüm 7): kalede ve başkentte 30, surlu şehirde 20, sursuz kasabada 10. */
+export function guardsOf(state, id) {
+  const G = N.guards;
+  // Bağımsızların zaten büyük garnizonu var (N.start.free); muhafız medeniyetlerin yerlerinde.
+  if (!state.places[id].owner) return 0;
+  if (info(id).kind === "castle") return G.castle;
+  if (info(id).capital) return G.capital;
+  return wallsOf(state, id) ? G.walled : G.town;
 }
 
 /** İçeridekilerin donanımı (bölüm 6d): orduların donanımı kişi sayısıyla tartılı (garnizon donanımsız). */
@@ -440,8 +453,34 @@ export function forecast(state, unit, civ, id) {
   return { ...land, sea };
 }
 
-/** Saldırabilir mi: düşman ya da bağımsız yer, menzilde, hareketi var; denizdense gemileri yetiyor. */
-export function canAttack(state, army, id) {
+/**
+ * Kuşatma hazırlığı (bölüm 20; kullanıcı 28.10: "kale şehir kuşatmaya gidince büyüklüğe göre en az 1 tur kuşatma hazırlığı
+ * sürsün, kuşatılan medeniyet tepki verebilsin"): bu yere saldırmadan önce kaç tur kuşatılmalı.
+ */
+export function prepOf(state, id) {
+  const P = N.siege.prep;
+  // Bağımsız yerin yardıma gelecek bir medeniyeti yok: hep bir tur (erken yayılma eski hızında kalsın).
+  if (!state.places[id].owner) return P.town;
+  if (info(id).capital || state.places[id].level >= N.maxCity) return P.great;
+  if (info(id).kind === "castle") return P.castle;
+  return wallsOf(state, id) ? P.walled : P.town;
+}
+
+/** Hazırlığın kalan turu (0: saldırıya hazır). Denizden çıkarma ve barbar akınları beklemez. */
+export function prepLeft(state, army, id) {
+  if (!army || bySea(army, POS[id]) || army.raider || army.bandit || army.barbarian || army.horde) return 0;
+  if (army.besieging !== id) return prepOf(state, id);
+  return Math.max(0, prepOf(state, id) - (state.turn - (army.besiegedSince ?? state.turn)));
+}
+
+/** Saldırıya hazır mı: bu yeri yeterince kuşattı (ya da denizden, akından). */
+export const prepared = (state, army, id) => prepLeft(state, army, id) === 0;
+
+/** Şimdi saldırabilir mi (oyuncunun ve bilgisayarın kararı): menzilde ve hazırlık bitti. */
+export const canAttack = (state, army, id) => inReach(state, army, id) && prepared(state, army, id);
+
+/** Menzilde mi: düşman ya da bağımsız yer, menzilde, hareketi var; denizdense gemileri yetiyor (kuşatmaya da yeter). */
+export function inReach(state, army, id) {
   if (!army || army.mp <= 0 || men(army) <= 0 || army.at === id) return false;
   if (!hostile(access(state, army.owner, id))) return false;
   if (dist(army, POS[id]) > N.reach.strike + 1e-9) return false;
@@ -473,7 +512,8 @@ export const shipsAt = (state, id) => fleetOf(fleetAt(state, id));
  */
 export function attack(state, armyId, id, luck = null, result = null) {
   const army = armyById(state, armyId);
-  if (!canAttack(state, army, id)) return null;
+  // Hazırlığı karar verenler sorar (canAttack: oyuncunun penceresi, bilgisayar); saldırının kendisi menzile bakar.
+  if (!inReach(state, army, id)) return null;
   const pl = state.places[id];
   const from = { x: army.x, y: army.y };
   const sea = bySea(from, POS[id]);

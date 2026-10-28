@@ -17,7 +17,7 @@ import { DEFAULT_SCENARIO, SCENARIOS, scenarioOf } from "../data/scenarios.js";
 import { angerOf, canDeclare, canPropose, canTrade } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import {
-  access, canAttack, canStrike, defenders, fieldSides, forecast, forecastField, fortOf, hostile, menace, mpMax, nearestPlace, shipsAt, sides, wallsOf,
+  access, canAttack, canStrike, defenders, fieldSides, forecast, forecastField, fortOf, guardsOf, hostile, inReach, menace, mpMax, nearestPlace, prepLeft, prepOf, shipsAt, sides, wallsOf,
 } from "../rules/moves.js";
 import { POS, cellOf, centre, dist, isLand, isMountain, placeAtCell } from "../rules/map.js";
 import { intelOf, spyAt, spyInfo } from "../rules/spies.js";
@@ -1610,6 +1610,7 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
     const acts = [];
     if (a.besieging) {
       if (canAttack(game, a, a.besieging)) acts.push({ label: T.attack, act: { do: "attackAsk", army: a.id, id: a.besieging }, main: true });
+      else acts.push({ label: fill(T.assaultIn, prepLeft(game, a, a.besieging)), act: null, off: true, tip: [T.attack, fill(T.prepLeft, prepLeft(game, a, a.besieging)), T.prepWhy] });
       acts.push({ label: T.liftSiege, act: { do: "lift", army: a.id } });
     }
     acts.push({ label: "➜ " + T.marchBtn, act: { do: "aim", army: a.id }, main: !a.besieging, tip: [T.marchBtn, T.tipMarchBtn] });
@@ -1750,7 +1751,7 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
     y += h;
   };
   const walls = wallsOf(game, id);
-  row(T.wallsShort, wallsText(walls, T), INK.ink);
+  row(T.wallsShort, `${wallsText(walls, T)} · ${fill(T.guardsN, guardsOf(game, id))}`, INK.ink);
   if (old) {
     text(ctx, fill(T.spyOld, f.age), x, y, { italic: true, bold: true, size: 12, color: INK.warn });
     y += 18;
@@ -1823,7 +1824,7 @@ function sideCard(ctx, cam, game, ui, boxes, T, bottomTop) {
     text(ctx, tail, sx + lw + 6 + 16 + measure(ctx, String(si.cost), { bold: true, size: 13 }), b.y + 22, { bold: true, size: 13, color: c });
     by -= 42;
   }
-  if (army && canAttack(game, army, id)) {
+  if (army && inReach(game, army, id)) {
     const e = forecast(game, army, me, id);
     const [label] = oddsLabel(e.odds, T);
     btn({ label: `${T.attack} · ${label}`, main: true, act: { do: "attackAsk", army: army.id, id }, tip: [T.attack, `${T.odds}: ${label}`, fill(T.expect, e.lost, e.killed)] });
@@ -2040,6 +2041,7 @@ export function goLine(go, lang) {
   const hills = go.cells?.length && isMountain(go.cells[go.cells.length - 1]) ? ` · ${T.mountainNote}` : "";
   if (go.kind === "walk") return [`${T.tipWalk} · ${when(go.turns)}${hills}`, "warn"];
   if (go.kind === "attack") return [`${T.tipAttack} · ${T.odds}: ${oddsLabel(go.odds, T)[0]}`, tone(go.odds)];
+  if (go.kind === "siege") return [fill(T.tipSiegeGo, go.turns), "warn"];
   if (go.kind === "strike") return [`${T.tipStrike} · ${T.odds}: ${oddsLabel(go.odds, T)[0]}`, tone(go.odds)];
   if (go.kind === "approach") return [`${T.tipWalk} · ${when(go.turns)} → ${T.attack}`, "warn"];
   if (go.kind === "spent") return [T.tipSpent, "bad"];
@@ -2117,7 +2119,7 @@ const ownArmy = (g, ui) => {
   return a && a.owner === g.player && a.mp > 0.05 ? a : null;
 };
 /** Seçili ordunun menzilinde saldırılabilecek, umutsuz olmayan bir yer. */
-const prey = (g, a) => Object.keys(g.places).find((n) => canAttack(g, a, n) && forecast(g, a, a.owner, n).odds !== "hopeless");
+const prey = (g, a) => Object.keys(g.places).find((n) => inReach(g, a, n) && forecast(g, a, a.owner, n).odds !== "hopeless");
 /** Bir ordunun ekrandaki yeri (ipucu balonu için). */
 const armySpot = (cam, a) => {
   const s = toScreen(cam, a.x, a.y);
@@ -2308,7 +2310,9 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   }
   const pow = sea && b ? null : fight(sd.att, sd.def, walls);
   const ex = sea && b ? { att: [], def: [] } : explain(sd.att, sd.def, walls);
-  const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id), N.siege.works.max), 552, { size: 12, italic: true }) : [];
+  const left = b ? 0 : prepLeft(game, a, m.id);
+  const prep = left ? wrap(ctx, a.besieging === m.id ? fill(T.prepLeft, left) + ". " + T.prepWhy : fill(T.prepNeed, prepOf(game, m.id)), 552, { size: 12, italic: true }) : [];
+  const hint = [...prep, ...(sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id), N.siege.works.max), 552, { size: 12, italic: true }) : [])];
   const modRows = Math.max(ex.att.length, ex.def.length);
   const r = modalFrame(ctx, cam, boxes, 360 + modRows * 18 + (sea ? 20 : 0) + hint.length * 17, 600);
   const x = r.x + 22, w = r.w - 44, cw = (w - 16) / 2;
@@ -2375,9 +2379,9 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   } else y += 6;
 
   // Artılar ve eksiler: her sütun kendi tarafının; yeşil o tarafa yarar, kırmızı zarar.
-  const fmt1 = (key, v) => (key === "engines" || key === "works" ? fill(T.pct, Math.round(v * 100))
+  const fmt1 = (key, v) => (key === "guards" ? `+${v}` : key === "engines" || key === "works" ? fill(T.pct, Math.round(v * 100))
     : key === "siegeGeneral" ? "−" + fill(T.pct, 50) : (v > 1 ? "+" : "−") + fill(T.pct, Math.round(Math.abs(v - 1) * 100)));
-  const good = (key, v) => key === "engines" || key === "works" || key === "siegeGeneral" || v > 1;
+  const good = (key, v) => key === "engines" || key === "works" || key === "guards" || key === "siegeGeneral" || v > 1;
   const list = (bx, mods) => mods.forEach(([key, v], i) => {
     const ly = y + 12 + i * 18;
     const s = fmt1(key, v);
@@ -2401,9 +2405,9 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   // Taktik savaş: karada savunan varsa; denizde filo filoya (deniz savaşı sahada, bölüm 29h).
   const tactical = (!sea && men(theirs) > 0) || (sea && !!b && fleetOf(b) > 0 && fleetOf(a) > 0);
   const btns = [
-    { label: tactical ? T.seeResult : T.attack, main: true, act: { do: "attack" }, tip: [T.seeResult, T.seeResultTip] },
-    ...(tactical ? [{ label: T.fightIt, main: true, act: { do: "battleStart" }, tip: [T.fightIt, T.fightItTip] }] : []),
-    ...(sg ? [{ label: T.besiege, act: { do: "besiege" } }] : []),
+    { label: tactical ? T.seeResult : T.attack, main: !left, off: !!left, act: { do: "attack" }, tip: [T.seeResult, T.seeResultTip, left ? [fill(T.prepLeft, left), "bad"] : null] },
+    ...(tactical ? [{ label: T.fightIt, main: !left, off: !!left, act: { do: "battleStart" }, tip: [T.fightIt, T.fightItTip, left ? [fill(T.prepLeft, left), "bad"] : null] }] : []),
+    ...(sg ? [{ label: T.besiege, main: !!left, act: { do: "besiege" } }] : []),
     { label: T.cancel, act: { do: "close" } },
   ];
   const bw = (r.w - 40 - 8 * (btns.length - 1)) / btns.length, by = r.y + r.h - 62;

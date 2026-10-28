@@ -7,7 +7,7 @@
 // attack / strike, barbarians.js raid) - taktik savaştaysa hazır sonuçla. Yalnız gerçek oyunda (\`state.defer\`,
 // main.js açar) ve tek oyunculu oyunda; bot oyunları ve testler eskisi gibi hemen çözer.
 
-import { attack, canAttack, canStrike, fieldSides, mpMax, sides, strike, navalSides } from "./moves.js";
+import { attack, canStrike, inReach, fieldSides, mpMax, sides, strike, navalSides } from "./moves.js";
 import { armyById, humansOf, isHuman } from "./state.js";
 import { raidOn } from "./barbarians.js";
 import { cellOf, isLand } from "./map.js";
@@ -80,7 +80,8 @@ export function resolveIncoming(state, it, result = null, luck = null) {
   else {
     // Saldıran kapıda bekledi: saldırabilmesi için hareketi geri gelir (saldırı onu yine sıfırlar).
     a.mp = Math.max(a.mp, mpMax(a));
-    if (it.kind === "place" && canAttack(state, a, it.target)) ev = attack(state, a.id, it.target, luck, result);
+    // Hazırlık bilgisayar saldırıya karar verirken bitmişti (ai.js go); çözülürken menzil yeter.
+    if (it.kind === "place" && inReach(state, a, it.target)) ev = attack(state, a.id, it.target, luck, result);
     else if (it.kind === "army") { const b = armyById(state, it.target); if (canStrike(state, a, b)) ev = strike(state, a.id, b.id, luck, result); }
     if (armyById(state, a.id)) a.mp = 0;
   }

@@ -7,14 +7,17 @@
 // yerinde bir alet yapar (`works`: koçbaşı, merdiven; en çok N.siege.works.max): saldırınca surun bir kısmını söker
 // (combat.js enginesOf), taktik savaşta koçbaşı olarak sahaya çıkar. Ya aç bırakıp beklemek ya aletleri yapıp saldırmak.
 
-import { access, bySea, canAttack, capture, defenders, hostile, wallsOf } from "./moves.js";
+import { access, bySea, capture, defenders, hostile, inReach } from "./moves.js";
 import { POS, dist } from "./map.js";
 import { N, UNITS } from "./numbers.js";
 import { armyById, empty, fleetOf, men } from "./state.js";
 
-/** Bu ordu bu yeri kuşatabilir mi: saldırabileceği (menzilde), surlu, karadan bir yer. */
+/**
+ * Bu ordu bu yeri kuşatabilir mi: menzilde, karadan bir yer (kullanıcı 28.10: her yere saldırmadan önce kuşatma hazırlığı -
+ * sursuz kasabaya da; moves.js prepOf).
+ */
 export function canBesiege(state, army, id) {
-  return !!army && canAttack(state, army, id) && !!wallsOf(state, id) && !bySea(army, POS[id]) && army.besieging !== id;
+  return !!army && inReach(state, army, id) && !bySea(army, POS[id]) && army.besieging !== id;
 }
 
 /** Yerinde yapılan alet türleri (sırasıyla; bölüm 20). */
@@ -86,7 +89,7 @@ export function tickSieges(state, events = []) {
     const id = a.besieging;
     if (!id) continue;
     const ok = state.armies.includes(a) && men(a) > 0 && !a.at && dist(a, POS[id]) <= N.reach.strike + 1e-9
-      && hostile(access(state, a.owner, id)) && !!wallsOf(state, id);
+      && hostile(access(state, a.owner, id));
     if (!ok) { lift(state, a.id); continue; }
     const pl = state.places[id];
     const r = siegeRate(a);

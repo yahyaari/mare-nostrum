@@ -375,7 +375,12 @@ section("Hareket ve diplomasi (bölüm 6, 8)");
   check("ertesi tur kendiliğinden ilerler", b.route.length < left);
   for (let t = 0; t < 6 && b.route.length; t++) { M.refresh(s2, "rome"); M.advance(s2, b); }
   check("düşmanın kapısının önünde durur: menzilde, içinde değil", !b.at && !b.route.length && MAP.dist(b, POS.mediolanum) <= N.reach.strike, MAP.dist(b, POS.mediolanum));
-  check("menzildeki yere saldırabilir", M.canAttack(s2, b, "mediolanum"));
+  // Kuşatma hazırlığı (kullanıcı 28.10): menzildeki yere önce kuşatma, hazırlık bitince saldırı.
+  check("menzildeki yere hemen saldırılmaz: önce kuşatma hazırlığı", M.inReach(s2, b, "mediolanum") && !M.canAttack(s2, b, "mediolanum") && M.prepLeft(s2, b, "mediolanum") === M.prepOf(s2, "mediolanum"));
+  b.besieging = "mediolanum";
+  b.besiegedSince = s2.turn - M.prepOf(s2, "mediolanum");
+  check("hazırlık kadar kuşatılan yere saldırılır", M.canAttack(s2, b, "mediolanum"));
+  delete b.besieging;
   const mp = b.mp;
   b.mp = 0;
   check("hareketi bitmiş ordu saldıramaz", !M.canAttack(s2, b, "mediolanum"));
@@ -843,7 +848,8 @@ section("Barbarlar (bölüm 26)");
   r.places.ariminum.inf = 0; r.places.ariminum.arch = 0;
   r.civs.rome.money = 100;
   const pop0 = r.places.ariminum.pop;
-  const raider = { id: r.nextArmy++, owner: null, barbarian: true, raider: true, target: "ariminum", at: null, ...before({}, "ariminum"), inf: 40, arch: 0, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, mp: 4, route: [], general: null, xp: 0 };
+  // 90 akıncı: kalenin 30 sur muhafızını da yenecek kadar.
+  const raider = { id: r.nextArmy++, owner: null, barbarian: true, raider: true, target: "ariminum", at: null, ...before({}, "ariminum"), inf: 90, arch: 0, cav: 0, siege: 0, ships: 0, trireme: 0, quinq: 0, mp: 4, route: [], general: null, xp: 0 };
   r.armies.push(raider);
   r.barbarians = { lastCamp: r.turn };
   check("akıncılar yakındaki yere tehdit", M.menace(r, "ariminum") > 0);
@@ -3287,7 +3293,7 @@ const SG = await import("../src/rules/siege.js");
   let { s, a } = setup();
   check("ordu Mediolanum'un önünde, karada, menzilde", !a.at && MAP.isLand(MAP.cellOf(a.x, a.y)) && MAP.dist(a, POS.mediolanum) <= N.reach.strike);
   s.places.mediolanum.level = 2;
-  check("sursuz yer kuşatılmaz", !M.wallsOf(s, "mediolanum") && !SG.canBesiege(s, a, "mediolanum"));
+  check("sursuz yer de kuşatılır, hazırlığı 1 tur", !M.wallsOf(s, "mediolanum") && SG.canBesiege(s, a, "mediolanum") && M.prepOf(s, "mediolanum") === N.siege.prep.town);
   s.places.mediolanum.level = 3;
   check("3. seviye şehir surlu: kuşatılabilir", SG.canBesiege(s, a, "mediolanum"));
   const t = S.newGame("rome", 7);
@@ -3358,6 +3364,37 @@ const SG = await import("../src/rules/siege.js");
   const slow = SG.turnsToFall(s, a, "mediolanum");
   a.siege = 40;
   check("makineyle teslim süresi kısalır", SG.turnsToFall(s, a, "mediolanum") < slow && slow > 3);
+
+  // Kuşatma hazırlığı ve sur muhafızları (kullanıcı 28.10: "kaleler başlangıçta güçlü olsun, çok kolay alıyorlar; kale
+  // şehir kuşatmaya gidince büyüklüğe göre en az 1 tur kuşatma hazırlığı sürsün, kuşatılan medeniyet tepki verebilsin").
+  {
+    const q = S.newGame("rome", 7);
+    const castle = Object.keys(q.places).find((id) => byId[id].kind === "castle"), cap = "rome";
+    q.places.mediolanum.level = 2;
+    q.places.mediolanum.owner = "gaul"; // bağımsız yerde muhafız yok, hazırlık hep 1 tur
+    check("bağımsız yer: muhafız yok, hazırlık 1 tur", (() => { const o = S.newGame("rome", 7); o.places.mediolanum.level = 3; return M.guardsOf(o, "mediolanum") === 0 && M.prepOf(o, "mediolanum") === 1; })());
+    check("hazırlık: sursuz kasaba 1, surlu şehir ve kale 2, başkent 3 tur", M.prepOf(q, "mediolanum") === 1 && M.prepOf(q, castle) === 2 && M.prepOf(q, cap) === 3
+      && (() => { q.places.mediolanum.level = 3; const w = M.prepOf(q, "mediolanum"); q.places.mediolanum.level = 2; return w === 2; })());
+    check("sur muhafızları: kale ve başkent 30, surlu şehir 20, kasaba 10", M.guardsOf(q, castle) === 30 && M.guardsOf(q, cap) === 30 && M.guardsOf(q, "mediolanum") === 10);
+    const army = before(S.formArmy(q, "ariminum", 10, 0), "mediolanum");
+    army.inf = 150;
+    const sd = M.sides(q, army, "rome", "mediolanum"), CX = await import("../src/rules/combat.js");
+    check("muhafızlar savunanlara piyade olarak katılır, dökümde satırı", sd.def.inf === S.men(M.defenders(q, "mediolanum")) - (M.defenders(q, "mediolanum").arch ?? 0) + 10 && CX.explain(sd.att, sd.def, sd.walls).def.some(([k, v]) => k === "guards" && v === 10));
+    // Bilgisayar önce kuşatır, hazırlık bitince saldırır; kuşatılanın haberi olur.
+    const r = S.newGame("gaul", 7);
+    const ra = before(S.formArmy(r, "ariminum", 10, 0), "mediolanum");
+    ra.inf = 260;
+    r.places.ariminum.inf = 20;
+    for (const id of Object.keys(r.places)) if (id !== "mediolanum" && r.places[id].owner === null) r.places[id].owner = "egypt";
+    const { aiTurn: aiP } = await import("../src/rules/ai.js");
+    const ev1 = [];
+    aiP(r, "rome", ev1);
+    check("bilgisayar kolay hedefe de önce kuşatma kurar (haber), hemen saldırmaz", r.places.mediolanum.owner === null && r.armies.some((x) => x.besieging === "mediolanum") && ev1.some((e) => e.type === "siege" && e.place === "mediolanum"));
+    r.turn += M.prepOf(r, "mediolanum");
+    for (const x of r.armies) if (x.besieging) x.mp = 4;
+    aiP(r, "rome", []);
+    check("hazırlık bitince saldırır", r.places.mediolanum.owner === "rome");
+  }
 
   // Yerinde aletler (kullanıcı 28.10): kuşatan ordu her tur bir koçbaşı yapar, en çok N.siege.works.max.
   ({ s, a } = setup());
