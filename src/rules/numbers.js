@@ -137,7 +137,9 @@ export const N = {
     // Bilgisayar sura saldırırken önce surun `stage` birim önünde toplanır (en çok `wait` sn bekler).
     // Tırmananlar içeride `join` birim yakınındaki aynı türden köprübaşına katılır; köprübaşının kayıptan moral
     // kaybı x`steady`.
-    climb: { stage: 10, wait: 15, rate: 3, guard: 4, repel: 0.6, join: 8, steady: 0.5, breach: 30, ram: 2, gapHalf: 4, wallZone: 8, cover: 0.75 },
+    // Mancınık (yerinde yapılan): `every` saniyede bir, `range` birim uzağa taş; bölüğü başına `kills` asker düşürür.
+    catapult: { every: 4.5, range: 46, kills: 3, flight: 1.8, stand: 20 },
+    climb: { stage: 10, wait: 15, rate: 3, guard: 4, repel: 0.6, join: 8, steady: 0.5, breach: 30, ram: 2, tower: 3, towerRepel: 0.5, bridge: 6, gapHalf: 4, wallZone: 8, cover: 0.75 },
     timeWalls: 300, turn: { march: 3, fight: 0.5, idle: 1.2, near: 14 }, minSplit: 5, mergeReach: 20,
   },
   // Ticaret yolları (bölüm 28, trade.js): karadan `reach`, iki liman arasında `seaReach` birime kadar;
@@ -382,7 +384,13 @@ export const N = {
   // kuşatılan yerin sadakati turda 5 düşer; kamptaki ordu da salgından turda %3 erir.
   // Aletler (kullanıcı 28.10): kuşatan ordu, en az `crew` dövüşen askeri varsa her tur bir koçbaşı / merdiven yapar,
   // en çok `max`; her biri bir makine bölüğü kadar sur söker (siegeBreach). Kuşatma kalkınca ya da saldırınca biter.
-  siege: { starve: 0.1, perEngines: 0.02, max: 0.25, loyalty: 5, camp: 0.03, works: { crew: 20, max: 3 } },
+  // Alet türleri (kullanıcı 28.10, önerilerden 5.): koçbaşı `breach` kadar makine bölüğü sur söker; kule yarısını söker,
+  // saldıranın gücü her biriyle +`power` (sahada sura köprü kurar); mancınık yarısını söker, kuşatmada garnizonu her tur
+  // +`starve` eritir (sahada uzaktan taş atar).
+  siege: {
+    starve: 0.1, perEngines: 0.02, max: 0.25, loyalty: 5, camp: 0.03,
+    works: { crew: 20, max: 3, kinds: { ram: { breach: 1 }, tower: { breach: 0.5, power: 0.08 }, catapult: { breach: 0.5, starve: 0.02 } } },
+  },
   // Arazi ve mevsim (bölüm 22): nehir geçen yoldan saldıran x0.85, dağ geçidini savunan x1.25.
   // Kışın deniz yolunda yürüyen ya da denizden saldıran ordu %25 ihtimalle fırtınaya yakalanır
   // (askerinin %10'u ve bir gemisi gider); kışın bütün ordular %3 yıpranır.

@@ -3255,10 +3255,10 @@ const SG = await import("../src/rules/siege.js");
   s.places.mediolanum.level = 3;
   SG.besiege(s, a.id, "mediolanum");
   const built = [];
-  for (let i = 0; i < N.siege.works.max + 1; i++) { SG.tickSieges(s, []); built.push(a.works ?? 0); }
+  for (let i = 0; i < N.siege.works.max + 1; i++) { SG.tickSieges(s, []); built.push(SG.worksCount(a)); }
   check("kuşatan ordu her tur bir alet yapar, tavanda durur", built.join() === [1, 2, 3, 3].join() && N.siege.works.max === 3, built.join());
   const sw = M.sides(s, a, "rome", "mediolanum");
-  check("aletler yalnız kuşatılan yere saldırıda sayılır", sw.att.works === 3 && M.sides(s, a, "rome", "ariminum").att.works === 0);
+  check("aletler yalnız kuşatılan yere saldırıda sayılır; seçilmezse koçbaşı", sw.att.works?.ram === 3 && M.sides(s, a, "rome", "ariminum").att.works === 0);
   const C3 = await import("../src/rules/combat.js");
   const exw = C3.explain(sw.att, sw.def, sw.walls).att.find(([k]) => k === "works");
   check("savaşın dökümünde ayrı satır: surun %60'ı koçbaşılarla söküldü", !!exw && Math.abs(exw[1] - 0.6) < 1e-9);
@@ -3287,6 +3287,44 @@ const SG = await import("../src/rules/siege.js");
   SG.besiege(s, a.id, "mediolanum");
   SG.tickSieges(s, []);
   check("az dövüşen askerli ordu (makineler sayılmaz) alet yapamaz", !a.works);
+
+  // Aleti seç (kullanıcı 28.10, önerilerden 5.): kule ve mancınık.
+  ({ s, a } = setup());
+  s.places.mediolanum.level = 3;
+  SG.besiege(s, a.id, "mediolanum");
+  const r0 = SG.siegeRate(a);
+  check("yanlış türe geçilmez", !SG.setWorkType(s, a.id, "wolf") && SG.setWorkType(s, a.id, "catapult"));
+  SG.tickSieges(s, []);
+  SG.setWorkType(s, a.id, "tower");
+  SG.tickSieges(s, []);
+  check("kamp seçilen aleti yapar: bir mancınık, bir kule", SG.worksOf(a).catapult === 1 && SG.worksOf(a).tower === 1 && SG.worksCount(a) === 2);
+  check("mancınık garnizonu her tur %2 daha hızlı eritir", Math.abs(SG.siegeRate(a) - r0 - N.siege.works.kinds.catapult.starve) < 1e-9);
+  const C4 = await import("../src/rules/combat.js");
+  const sk = M.sides(s, a, "rome", "mediolanum");
+  check("kule ve mancınık surun yarım bölük kadarını söker", Math.abs(C4.enginesOf(sk.att) - 2 * 0.5 * N.siegeBreach) < 1e-9);
+  const noTower = C4.fight({ ...sk.att, works: { catapult: 1 } }, sk.def, sk.walls, [1, 1]), withTower = C4.fight({ ...sk.att, works: { catapult: 1, tower: 1 } }, sk.def, sk.walls, [1, 1]);
+  check("kule saldıranı surda güçlendirir (dökümde satırı)", withTower.attPow > noTower.attPow && C4.explain(sk.att, sk.def, sk.walls).att.some(([k]) => k === "towers"));
+  check("eski kayıttaki sayı koçbaşı sayılır", SG.worksOf({ works: 2 }).ram === 2 && C4.enginesOf({ works: 2 }) === 2 * N.siegeBreach);
+  // Sahada: kule sura köprü kurar, oradan çok daha hızlı çıkılır; mancınık uzaktan taş atar.
+  const TB2 = await import("../src/rules/tactics.js");
+  const kb = TB2.setupBattle({ civ: "rome", inf: 240, works: { tower: 1, catapult: 1 } }, { civ: null, inf: 150 }, "city", 4);
+  const tw = kb.units.find((u) => u.work === "tower"), cp = kb.units.find((u) => u.work === "catapult");
+  check("sahada kule ve mancınık birlikleri", !!tw && !!cp && kb.bridges.length === 0);
+  for (let i = 0; i < 900 && !kb.over && (!kb.bridges.length || !kb.shots.some((x) => x.stone)); i++) { if (i % 7 === 0) { TB2.aiOrders(kb, "att", true); TB2.aiOrders(kb, "def", true); } TB2.step(kb, 0.1); }
+  check("kule sura yanaşıp köprü kurar, mancınık taş atar", kb.bridges.length === 1 && (kb.shots.some((x) => x.stone) || kb.units.some((u) => u.threw != null)), `köprü ${kb.bridges.length}, t ${kb.t.toFixed(1)}`);
+  // Bilgisayar: umutsuz hedefe mancınık.
+  const ai3 = S.newGame("gaul", 7);
+  ai3.turn = N.aiLate[1] + 20;
+  const ra3 = before(S.formArmy(ai3, "ariminum", 10, 0), "mediolanum");
+  ra3.inf = 190;
+  ai3.places.ariminum.inf = 20;
+  for (const id of Object.keys(ai3.places)) if (id !== "mediolanum" && ai3.places[id].owner === null) ai3.places[id].owner = "egypt";
+  ai3.places.mediolanum.level = 3;
+  ai3.places.mediolanum.inf = 220;
+  const { aiTurn: aiT3 } = await import("../src/rules/ai.js");
+  aiT3(ai3, "rome", []);
+  aiT3(ai3, "rome", []);
+  check("bilgisayar aç bırakacağı yere mancınık yapar", ai3.armies.some((x) => x.besieging === "mediolanum" && x.workType === "catapult"));
 
   // Bilgisayar da kuşatır: kolay olmayan surlu hedefin önünde, yeterince büyük orduyla.
   const g = S.newGame("gaul", 7);

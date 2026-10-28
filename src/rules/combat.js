@@ -21,7 +21,13 @@ import { N, SHIPS, UNITS, trait, uniqueOf } from "./numbers.js";
  * Surun bonusunun sökülen payı: saldıranın kuşatma makineleri (her bölük `N.siegeBreach`) ve kuşatmada yerinde yaptığı
  * aletler (`works`, her biri bir bölük kadar; siege.js). En çok hepsi.
  */
-export const enginesOf = (att) => Math.min(1, ((att.siege ?? 0) / N.company + (att.works ?? 0)) * N.siegeBreach);
+export const enginesOf = (att) => Math.min(1, ((att.siege ?? 0) / N.company + worksBreach(att.works)) * N.siegeBreach);
+
+/** Aletlerin söktüğü, makine bölüğü cinsinden: koçbaşı 1, kule ve mancınık yarım (sayı: hepsi koçbaşı). */
+const worksBreach = (w) => (typeof w === "number" ? w : Object.entries(w ?? {}).reduce((n, [k, v]) => n + v * (N.siege.works.kinds[k]?.breach ?? 0), 0));
+
+/** Kuşatma kulelerinin saldırıya katkısı (otomatik savaşta; sahada kuleler sura köprü kurar). */
+export const towersMul = (att) => 1 + (typeof att.works === "object" ? att.works?.tower ?? 0 : 0) * N.siege.works.kinds.tower.power;
 
 /**
  * `att`, `def`: { civ, inf, arch, cav, siege, works?, gen?, vet?, terrain?, mods? } (bağımsızın civ'i null; gen:
@@ -60,7 +66,7 @@ export function fight(att, def, walls, luck = [1, 1]) {
   // Surculuk (araştırma) savunanın surunu güçlendirir; makineler ve kuşatma ustası onu da söker.
   const wall = breach(walls ? (walls === "castle" ? N.castleWall : N.cityWall) * tech(def, "walls") : 1);
   // Arazi (ground.js): nehir geçen saldıran, dağ geçidini tutan savunan (çarpan dışarıdan gelir).
-  const attPow = power(a, att, false, !!walls) * siege * might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * luck[0];
+  const attPow = power(a, att, false, !!walls) * siege * might(att.gen) * (att.vet ?? 1) * (att.terrain ?? 1) * (walls ? towersMul(att) : 1) * luck[0];
   const defPow = power(d, def, true, false) * wall * might(def.gen) * (def.vet ?? 1) * (def.terrain ?? 1) * luck[1];
 
   // 3. Sonuç. Savunan kimse kalmadıysa saldıran kayıpsız girer; eşitlikte savunan kazanır.
@@ -253,6 +259,7 @@ export function explain(att, def, walls) {
     const machines = Math.min(1, ((att.siege ?? 0) / N.company) * N.siegeBreach), engines = enginesOf(att);
     if (machines > 0) A.push(["engines", machines]);
     if (engines > machines) A.push(["works", engines - machines]);
+    put(A, "towers", towersMul(att));
     if (has(att.gen, "siege")) A.push(["siegeGeneral", 0.5]);
     const breach = (m) => 1 + (m - 1) * (has(att.gen, "siege") ? 0.5 : 1) * (1 - engines);
     const fort = tech(def, "walls") > 1 ? "Tech" : "";

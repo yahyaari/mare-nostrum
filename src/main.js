@@ -32,7 +32,7 @@ import { relation, startSpec } from "./rules/state.js";
 import { eyes, seen as seenBy, sight } from "./rules/sight.js";
 import { plagueAt } from "./rules/crises.js";
 import { closeRoute, flowing, openRoute, routesFrom, routesOf, slotsOf, valueOf } from "./rules/trade.js";
-import { besiege, lift } from "./rules/siege.js";
+import { besiege, lift, setWorkType, worksCount } from "./rules/siege.js";
 import { record } from "./rules/chronicle.js";
 import { sendSpy } from "./rules/spies.js";
 import { SCENE_MS } from "./view/battle.js";
@@ -291,7 +291,7 @@ function beginBattle(B) {
 function unitLabel(u, owner) {
   if (u.type === "gen") return `★ ${u.name ?? T().tacGeneral}`;
   if (u.ship) return T().shipNames[u.type];
-  if (u.work) return T().ram;
+  if (u.work) return T()[u.work === "tower" ? "siegeTower" : u.work === "catapult" ? "catapult" : "ram"];
   const s = u.type === "elite" ? T().eliteOf[owner]?.[0] ?? T().elite : T()[u.type];
   return s[0].toLocaleUpperCase() + s.slice(1);
 }
@@ -580,7 +580,7 @@ function mapView() {
     float: a.at ? null : { x: a.x, y: a.y },
     sea: !a.at && !isLand(cellOf(a.x, a.y)),
     camp: !!a.besieging || !!a.bandit || !!a.camp,
-    works: a.besieging ? a.works ?? 0 : 0,
+    works: a.besieging ? worksCount(a) : 0,
     barb: !!a.camp,
     horde: !!a.horde,
   }));
@@ -1090,6 +1090,11 @@ function dispatch(act) {
         anim.rise(act.id, `${T()[act.what]} · ${b.total === 1 ? T().turnsOne : fill(T().turnsN, b.total)}`, INK.good);
         anim.pulse(act.id, INK.good);
       }
+      save();
+      break;
+    case "workType":
+      // Kuşatma kampı bundan sonra ne yapsın (bölüm 20): koçbaşı, kule, mancınık.
+      setWorkType(game, act.army, act.kind);
       save();
       break;
     case "spec":

@@ -904,7 +904,9 @@ function block(ctx, f, B, u, owner, selected, dt) {
     ctx.fill();
   }
   if (u.work) {
-    ram(ctx, f, u, color);
+    if (u.work === "tower") siegeTower(ctx, f, u, color, B.b);
+    else if (u.work === "catapult") catapult(ctx, f, u, color, B.b);
+    else ram(ctx, f, u, color);
     ctx.restore();
     return;
   }
@@ -963,6 +965,54 @@ function ram(ctx, f, u, color) {
   ctx.stroke();
   ctx.fillStyle = color;
   ctx.fillRect(-2.6 * k, -0.25 * k, 5.2 * k, 0.5 * k);
+}
+
+/** Kuşatma kulesi: üç katlı ahşap kule, tepesinde sahibinin renginde şerit; sura yanaşınca önünde köprü. */
+function siegeTower(ctx, f, u, color, b) {
+  const k = f.k * 0.9;
+  ctx.translate(f.x + u.x * f.k, f.y + u.y * f.k);
+  ctx.rotate(u.facing);
+  ctx.fillStyle = "rgba(20,14,8,0.25)";
+  ctx.fillRect(-2.6 * k, -2.2 * k + 1, 5.2 * k, 4.4 * k);
+  for (let i = 0; i < 3; i++) {
+    const s = 1 - i * 0.16;
+    ctx.fillStyle = i % 2 ? "#7a5634" : "#8a6440";
+    ctx.fillRect(-2.6 * s * k, -2.2 * s * k, 5.2 * s * k, 4.4 * s * k);
+    ctx.strokeStyle = "rgba(20,14,8,0.8)";
+    ctx.lineWidth = 0.9;
+    ctx.strokeRect(-2.6 * s * k, -2.2 * s * k, 5.2 * s * k, 4.4 * s * k);
+  }
+  ctx.fillStyle = color;
+  ctx.fillRect(-1.6 * k, -0.35 * k, 3.2 * k, 0.7 * k);
+  if (u.bridged) {
+    ctx.fillStyle = "#6b4a2e";
+    ctx.fillRect(2.4 * k, -1 * k, 2.6 * k, 2 * k);
+    ctx.strokeStyle = "rgba(20,14,8,0.7)";
+    ctx.strokeRect(2.4 * k, -1 * k, 2.6 * k, 2 * k);
+  }
+}
+
+/** Mancınık: ahşap çatkı, kolu taş atınca öne fırlar, sonra yavaşça geri çekilir. */
+function catapult(ctx, f, u, color, b) {
+  const k = f.k * 0.85, since = b.t - (u.threw ?? -9), swing = since < 0.5 ? since / 0.5 : Math.max(0, 1 - (since - 0.5) / 2.5);
+  ctx.translate(f.x + u.x * f.k, f.y + u.y * f.k);
+  ctx.rotate(u.facing);
+  ctx.fillStyle = "#6b4a2e";
+  ctx.fillRect(-2.4 * k, -1.8 * k, 4.8 * k, 0.6 * k);
+  ctx.fillRect(-2.4 * k, 1.2 * k, 4.8 * k, 0.6 * k);
+  ctx.fillRect(-0.4 * k, -1.8 * k, 0.8 * k, 3.6 * k);
+  ctx.fillStyle = "#3b3024";
+  for (const [x, y] of [[-2, -1.8], [2, -1.8], [-2, 1.8], [2, 1.8]]) { ctx.beginPath(); ctx.arc(x * k, y * k, 0.5 * k, 0, TAU); ctx.fill(); }
+  // Kol: geride (yatık) -> öne fırlamış.
+  const ang = Math.PI - swing * 2.2;
+  ctx.strokeStyle = "#8a6440";
+  ctx.lineWidth = 0.7 * k;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(Math.cos(ang) * 3.4 * k, Math.sin(ang) * 0.6 * k);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fillRect(-0.5 * k, -0.5 * k, 1 * k, 1 * k);
 }
 
 /** Bir birliğin dikdörtgen yolu (saha birimiyle merkez, cephe yönü, yarı derinlik, yarı genişlik). */
@@ -1139,6 +1189,19 @@ function orderLine(ctx, f, b, u) {
 /** Uçan oklar: atandan hedefe kavisli, varınca söner. */
 function arrows(ctx, f, b, s) {
   const p = Math.max(0, Math.min(1, (b.t - s.t0) / (s.t1 - s.t0)));
+  if (s.stone) {
+    // Mancınık taşı: yüksek kavisle uçan iri bir taş, gölgesi yerde.
+    const x = s.from.x + (s.at.x - s.from.x) * p, y = s.from.y + (s.at.y - s.from.y) * p;
+    ctx.fillStyle = "rgba(20,14,8,0.25)";
+    ctx.beginPath();
+    ctx.ellipse(f.x + x * f.k, f.y + y * f.k, 0.7 * f.k, 0.4 * f.k, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#6a5e50";
+    ctx.beginPath();
+    ctx.arc(f.x + x * f.k, f.y + (y - Math.sin(p * Math.PI) * 14) * f.k, 0.75 * f.k, 0, TAU);
+    ctx.fill();
+    return;
+  }
   ctx.save();
   // Yanan oklar: turuncu, parlak (ateşli ok yeteneği).
   ctx.strokeStyle = s.fire ? "rgba(255,150,50,0.95)" : "rgba(40,28,16,0.85)";
@@ -1221,8 +1284,9 @@ function marksOf(B, now) {
   // Yanan ok şehrin içine düşünce en yakın ev tutuşur (ok yere varınca).
   const C = b.field.city;
   for (const s of b.shots) {
-    if (!s.fire || M.seen.has(s)) continue;
+    if (!(s.fire || s.stone) || M.seen.has(s)) continue;
     M.seen.add(s);
+    if (s.stone) M.list.push({ kind: "dust", x: s.at.x, y: s.at.y, t: s.t1, small: true });
     if (!C || !insideCity(C, s.at)) continue;
     const h = C.houses.reduce((m, q) => (!m || Math.hypot(q.x - s.at.x, q.y - s.at.y) < Math.hypot(m.x - s.at.x, m.y - s.at.y) ? q : m), null);
     if (h && Math.hypot(h.x - s.at.x, h.y - s.at.y) < 6 && !M.list.some((m) => m.kind === "fire" && m.house === h && b.t - m.t < 14)) {
@@ -1277,9 +1341,9 @@ function airMarks(ctx, f, B, now) {
     if (age < 0) continue;
     const x = f.x + m.x * f.k, y = f.y + m.y * f.k, k = f.k;
     if (m.kind === "dust") {
-      const a = Math.max(0, 1 - age / 4);
+      const a = Math.max(0, 1 - age / 4), sm = m.small ? 0.45 : 1;
       for (let i = 0; i < 10; i++) {
-        const ang = i * 0.63, r = (1.5 + age * 3.5) * k * (0.7 + (i % 3) * 0.2);
+        const ang = i * 0.63, r = (1.5 + age * 3.5) * k * (0.7 + (i % 3) * 0.2) * sm;
         ctx.fillStyle = `rgba(170,150,120,${0.45 * a})`;
         ctx.beginPath();
         ctx.arc(x + Math.cos(ang) * r, y + Math.sin(ang) * r * 0.7 - age * 1.5 * k, (1.6 + age * 1.2) * k, 0, TAU);

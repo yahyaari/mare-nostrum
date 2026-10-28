@@ -952,6 +952,16 @@ Surlu bir yere (kale, başkent, 3. seviye ve üstü şehir) **hemen saldırmak y
   sundurma, sura dayanınca kütüğü işler, makineden iki kat hızlı gedik açar (`N.tactics.climb.ram`); ordunun askeri
   değildir, sonuçta ve kayıplarda sayılmaz.
   Ölçüm: 200 piyade + 40 okçu, 200 savunana karşı (20 savaş): koçbaşısız 19, üç koçbaşıyla 20 kazanır, 40 gedik.
+- **Aleti seç** (kullanıcı 28.10, önerilerden 5.): ordu kartında üç düğme - kamp bundan sonra ne yapsın (`army.workType`;
+  aletler `army.works` = { ram, tower, catapult }; siege.js `WORKS`, `worksOf`, `setWorkType`; `N.siege.works.kinds`):
+  - **Koçbaşı:** surun beşte birini söker; sahada kapının yanında hızla gedik açar.
+  - **Kuşatma kulesi:** surun onda birini söker, saldıran surda %8 daha güçlü (combat.js `towersMul`; dökümde satırı);
+    sahada sura yanaşınca köprü kurar - köprünün yanındaki merdivenden üç kat hızlı çıkılır, düşürmek yarı yarıya zor
+    (`b.bridges`, `N.tactics.climb.tower`).
+  - **Mancınık:** surun onda birini söker, kuşatmada garnizonu her tur %2 daha hızlı eritir (`siegeRate`); sahada surdan
+    20 birim geride durur, 4.5 saniyede bir surun üstünden taş atar (siper korumaz), düştüğü evi tutuşturur.
+  - Bilgisayar: aç bırakacağı (saldırısı umutsuz) yere mancınık, yoksa önce iki koçbaşı, sonra kule. Eski kayıttaki sayı
+    koçbaşı sayılır.
   İlk sürümde koçbaşılar batı surunda piyadenin yerini alıyor, tayfası okla bozulup yanındakileri sarsıyordu - 170
   savunana karşı 20'de 7'ye düştü. Şimdi makineler kapının iki yanına dizilir, bozulup kaçmaz (kırılır), tırmananlar
   onları beklemez (bölüm 29a).

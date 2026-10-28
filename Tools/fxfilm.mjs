@@ -12,7 +12,7 @@ await page.evaluate(`(async () => {
   M.dispatch({ do: "pick", civ: "rome" }); M.dispatch({ do: "start" }); M.dispatch({ do: "close" });
   const p = M.pos("carthage");
   M.battle({
-    att: { civ: "egypt", inf: 200, arch: 60, cav: 40, works: 3 }, def: { civ: "carthage", inf: 160, arch: 50 }, walls: "city", me: "att",
+    att: { civ: "egypt", inf: 200, arch: 60, cav: 40, works: { ram: 1, tower: 1, catapult: 1 } }, def: { civ: "carthage", inf: 160, arch: 50 }, walls: "city", me: "att",
     field: { at: { x: p.x - 0.75, y: p.y + 0.25 }, dir: 0, seed: 9, place: "carthage" },
     owners: { att: "egypt", def: "carthage" }, names: { att: "Egypt", def: "Carthage" }, title: "Siege of Carthage", finish: () => null,
   });

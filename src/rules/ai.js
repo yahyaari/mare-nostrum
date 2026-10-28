@@ -15,7 +15,7 @@ import {
 } from "./moves.js";
 import { POS, centre, dist } from "./map.js";
 import { BUILDABLE, wondersAt } from "./wonders.js";
-import { besiege, canBesiege } from "./siege.js";
+import { besiege, canBesiege, worksOf } from "./siege.js";
 import { LEVELS, N, SHIPS, UNITS, trait } from "./numbers.js";
 import { candidates, openRoute, routesFrom, slotsOf } from "./trade.js";
 import { deferAttack } from "./incoming.js";
@@ -531,7 +531,12 @@ function military(state, civ, events) {
       if (ev) events.push(ev);
       continue;
     }
-    if (a.besieging) { a.mp = 0; continue; }
+    if (a.besieging) {
+      const w = worksOf(a);
+      a.workType = forecast(state, a, civ, a.besieging).odds === "hopeless" ? "catapult" : (w.ram ?? 0) < 2 ? "ram" : "tower";
+      a.mp = 0;
+      continue;
+    }
     let siege = null, score = -Infinity;
     for (const id of Object.keys(state.places)) {
       if (!canBesiege(state, a, id) || men(a) < men(defenders(state, id)) * 0.5) continue;

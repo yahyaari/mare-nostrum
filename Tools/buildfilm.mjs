@@ -36,7 +36,7 @@ await shot("7_kusatma_karti", `
   g.relations[S.key("rome", "carthage")] = "war";
   const p = M.pos(id);
   const a = S.formArmy(g, "rome", 10, 0);
-  Object.assign(a, { x: p.x - 0.5, y: p.y, at: null, inf: 200, besieging: id, besiegedSince: g.turn - 3, works: 3, mp: 0 });
+  Object.assign(a, { x: p.x - 0.5, y: p.y, at: null, inf: 200, besieging: id, besiegedSince: g.turn - 3, works: { ram: 1, tower: 1, catapult: 1 }, workType: "tower", mp: 0 });
   M.ui.sel = { kind: "army", id: a.id };
   M.lookAt(p.x, p.y, 3);
   window.siegeAt = id; window.siegeArmy = a.id;
@@ -48,7 +48,7 @@ await page.evaluate(`(async () => {
   M.ui.modal = null;
   const p = M.pos("carthage");
   M.battle({
-    att: { civ: "rome", inf: 160, arch: 40, works: 3 }, def: { civ: "carthage", inf: 120, arch: 40 }, walls: "city", me: "att",
+    att: { civ: "rome", inf: 160, arch: 40, works: { ram: 1, tower: 1, catapult: 1 } }, def: { civ: "carthage", inf: 120, arch: 40 }, walls: "city", me: "att",
     field: { at: { x: p.x - 0.75, y: p.y + 0.25 }, dir: 0, seed: 9, place: "carthage" },
     owners: { att: "rome", def: "carthage" }, names: { att: "Rome", def: "Carthage" }, title: "Siege of Carthage", finish: () => null,
   });

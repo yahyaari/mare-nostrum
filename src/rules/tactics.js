@@ -131,7 +131,7 @@ export function setupBattle(att, def, walls, seed = 1, field = null) {
     if (!field.city) addCity(field, walls, K().w * 0.68, K().h / 2);
   }
   const b = {
-    t: 0, over: null, walls, seed, field: field ?? flatField(), rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, gaps: [], reserve: [],
+    t: 0, over: null, walls, seed, field: field ?? flatField(), rand: rng(seed), units: [], shots: [], fx: [], touch: new Map(), nextId: 1, gaps: [], reserve: [], bridges: [],
     // Hava (bölüm 29g): tarafların getirdiği (moves.js), yoksa açık gün.
     weather: att.weather ?? null, wx: { volley: 1, range: 1, charge: 1, speed: 1, ...(att.wx ?? {}) },
     sides: { att: { civ: att.civ, muls: muls.att, open: muls.att, gen: !!att.gen, wild: !!att.wild }, def: { civ: def.civ, muls: muls.def, open: open.def, gen: !!def.gen, wild: !!def.wild } },
@@ -167,15 +167,18 @@ export function setupBattle(att, def, walls, seed = 1, field = null) {
       (groups[u.mounted || u.type === "cav" ? "cav" : u.kind === "arch" ? "arch" : u.type === "siege" ? "siege" : "front"] ??= []).push(u);
       b.units.push(u);
     }
-    // Kuşatmada yerinde yapılan aletler (bölüm 20): her biri bir koçbaşı, makine bölüğü gibi gedik açar; ordunun
-    // askeri değil, sonuçta sayılmaz.
-    if (side === "att" && walls) {
-      for (let i = 0; i < (s.works ?? 0); i++) {
-        for (const u of troops(side, s, { siege: N.company }, false)) {
-          u.work = true;
-          u.cols = 3; // dar ve uzun: sura burnuyla dayanır
-          (groups.siege ??= []).push(u);
-          b.units.push(u);
+    // Kuşatmada yerinde yapılan aletler (bölüm 20): koçbaşı gedik açar, kule sura köprü kurar, mancınık uzaktan taş
+    // atar. Ordunun askeri değil, sonuçta sayılmaz. (Sayı: hepsi koçbaşı.)
+    if (side === "att" && walls && s.works) {
+      const W = typeof s.works === "number" ? { ram: s.works } : s.works;
+      for (const kind of ["ram", "tower", "catapult"]) {
+        for (let i = 0; i < (W[kind] ?? 0); i++) {
+          for (const u of troops(side, s, { siege: N.company }, false)) {
+            u.work = kind;
+            u.cols = 3; // dar ve uzun
+            (groups.siege ??= []).push(u);
+            b.units.push(u);
+          }
         }
       }
     }
@@ -734,7 +737,7 @@ export function aiOrders(b, side, all = false) {
   for (const u of b.units.filter((v) => v.side === side && alive(v) && !v.routed && v.type !== "gen")) {
     if (u.manual && !all) continue;
     // Sura saldıran: önce planındaki yanın önünde toplanır, sonra o yerde sura dayanır (dört yandan, sur boyunca).
-    if (plan?.has(u.id) && !u.inside && !gapAt(b, u)) {
+    if (plan?.has(u.id) && !u.inside && !gapAt(b, u) && u.work !== "catapult") {
       u.order = post(u, b.assault ? 0.2 : T.climb.stage);
       continue;
     }
@@ -757,8 +760,8 @@ export function aiOrders(b, side, all = false) {
       if (dist(u, nearest) > K().hold) { u.order = null; continue; }
     }
     if (u.type === "siege") {
-      // Kuşatma makinesi sura dayanır (gedik açar); sursuz savaşta yerinde.
-      u.order = plan?.has(u.id) && !u.inside ? post(u, 0.6) : null;
+      // Kuşatma makinesi sura dayanır (gedik açar); mancınık menzilinde durur; sursuz savaşta yerinde.
+      u.order = plan?.has(u.id) && !u.inside ? post(u, u.work === "catapult" ? T.catapult.stand : 0.6) : null;
       continue;
     }
     if (u.shoot > 0 && !u.mounted) {
@@ -943,6 +946,17 @@ export function step(b, dt) {
     const kills = (u.men / N.company) * N.volley * u.shoot * mulsOf(b, u, true).volley * T.volley.kill * trees * cover * (0.85 + b.rand() * 0.3) * (u.m ?? ONE).volley * b.wx.volley;
     b.shots.push({ from: { x: u.x, y: u.y }, to: t.id, at: { x: t.x, y: t.y }, t0: b.t, t1: b.t + T.volley.flight, kills, side: u.side, n: Math.min(12, Math.ceil(u.men / 3)), fire: (u.m ?? ONE).arrowMorale > 1 ? u.m.arrowMorale : 0 });
   }
+  // Mancınık (bölüm 20): ağır ağır, uzaktan taş atar - en yakın düşmana, surun ardındakine de (siper korumaz).
+  const CP = T.catapult;
+  for (const u of b.units.filter((v) => alive(v) && !v.routed && v.work === "catapult")) {
+    u.cool -= dt;
+    if (u.cool > 0) continue;
+    const t = foes(b, u).filter((v) => dist(u, v) <= CP.range).reduce((m, v) => (!m || dist(u, v) < dist(u, m) ? v : m), null);
+    if (!t) continue;
+    u.cool = CP.every * (0.9 + b.rand() * 0.2);
+    u.threw = b.t;
+    b.shots.push({ from: { x: u.x, y: u.y }, to: t.id, at: { x: t.x, y: t.y }, t0: b.t, t1: b.t + CP.flight, kills: CP.kills * (u.men / N.company), side: u.side, n: 1, stone: true });
+  }
   for (const s of b.shots.filter((x) => x.t1 <= b.t)) {
     const v = unitById(b, s.to);
     // Kaplumbağa ve çember okları az yer; ateşli ok morali çok kırar.
@@ -1001,7 +1015,7 @@ function siegePlan(b) {
   const pick = (s) => (land.includes(s) ? s : land[0] ?? "W");
   const plan = new Map(), bySide = {}, engines = [];
   for (const v of b.units.filter(want)) {
-    if (v.type === "siege") { engines.push(v); continue; }
+    if (v.type === "siege") { if (v.work !== "catapult") engines.push(v); else plan.set(v.id, { side: pick("W"), t: 0.3 + (v.id % 5) * 0.1 }); continue; }
     const s = pick(v.y < C.y0 + 2 ? "N" : v.y > C.y1 - 2 ? "S" : "W");
     (bySide[s] ??= []).push(v);
   }
@@ -1043,9 +1057,17 @@ function walls(b, dt) {
     const q = wallPoint(W, u), ex = Math.abs(q.nx) * extent(u).x + Math.abs(q.ny) * extent(u).y;
     // Köşelerde merdiven kurulmaz.
     const atWall = q.d - ex <= 1.2 && q.t > 0.06 && q.t < 0.94 && wallAt(b.field, q) && !gapAt(b, u);
-    // Makine: sura dayandıkça gedik açar.
+    // Makine: sura dayandıkça gedik açar. Kule sura yanaşınca köprü kurar; mancınık sura yanaşmaz.
     if (u.type === "siege") {
-      if (!atWall) continue;
+      if (!atWall || u.work === "catapult") continue;
+      if (u.work === "tower") {
+        if (!u.bridged) {
+          u.bridged = true;
+          b.bridges.push({ x: q.x, y: q.y, nx: q.nx, ny: q.ny, unit: u.id });
+          b.fx.push({ kind: "bridge", x: q.x, y: q.y, t: b.t });
+        }
+        continue;
+      }
       // Yerinde yapılan koçbaşı surda makineden hızlı iş görür (C.ram kat).
       u.ram = (u.ram ?? 0) + dt * (u.men / N.company) * (u.work ? C.ram : 1);
       if (u.ram >= C.breach) {
@@ -1072,10 +1094,12 @@ function walls(b, dt) {
       if (d.side !== "def" || !fighting(d) || !d.inside || dist(d, L) > footprint(d).r + C.guard) continue;
       repel += Math.min(d.men, footprint(d).cols * T.ranks) * d.melee * mulsOf(b, d, true).power;
     }
-    if (repel > 0) hurt(b, u, repel * T.melee * C.repel * dt);
+    // Kuşatma kulesinin köprüsü yakınsa (kule ayakta): çok daha hızlı çıkılır, düşürmek zor.
+    const bridge = b.bridges.some((g) => Math.hypot(g.x - L.x, g.y - L.y) < C.bridge && alive(unitById(b, g.unit) ?? {}));
+    if (repel > 0) hurt(b, u, repel * T.melee * C.repel * (bridge ? C.towerRepel : 1) * dt);
     if (!alive(u)) continue;
-    // Tek sıra: saniyede `rate` asker içeri.
-    u.climbAcc = (u.climbAcc ?? 0) + C.rate * dt;
+    // Tek sıra: saniyede `rate` asker içeri (köprüden `tower` katı).
+    u.climbAcc = (u.climbAcc ?? 0) + C.rate * (bridge ? C.tower : 1) * dt;
     const n = Math.min(Math.floor(u.climbAcc), Math.floor(u.men));
     if (n <= 0) continue;
     u.climbAcc -= n;

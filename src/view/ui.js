@@ -48,7 +48,7 @@ import { rankOf, ranking, scoreOf, wonderTurnsLeft } from "../rules/victory.js";
 import { ownersAt } from "../rules/chronicle.js";
 import { musicEnabled, soundEnabled } from "./sound.js";
 import { eyes, seen, sight } from "../rules/sight.js";
-import { canBesiege, siegeRate, turnsToFall } from "../rules/siege.js";
+import { WORKS, canBesiege, siegeRate, turnsToFall, worksCount, worksOf } from "../rules/siege.js";
 import { SCENE_MS, drawBattle, trooper } from "./battle.js";
 import { estimate, explain, fight, nextRankXp, veteranMul, veteranRank } from "../rules/combat.js";
 import { incomingSides } from "../rules/incoming.js";
@@ -1443,7 +1443,13 @@ function armyCard(ctx, cam, game, ui, boxes, T) {
   }
   if (a.besieging) {
     ly += 20;
-    lines(ctx, fill(T.siegeLine, placeName(a.besieging, ui.lang), game.turn - a.besiegedSince + 1, men(defenders(game, a.besieging)), a.works ?? 0, N.siege.works.max), x, ly, A, { size: 13, bold: true, color: INK.warn }, 3, 16);
+    const wk = worksOf(a), list = WORKS.filter((k) => wk[k]).map((k) => `${wk[k]} ${T.workShort[k]}`).join(", ") || "—";
+    lines(ctx, fill(T.siegeLine, placeName(a.besieging, ui.lang), game.turn - a.besiegedSince + 1, men(defenders(game, a.besieging)), list, worksCount(a), N.siege.works.max), x, ly, A, { size: 13, bold: true, color: INK.warn }, 3, 16);
+    // Kamp bundan sonra ne yapsın: koçbaşı, kule, mancınık (kendi ordunsa).
+    if (mine) {
+      const bw = (A - 8) / 3, by = ly + 50, now = WORKS.includes(a.workType) ? a.workType : "ram";
+      WORKS.forEach((k, i) => button(ctx, boxes, { x: x + i * (bw + 4), y: by, w: bw, h: 24, label: T.workShort[k], size: 11.5, main: now === k, act: { do: "workType", army: a.id, kind: k }, tip: [T.workName[k], T.workTip[k], [T.workNext, "good"]] }));
+    }
   } else if (mine) lines(ctx, T.cardsHint, x, y + H - 34, A, { size: 12, italic: true, color: INK.soft }, 2, 15);
 
   // Birlikler: kart kart; kendi ordunsa altta eylemler.
@@ -2157,7 +2163,7 @@ function attackModal(ctx, cam, game, ui, boxes, T, m) {
   }
   const pow = sea && b ? null : fight(sd.att, sd.def, walls);
   const ex = sea && b ? { att: [], def: [] } : explain(sd.att, sd.def, walls);
-  const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id), N.siege.works.max, Math.round(N.siegeBreach * 100)), 552, { size: 12, italic: true }) : [];
+  const hint = sg ? wrap(ctx, fill(T.siegeHint, Math.round(siegeRate(a) * 100), turnsToFall(game, a, m.id), N.siege.works.max), 552, { size: 12, italic: true }) : [];
   const modRows = Math.max(ex.att.length, ex.def.length);
   const r = modalFrame(ctx, cam, boxes, 360 + modRows * 18 + (sea ? 20 : 0) + hint.length * 17, 600);
   const x = r.x + 22, w = r.w - 44, cw = (w - 16) / 2;

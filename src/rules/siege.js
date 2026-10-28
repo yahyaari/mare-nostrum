@@ -17,8 +17,26 @@ export function canBesiege(state, army, id) {
   return !!army && canAttack(state, army, id) && !!wallsOf(state, id) && !bySea(army, POS[id]) && army.besieging !== id;
 }
 
-/** Kuşatmanın turluk erimesi: %10, her 10 kuşatma makinesi +%2, en fazla %25. */
-export const siegeRate = (army) => Math.min(N.siege.max, N.siege.starve + N.siege.perEngines * ((army.siege ?? 0) / N.company));
+/** Yerinde yapılan alet türleri (sırasıyla; bölüm 20). */
+export const WORKS = ["ram", "tower", "catapult"];
+
+/** Ordunun yaptığı aletler, türleriyle: { ram, tower, catapult } (eski kayıtta sayı: hepsi koçbaşı). */
+export const worksOf = (a) => (typeof a?.works === "number" ? { ram: a.works } : { ...(a?.works ?? {}) });
+
+/** Kaç alet. */
+export const worksCount = (a) => Object.values(worksOf(a)).reduce((n, v) => n + v, 0);
+
+/** Kuşatmanın turluk erimesi: %10, her 10 kuşatma makinesi +%2, her mancınık +%2, en fazla %25. */
+export const siegeRate = (army) => Math.min(N.siege.max, N.siege.starve + N.siege.perEngines * ((army.siege ?? 0) / N.company)
+  + (worksOf(army).catapult ?? 0) * N.siege.works.kinds.catapult.starve);
+
+/** Kampın bundan sonra yapacağı alet (oyuncu seçer; yoksa koçbaşı). */
+export function setWorkType(state, armyId, kind) {
+  const a = armyById(state, armyId);
+  if (!a || !WORKS.includes(kind)) return false;
+  a.workType = kind;
+  return true;
+}
 
 /** Garnizon kaç turda tükenir (kaba tahmin: bugünkü erimeyle). */
 export function turnsToFall(state, army, id) {
@@ -54,7 +72,7 @@ export function lift(state, armyId) {
 }
 
 /** Kuşatan ordu bu tur alet yapabilir mi: en az `crew` dövüşen askeri var ve tavana varmadı. */
-export const canBuildWorks = (a) => men(a) - (a.siege ?? 0) >= N.siege.works.crew && (a.works ?? 0) < N.siege.works.max;
+export const canBuildWorks = (a) => men(a) - (a.siege ?? 0) >= N.siege.works.crew && worksCount(a) < N.siege.works.max;
 
 /** Bir yeri kuşatan ordular. */
 export const besiegers = (state, id) => state.armies.filter((a) => a.besieging === id);
@@ -80,7 +98,11 @@ export function tickSieges(state, events = []) {
     // Kampta da salgın ve kaçak: kuşatan ordu turda %3 erir (aşağı yuvarlanır; küçük ordu erimez ama zaten bir şey yapamaz).
     for (const k of UNITS) a[k] -= Math.floor(a[k] * N.siege.camp);
     // Aletler: her tur bir koçbaşı ya da merdiven.
-    if (canBuildWorks(a)) a.works = (a.works ?? 0) + 1;
+    if (canBuildWorks(a)) {
+      const w = worksOf(a), k = WORKS.includes(a.workType) ? a.workType : "ram";
+      w[k] = (w[k] ?? 0) + 1;
+      a.works = w;
+    }
     if (pl.owner) pl.loyalty = Math.max(0, pl.loyalty - N.siege.loyalty);
     if (men(defenders(state, id)) > 0) continue;
     // Teslim: kuşatan ordu içeri girer.
