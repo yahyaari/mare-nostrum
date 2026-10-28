@@ -5,6 +5,7 @@
 // saldırtır. Fare bir yerin üstündeyken seçili ordunun oraya yolu ve kaç tur süreceği görünür.
 
 import { CIVS, PLACES } from "./data/world.js";
+import { DEFAULT_SCENARIO } from "./data/scenarios.js";
 import { breakAlliance, declareWar, proposeAlliance, proposePeace, proposeTrade } from "./rules/diplomacy.js";
 import { roadBetween } from "./rules/graph.js";
 import {
@@ -55,7 +56,7 @@ const ctx = canvas.getContext("2d");
 const cam = makeCamera();
 
 let game = null;
-const ui = { screen: "start", lang: pickLang(), level: pickLevel(), players: 1, picks: [], pick: null, saved: null, sel: null, army: null, modal: null, toast: null, news: null, tip: null, fog: pickFog(), coach: pickCoach() };
+const ui = { screen: "title", scenario: DEFAULT_SCENARIO, lang: pickLang(), level: pickLevel(), players: 1, picks: [], pick: null, saved: null, sel: null, army: null, modal: null, toast: null, news: null, tip: null, fog: pickFog(), coach: pickCoach() };
 const startOwners = Object.fromEntries(PLACES.map((p) => [p.id, p.owner]));
 
 let dpr = 1;
@@ -700,6 +701,14 @@ function showCiv(civ, ms = 900) {
   glide((x0 + x1) / 2 - (sx - cam.w / 2) / scale, (y0 + y1) / 2 - (sy - cam.h / 2) / scale, scale, ms);
 }
 
+/** Ana menünün arkası: bütün Akdeniz, menünün sağında. */
+function showWorld(ms = 900) {
+  const left = Math.min(520, cam.w * 0.42);
+  cam.pad = { left, right: 0 };
+  const scale = cam.min * 1.12;
+  glide(SIZE.x / 2 - left / 2 / scale, SIZE.y * 0.52, scale, ms);
+}
+
 /** Sıradaki ya da önceki medeniyet (başlangıç ekranında ‹ › ve klavye). */
 function stepCiv(by) {
   const i = CIVS.findIndex((c) => c.id === ui.pick);
@@ -769,7 +778,7 @@ function dispatch(act) {
       if (many && ui.picks.includes(ui.pick)) break;
       const who = many ? [...ui.picks, ui.pick] : ui.pick;
       // ?seed=123 aynı oyunu tekrar kurar (araçlar ve hata ayıklama için).
-      game = newGame(who, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level);
+      game = newGame(who, Number(new URLSearchParams(location.search).get("seed")) || (Date.now() % 1e9) | 0, ui.level, ui.scenario);
       game.defer = true;
       ui.picks = [];
       // İpuçları açıksa her yeni oyunda başkentin yanında haydutlar: ilk ordu, ilk savaş; zincirin balonları baştan.
@@ -844,6 +853,32 @@ function dispatch(act) {
       lookAtHome();
       break;
     }
+    case "title":
+      // Ana menüye dön: oyun kaydedilir, menüde "Devam et" onu açar.
+      if (game) { save(); ui.saved = { player: game.player, turn: game.turn }; }
+      game = null;
+      ui.screen = "title";
+      ui.modal = null;
+      ui.sel = null;
+      ui.army = null;
+      ui.news = null;
+      ui.slots = slotMeta();
+      showWorld(1200);
+      break;
+    case "toStart":
+      // Ana menüden ya da senaryolardan: medeniyet seçimi (seçilen senaryoda).
+      ui.scenario = act.scenario ?? ui.scenario ?? DEFAULT_SCENARIO;
+      ui.screen = "start";
+      ui.modal = null;
+      ui.picks = [];
+      ui.pick ??= CIVS[0].id;
+      ui.pickAt = performance.now();
+      showCiv(ui.pick, 1200);
+      break;
+    case "scenarios":
+      ui.screen = "scenarios";
+      ui.modal = null;
+      break;
     case "newGame":
       forget();
       ui.pick = game?.player ?? ui.pick;
@@ -1906,7 +1941,7 @@ window.addEventListener("keydown", (e) => {
     ArrowDown: () => panBy(cam, 0, -step),
     // Taktik savaş: Boşluk duraklatır / sürdürür.
     " ": () => { if (ui.screen === "battle" && !skipIntro()) dispatch({ do: "tacPause" }); },
-    Escape: () => { if (ui.screen === "battle" && ui.battle) { if (!skipIntro()) ui.battle.sel = new Set(); return; } if (ui.modal) dispatch({ do: "close" }); else if (ui.aim) ui.aim = null; else { ui.sel = null; ui.army = null; } },
+    Escape: () => { if (ui.screen === "battle" && ui.battle) { if (!skipIntro()) ui.battle.sel = new Set(); return; } if (ui.modal) dispatch({ do: "close" }); else if (ui.screen === "start" || ui.screen === "scenarios") dispatch({ do: "title" }); else if (ui.aim) ui.aim = null; else { ui.sel = null; ui.army = null; } },
     // Başlangıç ekranında oklar medeniyetler arasında gezer.
     ...(ui.screen === "start" && !ui.modal ? {
       ArrowLeft: () => stepCiv(-1), ArrowRight: () => stepCiv(1), ArrowUp: () => stepCiv(-1), ArrowDown: () => stepCiv(1),
@@ -1914,6 +1949,7 @@ window.addEventListener("keydown", (e) => {
     // Total War gibi: Enter turu bitirir, Tab sıradaki orduyu seçer (karar penceresi açıkken değil).
     Enter: () => {
       if (ui.modal?.kind === "handoff") dispatch({ do: "ready" });
+      else if (ui.screen === "title" && !ui.modal) dispatch({ do: ui.saved ? "continue" : "toStart" });
       else if (ui.screen === "start" && !ui.modal) dispatch({ do: (ui.players ?? 1) > 1 && ui.picks.length < ui.players - 1 ? "pickPlayer" : "start" });
       else if (playing && !ui.modal && !blocking) dispatch({ do: "endTurn" });
     },
@@ -1939,10 +1975,10 @@ window.addEventListener("resize", fit);
   ui.slots = slotMeta();
 }
 fit();
-// Açılışta harita bütün Akdeniz'den seçili medeniyetin topraklarına süzülür.
+// Açılış: ana menü, arkada bütün Akdeniz.
 ui.pick ??= CIVS[0].id;
 ui.pickAt = performance.now();
-showCiv(ui.pick, 1800);
+showWorld(1800);
 
 // Yazı tipleri (index.html, Google Fonts) gelince yeniden çiz: tuval bir yazı tipinin
 // yüklenmesini beklemez, o ana kadar yedeğiyle (Georgia) yazar.

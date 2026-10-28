@@ -20,6 +20,7 @@ try {
   await page.evaluate(readFileSync(new URL("./playtest.page.js", import.meta.url), "utf8"));
   await page.evaluate(`(async () => {
     const M = window.MareNostrum;
+    await PT.press((a) => a.do === "toStart", "yeni oyun");
     await PT.press((a) => a.do === "pick" && a.civ === "${civ}", "medeniyet");
     await PT.press((a) => a.do === "level" && a.level === "${level}", "zorluk");
     await PT.press((a) => a.do === "start", "başla");

@@ -7,7 +7,7 @@
 
 ## NEREDE KALDIK (28.10) - önce bunu oku
 
-Son commit **fb45368** (ve bu plan), hepsi push'lu, **2479 test** geçiyor, kayıt sürümü **20** (yeni alanlar isteğe bağlı:
+Son commit: aşağıda 38. madde, hepsi push'lu, **2484 test** geçiyor, kayıt sürümü **20** (yeni alanlar isteğe bağlı:
 `pl.spec`, `army.works` {ram, tower, catapult}, `army.workType`, `army.gear` {arms, armour}). 27.10 akşamından beri (madde 35-37):
 geç oyun canlı, müttefikler savaşa katılıyor; kuşatmada koçbaşı, şehrin yolu, 160. tur sonrası; sonra kullanıcı "keyifli
 olması, güzel görünmesi için ne yapabiliriz" dedi, önerdiğim yedi işe "sırayla hepsini yap" (madde 37). Kullanıcının
@@ -207,6 +207,14 @@ sonunu canlı tutan olaylar (iç savaş, salgın, büyük barbar göçü), (5) t
     6. Pusu (b9a1df0): 29i; tactics.js `spring`, `ambushOf`, `lurk`. `Tools/ambushfilm.mjs`.
     7. Donanım (fb45368): 6d; state.js `GEAR`, `gearInfo`, `equip`; combat.js `gearPow`, `armourTaken`. `Tools/gearfilm.mjs`.
        Denge (hepsi birlikte): ilk düşüş 38, ayakta 288.
+
+38. **Ana menü ve senaryolar** (bu adım; kullanıcı 28.10: "bir ana menü; ayarlar, new game, campaign, scenario; daha sonra
+    MS 1400'lerde geçen bir oyun gibi tarih değişikliğiyle çeşitlilik - şimdilik sadece bu olsun, sonra ekleyebilmek için"):
+    kurallar.md 12f; `src/data/scenarios.js` (`SCENARIOS`, `scenarioOf`), ui.js `drawTitle`, `drawScenarios`, `settingsModal`;
+    main.js `title`, `toStart`, `scenarios`, `showWorld`; `state.scenario`. Sefer kapalı ("yakında"). Tarayıcı araçları (tutorial,
+    playtest) önce Yeni oyun'a basar. `Tools/menufilm.mjs`.
+    Sonraki adım (kullanıcı isteyince): yeni bir çağ - kendi yerleşimleri, medeniyetleri, yılı; newGame'in senaryoya göre
+    kurması; season.js `yearOf` senaryonun başlangıç yılından.
 
 **Sırada:** kullanıcı oynayıp söyleyecek.
 

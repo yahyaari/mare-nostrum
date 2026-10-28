@@ -422,6 +422,29 @@ const SCENES = {
     ctx.fillRect(0, h * 0.5, w, h * 0.5);
     for (let i = 0; i < 4; i++) galley(ctx, i % 2 ? o.them ?? null : o.owner ?? null, w * (0.18 + i * 0.22), h * (0.66 + (i % 2) * 0.12), h / 70, { flip: i % 2 === 1 });
   },
+  // Senaryo kartı (ana menü): MÖ 270 - akşam güneşinde Akdeniz, kıyıda tapınaklı bir şehir, açıkta iki filo.
+  "scenario/bc270"(ctx, w, h, o) {
+    sky(ctx, w, h, "#4a5a7a", "#f0c890");
+    disc(ctx, w * 0.7, h * 0.42, h * 0.09, "#ffe0a0", "rgba(255,200,120,0.6)");
+    hills(ctx, w, h, 0.5, "#6a6a58", 0.05, 4);
+    const g = ctx.createLinearGradient(0, h * 0.55, 0, h);
+    g.addColorStop(0, "#4a7088");
+    g.addColorStop(1, "#1c3a4c");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, h * 0.55, w, h * 0.45);
+    // Kıyıda şehir: solda kara, evler ve tapınak.
+    ctx.fillStyle = "#8a7a58";
+    ctx.beginPath();
+    ctx.moveTo(0, h * 0.55);
+    ctx.lineTo(w * 0.36, h * 0.55);
+    ctx.quadraticCurveTo(w * 0.3, h * 0.66, 0, h * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    for (let i = 0; i < 4; i++) house(ctx, w * (0.05 + i * 0.06), h * 0.6, h / 90);
+    temple(ctx, w * 0.27, h * 0.58, h / 85);
+    for (let i = 0; i < 4; i++) galley(ctx, i < 2 ? o.owner ?? null : o.them ?? null, w * (0.44 + i * 0.13), h * (0.72 + (i % 2) * 0.1), h / 80, { flip: i >= 2 });
+    birds(ctx, w * 0.5, h * 0.2, h * 0.025, 5);
+  },
   // Savaş: iki ordu çarpışıyor.
   "notice/battle"(ctx, w, h, o) {
     sky(ctx, w, h, "#5a4a3a", "#d8b890");

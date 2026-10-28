@@ -24,6 +24,8 @@ const step = async (label) => {
 };
 try {
   await wait(2000);
+  await press(`(a) => a.do === "toStart"`); // ana menü: Yeni oyun
+  await wait(600);
   await press(`(a) => a.do === "pick" && a.civ === "${civ}"`);
   await press(`(a) => a.do === "start"`);
   await wait(1500);

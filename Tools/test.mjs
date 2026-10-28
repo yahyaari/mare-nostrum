@@ -1994,6 +1994,21 @@ section("Şehir binaları (bölüm 4b)");
 }
 
 // ---------------------------------------------------------------------------------------------
+section("Ana menü ve senaryolar (bölüm 12f)");
+{
+  // Kullanıcı 28.10: "bir ana menü; new game, campaign, scenario; daha sonra MS 1400'lerde geçen bir oyun gibi".
+  const SC = await import("../src/data/scenarios.js");
+  const { TEXT } = await import("../src/text.js");
+  check("bir senaryo hazır, varsayılan o", SC.SCENARIOS.filter((x) => x.ready).length >= 1 && SC.scenarioOf(SC.DEFAULT_SCENARIO).ready && SC.scenarioOf("yok") === SC.SCENARIOS[0]);
+  for (const lang of ["en", "tr"]) check(`${lang}: senaryoların adı, yılı, açıklaması; menünün yazıları`, SC.SCENARIOS.every((x) => x.name[lang] && x.year[lang] && x.blurb[lang]) && ["mmNew", "mmScenarios", "mmCampaign", "mmSettings", "mainMenu", "soon", "scenarioPlay"].every((k) => TEXT[lang][k]));
+  const g = S.newGame("rome", 7);
+  check("yeni oyun senaryosunu kaydeder", g.scenario === SC.DEFAULT_SCENARIO && S.newGame("rome", 7, "normal", "bc270").scenario === "bc270");
+  const old = S.newGame("rome", 7);
+  delete old.scenario;
+  S.migrate(old);
+  check("eski kayıt varsayılan senaryoda", old.scenario === SC.DEFAULT_SCENARIO);
+}
+
 section("Şehrin yolu (bölüm 4c)");
 
 {

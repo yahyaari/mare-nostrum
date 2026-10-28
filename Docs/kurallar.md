@@ -784,6 +784,24 @@ hepsini yap"): Total War'daki yerleşim görünümü gibi. Soldaki şehir kartı
   olan yerde (main.js `view.works` flip / wetRight) kara yanına toplanır. Kuşatılan yerden dumanlar yükselir. Sonbaharda
   yapraklar, ilkbaharda çiçek yaprakları savrulur (atlas.js `drawPetals`; kışın kar zaten vardı). `node Tools/mapfilm.mjs`.
 
+### 12f. Ana menü ve senaryolar
+
+Kullanıcı 28.10: "bir ana menü yapmak; ayarlar, new game, campaign, scenario; daha sonra mesela MS 1400'lerde geçen bir
+oyun gibi, tarih değişikliği yaparak çeşitliliği artıracak şeyler ekleyebiliriz - şimdilik sadece bu olsun".
+
+- Oyun **ana menüyle** açılır (ui.js `drawTitle`; main.js `ui.screen = "title"`, `showWorld`): solda koyu şeritte oyunun
+  adı ve alt alta seçenekler, sağda bütün Akdeniz. **Devam et** (kayıt varsa; medeniyet ve tur), **Yeni oyun** (MÖ 270,
+  medeniyet seçimine), **Senaryolar**, **Sefer** (kapalı, "yakında": birbirine bağlı senaryolar), **Yükle** (kayıt yoksa
+  kapalı), **Ayarlar** (dil, ses, müzik, savaş sisi, ipuçları - oyun içi menüden de açılır). Enter: Devam et ya da Yeni
+  oyun; Escape senaryolardan ve medeniyet seçiminden ana menüye.
+- **Senaryolar** (`src/data/scenarios.js` `SCENARIOS`, ui.js `drawScenarios`): her çağ bir kart - resmi
+  (`art/scenario/<kimlik>`, yoksa çizilmiş), yılı, adı, açıklaması, Oyna. Şimdilik bir tane: **MÖ 270 · Mare Nostrum**;
+  sonda kilitli "Yeni çağlar · yakında" kartı. Oyun hangi senaryoda başladığını kaydeder (`state.scenario`; eski kayıt
+  MÖ 270). Medeniyet seçiminin başlığında senaryonun yılı; sağ üstte "‹ Ana menü".
+- Oyun içi menüde "Ayarlar" ve "Ana menü" (oyun kaydedilir; ana menüde Devam et açar).
+- Yeni bir çağ eklemek: `SCENARIOS`a bir kayıt, kendi yerleşimleri ve medeniyetleri (data/world.js gibi), newGame'in onu
+  kurması. Fotoğraflar: `node Tools/menufilm.mjs`.
+
 ## 12b. Casuslar
 
 Kullanıcı 22.10: "casus gönder şeyi yapacağız, şehirler hakkında bilgi toplamak için, mesafeye

@@ -13,6 +13,7 @@
 //   fight: { ev, t0 } oyuncunun az önceki savaşı: haritada sahne, sonra sonuç şeridi (drawFight)
 
 import { CIVS, PLACES } from "../data/world.js";
+import { DEFAULT_SCENARIO, SCENARIOS, scenarioOf } from "../data/scenarios.js";
 import { angerOf, canDeclare, canPropose, canTrade } from "../rules/diplomacy.js";
 import { byId, neighbours, roadBetween } from "../rules/graph.js";
 import {
@@ -69,7 +70,11 @@ export const MODAL_MS = 180;
 export function drawUI(ctx, cam, game, ui, boxes, view) {
   const T = TEXT[ui.lang];
   let card = null;
-  if (ui.screen === "start") {
+  if (ui.screen === "title") {
+    drawTitle(ctx, cam, ui, boxes, T);
+  } else if (ui.screen === "scenarios") {
+    drawScenarios(ctx, cam, ui, boxes, T);
+  } else if (ui.screen === "start") {
     drawStart(ctx, cam, ui, boxes, T);
   } else {
     drawTopBar(ctx, cam, game, ui, boxes, T);
@@ -101,6 +106,119 @@ export function drawUI(ctx, cam, game, ui, boxes, view) {
     if (ui.screen === "game") drawCoach(ctx, cam, game, ui, boxes, T, true);
   }
   if (ui.tip && performance.now() - ui.tip.since > 250) drawTip(ctx, cam, ui.tip.lines);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ana menü (kullanıcı 28.10: "bir ana menü yapmak; ayarlar, new game, campaign, scenario; daha sonra mesela MS 1400'lerde
+// geçen bir oyun gibi, tarih değişikliğiyle çeşitlilik ekleyebilmek için")
+//
+// Total War'ın ana menüsü gibi: solda koyu bir şeritte oyunun adı ve alt alta büyük yazılı seçenekler (üstüne gelince
+// altın, solunda küçük bir işaret); sağda bütün Akdeniz. Senaryolar: her çağ bir kart (data/scenarios.js). Sefer şimdilik
+// kapalı ("yakında").
+
+function drawTitle(ctx, cam, ui, boxes, T) {
+  const W = Math.min(520, cam.w * 0.42);
+  const g = ctx.createLinearGradient(0, 0, W + 160, 0);
+  g.addColorStop(0, "rgba(12,9,6,0.92)");
+  g.addColorStop(0.7, "rgba(12,9,6,0.75)");
+  g.addColorStop(1, "rgba(12,9,6,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W + 160, cam.h);
+  boxes.push({ x: 0, y: 0, w: cam.w, h: cam.h, act: null });
+  const x = 64, top = Math.max(70, cam.h * 0.16);
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.85)";
+  ctx.shadowBlur = 10;
+  text(ctx, T.title, x, top + 40, { title: true, bold: true, size: 54, color: CREAM });
+  ctx.restore();
+  text(ctx, T.titleSub, x + 2, top + 70, { italic: true, size: 17, color: GOLD_LIGHT });
+  ornament(ctx, x + 150, top + 90, 300);
+  const items = [
+    ...(ui.saved ? [{ label: T.cont, sub: fill(T.contInfo, civName(ui.saved.player, ui.lang), ui.saved.turn), act: { do: "continue" } }] : []),
+    { label: T.mmNew, sub: fill(T.mmNewSub, scenarioOf(DEFAULT_SCENARIO).year[ui.lang]), act: { do: "toStart", scenario: DEFAULT_SCENARIO } },
+    { label: T.mmScenarios, sub: T.mmScenariosSub, act: { do: "scenarios" } },
+    { label: T.mmCampaign, sub: T.soon, act: null, tip: [T.mmCampaign, T.mmCampaignTip] },
+    { label: T.loadBtn, sub: null, act: Object.keys(ui.slots ?? {}).length || ui.saved ? { do: "slots", mode: "load" } : null },
+    { label: T.mmSettings, sub: null, act: { do: "open", modal: "settings" } },
+  ];
+  let y = top + 138;
+  for (const it of items) {
+    const h = it.sub ? 58 : 46, hot = !!it.act && over(x - 24, y - 6, W - 60, h);
+    if (hot) {
+      const hg = ctx.createLinearGradient(x - 24, 0, x - 24 + W - 60, 0);
+      hg.addColorStop(0, "rgba(201,164,90,0.28)");
+      hg.addColorStop(1, "rgba(201,164,90,0)");
+      ctx.fillStyle = hg;
+      ctx.fillRect(x - 24, y - 6, W - 60, h);
+      ctx.fillStyle = GOLD_LIGHT;
+      ctx.fillRect(x - 24, y - 6, 3, h);
+    }
+    const color = !it.act ? "rgba(243,231,201,0.38)" : hot ? GOLD_LIGHT : CREAM;
+    text(ctx, it.label.toLocaleUpperCase(ui.lang === "tr" ? "tr" : "en"), x, y + 24, { title: true, bold: true, size: 24, color });
+    if (it.sub) text(ctx, it.sub, x + 1, y + 44, { italic: true, size: 13, color: !it.act ? "rgba(243,231,201,0.35)" : "rgba(243,231,201,0.7)" });
+    boxes.push({ x: x - 24, y: y - 6, w: W - 60, h, act: it.act, tip: it.tip ?? null });
+    y += h + 10;
+  }
+  text(ctx, "Natural Earth · github.com/yahyaari/mare-nostrum", x, cam.h - 24, { size: 11, color: "rgba(243,231,201,0.4)" });
+  langToggle(ctx, cam, ui, boxes, 12);
+}
+
+/**
+ * Senaryolar: her çağ bir kart - resmi (art/scenario/<kimlik>, yoksa çizilmiş), yılı, adı, açıklaması, Oyna; sonda
+ * "Yeni çağlar · yakında" kartı. Ana menüye dönüş.
+ */
+function drawScenarios(ctx, cam, ui, boxes, T) {
+  ctx.fillStyle = "rgba(12,9,6,0.72)";
+  ctx.fillRect(0, 0, cam.w, cam.h);
+  boxes.push({ x: 0, y: 0, w: cam.w, h: cam.h, act: null });
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.85)";
+  ctx.shadowBlur = 8;
+  text(ctx, T.mmScenarios.toLocaleUpperCase(ui.lang === "tr" ? "tr" : "en"), cam.w / 2, 70, { title: true, bold: true, size: 34, color: CREAM, align: "center" });
+  ctx.restore();
+  text(ctx, T.scenariosSub, cam.w / 2, 98, { italic: true, size: 15, color: GOLD_LIGHT, align: "center" });
+  const cards = [...SCENARIOS.map((s) => ({ s })), { soon: true }];
+  const cw = Math.min(360, (cam.w - 80 - 24 * (cards.length - 1)) / cards.length), ch = Math.min(470, cam.h - 210);
+  const x0 = cam.w / 2 - (cards.length * cw + (cards.length - 1) * 24) / 2, y0 = 126;
+  cards.forEach((c, i) => {
+    const x = x0 + i * (cw + 24), y = y0, ready = !!c.s?.ready, hot = ready && over(x, y, cw, ch);
+    ctx.save();
+    if (hot) { ctx.shadowColor = "rgba(255,200,90,0.55)"; ctx.shadowBlur = 16; }
+    roundRect(ctx, x, y, cw, ch, 8);
+    ctx.fillStyle = DARK;
+    ctx.fill();
+    ctx.restore();
+    const ih = Math.round(ch * 0.5);
+    if (c.s) artBox(ctx, "scenario/" + c.s.id, x + 6, y + 6, cw - 12, ih, { round: 6, owner: "rome", them: "carthage" });
+    else {
+      roundRect(ctx, x + 6, y + 6, cw - 12, ih, 6);
+      ctx.fillStyle = "#2a2016";
+      ctx.fill();
+      ctx.save();
+      ctx.translate(x + cw / 2, y + 6 + ih / 2);
+      ctx.scale(3, 3);
+      lock(ctx, 0, -6);
+      ctx.restore();
+    }
+    let ty = y + ih + 40;
+    const lc = c.s ? CREAM : "rgba(243,231,201,0.45)";
+    text(ctx, c.s ? c.s.year[ui.lang] : T.soon.toLocaleUpperCase(ui.lang === "tr" ? "tr" : "en"), x + cw / 2, ty, { bold: true, size: 15, color: c.s ? GOLD_LIGHT : "rgba(236,212,154,0.5)", align: "center" });
+    ty += 30;
+    text(ctx, c.s ? c.s.name[ui.lang] : T.scenarioSoon, x + cw / 2, ty, { title: true, bold: true, size: 24, color: lc, align: "center" });
+    ty += 22;
+    const body = wrap(ctx, c.s ? c.s.blurb[ui.lang] : T.scenarioSoonText, cw - 36, { size: 13 });
+    body.slice(0, 6).forEach((l, k) => text(ctx, l, x + cw / 2, ty + k * 18, { size: 13, color: c.s ? "rgba(243,231,201,0.85)" : "rgba(243,231,201,0.45)", align: "center" }));
+    roundRect(ctx, x + 0.5, y + 0.5, cw - 1, ch - 1, 8);
+    ctx.strokeStyle = hot ? GOLD_LIGHT : ready ? GOLD : GOLD_DARK;
+    ctx.lineWidth = hot ? 2.2 : 1.4;
+    ctx.stroke();
+    if (ready) {
+      glassButton(ctx, boxes, { x: x + 24, y: y + ch - 58, w: cw - 48, h: 42, size: 16, main: true, label: T.scenarioPlay, act: { do: "toStart", scenario: c.s.id } }, over(x + 24, y + ch - 58, cw - 48, 42));
+      boxes.push({ x, y, w: cw, h: ch - 64, act: { do: "toStart", scenario: c.s.id } });
+    }
+  });
+  button(ctx, boxes, { x: 24, y: 20, w: 150, h: 36, label: "‹ " + T.mainMenu, size: 14, act: { do: "title" } });
+  langToggle(ctx, cam, ui, boxes, 12);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -166,7 +284,7 @@ function drawStart(ctx, cam, ui, boxes, T) {
   text(ctx, T.title, 28, 50, { title: true, bold: true, size: 30, color: CREAM });
   ctx.restore();
   const choosing = (ui.players ?? 1) > 1 ? fill(T.choosePlayer, (ui.picks?.length ?? 0) + 1) : T.chooseCiv;
-  text(ctx, `${T.era} · ${choosing}`, 30, 74, { italic: true, size: 14, color: GOLD_LIGHT });
+  text(ctx, `${scenarioOf(ui.scenario).year[ui.lang]} · ${choosing}`, 30, 74, { italic: true, size: 14, color: GOLD_LIGHT });
 
   // Sancaklar: seçili olan öne çıkar, altın şeritle işaretlenir.
   const step = Math.min(92, (cam.h - 96 - 16) / CIVS.length);
@@ -205,6 +323,7 @@ function drawStart(ctx, cam, ui, boxes, T) {
 
   civPanel(ctx, ui, boxes, T, civ, L.panel);
   langToggle(ctx, cam, ui, boxes, 12);
+  button(ctx, boxes, { x: cam.w - 12 - 80 - 10 - 140, y: 12, w: 140, h: 30, label: "‹ " + T.mainMenu, size: 12.5, act: { do: "title" } });
 }
 
 /**
@@ -2135,7 +2254,7 @@ function drawModal(ctx, cam, game, ui, boxes, T) {
   const f = {
     attack: attackModal, diplo: diploModal, report: reportModal,
     menu: menuModal, slots: slotsModal, trade: tradeModal, incoming: incomingModal, help: helpModal, confirm: confirmModal, over: overModal, decide: decideModal,
-    armies: armiesModal, cities: citiesModal, spec: specModal, cityView: cityViewModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
+    armies: armiesModal, cities: citiesModal, spec: specModal, cityView: cityViewModal, settings: settingsModal, victory: victoryModal, research: researchModal, summary: summaryModal, leader: leaderModal, speech: speechModal, wonder: wonderModal, handoff: handoffModal, mission: missionModal, missions: missionsModal, chronicle: chronicleModal,
   }[m.kind];
   f?.(ctx, cam, game, ui, boxes, T, m);
 }
@@ -2673,7 +2792,7 @@ function wondersTab(ctx, game, ui, boxes, T, id, x, top, w, h) {
 }
 
 function menuModal(ctx, cam, game, ui, boxes, T) {
-  const r = modalFrame(ctx, cam, boxes, 596, 360);
+  const r = modalFrame(ctx, cam, boxes, 410, 360);
   text(ctx, T.menu, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
   const x = r.x + 20, w = r.w - 40;
   button(ctx, boxes, { x, y: r.y + 62, w, h: 42, label: T.resume, main: true, size: 15, act: { do: "close" } });
@@ -2682,20 +2801,30 @@ function menuModal(ctx, cam, game, ui, boxes, T) {
   const hw = (w - 8) / 2;
   button(ctx, boxes, { x, y: r.y + 218, w: hw, h: 42, label: T.saveBtn, size: 15, act: { do: "slots", mode: "save" } });
   button(ctx, boxes, { x: x + hw + 8, y: r.y + 218, w: hw, h: 42, label: T.loadBtn, size: 15, act: { do: "slots", mode: "load" } });
-  button(ctx, boxes, { x, y: r.y + 270, w, h: 42, label: T.newGame, size: 15, act: { do: "askNew" } });
-  text(ctx, T.language, x, r.y + 352, { bold: true, size: 14 });
+  button(ctx, boxes, { x, y: r.y + 270, w, h: 42, label: T.mmSettings, size: 15, act: { do: "open", modal: "settings" } });
+  button(ctx, boxes, { x, y: r.y + 322, w: hw, h: 42, label: T.mainMenu, size: 15, act: { do: "title" }, tip: [T.mainMenu, T.mainMenuTip] });
+  button(ctx, boxes, { x: x + hw + 8, y: r.y + 322, w: hw, h: 42, label: T.newGame, size: 15, act: { do: "askNew" } });
+  text(ctx, "Natural Earth · github.com/yahyaari/mare-nostrum", r.x + r.w / 2, r.y + r.h - 22, { size: 10, color: INK.faint, align: "center" });
+}
+
+/** Ayarlar (ana menüden ve oyun içi menüden): dil, ses, müzik, savaş sisi, ipuçları. */
+function settingsModal(ctx, cam, game, ui, boxes, T) {
+  const r = modalFrame(ctx, cam, boxes, 360, 380);
+  text(ctx, T.mmSettings, r.x + r.w / 2, r.y + 40, { title: true, bold: true, size: 20, align: "center" });
+  const x = r.x + 22, w = r.w - 44;
+  text(ctx, T.language, x, r.y + 86, { bold: true, size: 14 });
   ["en", "tr"].forEach((l, i) => {
-    button(ctx, boxes, { x: x + w - 2 * 56 + i * 56, y: r.y + 330, w: 50, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
+    button(ctx, boxes, { x: x + w - 2 * 74 + i * 74, y: r.y + 64, w: 68, h: 34, label: l.toUpperCase(), main: ui.lang === l, size: 13, act: { do: "lang", lang: l } });
   });
-  // Ses ve müzik: ayrı ayrı aç-kapa.
+  // Ses ve müzik, sis, ipuçları: ayrı ayrı aç-kapa.
   [["sound", T.soundLabel, soundEnabled()], ["music", T.musicLabel, musicEnabled()], ["fog", T.fogLabel, ui.fog], ["coachSet", T.tipsLabel, !ui.coach?.off]].forEach(([k, label, on], j) => {
-    const yy = r.y + 374 + j * 44;
+    const yy = r.y + 108 + j * 44;
     text(ctx, label, x, yy + 22, { bold: true, size: 14 });
     [[true, T.sndOn], [false, T.sndOff]].forEach(([v, l], i) => {
       button(ctx, boxes, { x: x + w - 2 * 74 + i * 74, y: yy, w: 68, h: 34, label: l, main: on === v, size: 13, act: { do: k, on: v } });
     });
   });
-  text(ctx, "Natural Earth · github.com/yahyaari/mare-nostrum", r.x + r.w / 2, r.y + r.h - 22, { size: 10, color: INK.faint, align: "center" });
+  button(ctx, boxes, { x: r.x + r.w / 2 - 80, y: r.y + r.h - 52, w: 160, h: 36, label: T.closeBtn, size: 14, act: { do: "close" } });
 }
 
 /** Ticaret yolu kur: menzildeki yerler, kazancına göre (en çok 7); her biri Kur düğmesiyle. */

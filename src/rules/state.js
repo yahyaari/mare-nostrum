@@ -4,6 +4,7 @@
 // Asker sayıları ADAM olarak tutuluyor; bölük 10 adam. Kaynaklar kesirli olabilir (kalenin
 // yarım silahı), ekran aşağı yuvarlayarak gösteriyor.
 
+import { DEFAULT_SCENARIO } from "../data/scenarios.js";
 import { CIVS, PLACES } from "../data/world.js";
 import { byId } from "./graph.js";
 import { LEVELS, N, SHIPS, UNITS, trait, uniqueOf } from "./numbers.js";
@@ -18,6 +19,7 @@ export const VERSION = 20;
 
 /** Eski kayıtları bugünün biçimine getirir (1 -> 2: sadakat, gelen kutusu, ateşkes). */
 export function migrate(s) {
+  s.scenario ??= DEFAULT_SCENARIO;
   if (s.version === 1) {
     for (const p of Object.values(s.places)) { p.loyalty ??= 100; p.games ??= false; }
     for (const a of s.armies) a.general ??= null;
@@ -152,7 +154,7 @@ export function migrate(s) {
  * Yeni oyun. `player` bir medeniyet ya da birkaç medeniyet (aynı bilgisayarda sırayla oynayan
  * oyuncular, kullanıcı 23.10): ilki başlar, `state.player` her zaman sırası gelen oyuncu.
  */
-export function newGame(player, seed = 1, level = "normal") {
+export function newGame(player, seed = 1, level = "normal", scenario = DEFAULT_SCENARIO) {
   const players = Array.isArray(player) ? player : [player];
   player = players[0];
   const civs = {};
@@ -188,6 +190,7 @@ export function newGame(player, seed = 1, level = "normal") {
     players,
     built: {},
     version: VERSION, turn: 1, player, level, rng: seed | 0 || 1,
+    scenario, // hangi senaryo (data/scenarios.js); şimdilik hep MÖ 270
     civs, places, armies: [], nextArmy: 1,
     relations: {}, // "a|b" -> "ally" | "war"; yazılmayan tarafsız
     cooldown: {}, // "a|b" -> ittifakın bozulduğu tur: o tur savaş ilan edilemez
